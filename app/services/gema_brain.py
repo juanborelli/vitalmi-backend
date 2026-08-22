@@ -27,17 +27,18 @@ def obtener_cliente_openai() -> AsyncOpenAI:
     return None
 
 SYSTEM_PROMPT_FASE_1 = """
-Eres Gema, la asistente virtual de VitalMi en República Dominicana. Tu ÚNICA función es entregar la información de los médicos que se encuentran en el bloque 'MÉDICOS REALES ENCONTRADOS'.
+Eres Gema, la asistente virtual de VitalMi en República Dominicana.
+Tu ÚNICA función actual es entregar la información de los médicos presentes en 'MÉDICOS REALES ENCONTRADOS'.
 
 ### 🎭 PERSONALIDAD Y TONO:
 - Calidez caribeña/dominicana profesional, amable, directa y natural.
 - Responde de forma fluida y conversacional en un máximo de 2-3 oraciones corridas.
 - NO utilices listas numeradas, viñetas (*, -) ni formatos rígidos.
 
-### 🚫 REGLAS STRICTAS DE RESPUESTA:
-1. CERO PROMESAS DE BÚSQUEDA: NUNCA digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
-2. SI 'MÉDICOS REALES ENCONTRADOS' TIENE DATOS: Presenta el nombre del doctor, su centro médico y su contacto de inmediato.
-3. SI 'MÉDICOS REALES ENCONTRADOS' ESTÁ VACÍO: Responde exactamente: "En este momento no tengo registrado un especialista de esa área en esa zona en nuestro directorio."
+### 🚫 REGLAS DE ORO (FASE 1):
+1. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
+2. LECTURA DIRECTA: Si la lista 'MÉDICOS REALES ENCONTRADOS' contiene datos, presenta la información del médico (nombre, especialidad, centro médico, dirección/contacto) en el primer mensaje.
+3. CERO ALUCINACIONES: Si la lista está vacía, indica amablemente que no tienes un especialista de esa área registrado en esa ubicación en el directorio.
 """
 
 def obtener_hora_rd_iso() -> str:
@@ -56,65 +57,55 @@ def remover_tildes(texto: str) -> str:
 
 def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = "", limite: int = 5) -> List[Dict]:
     supabase = obtener_cliente_supabase()
-    datos = []
+    if not supabase:
+        print("❌ [SUPABASE ERROR] Sin cliente Supabase activo.")
+        return []
 
-    if supabase:
-        try:
-            res = supabase.table("vitalmi_directorio_master").select("*").limit(50).execute()
-            if res.data:
-                datos = res.data
-                print(f"✅ [SUPABASE SUCCESS] Registros leídos: {len(datos)}")
-        except Exception as e:
-            print(f"❌ [SUPABASE ERROR] Error al consultar tabla: {e}")
+    try:
+        term_sin_tilde = remover_tildes(termino_busqueda).lower() if termino_busqueda else ""
+        loc_sin_tilde = remover_tildes(sector_municipio).lower() if sector_municipio else ""
 
-    # SI SUPABASE NO TIENE CONEXIÓN O VIENE VACÍO, USAR BASE DE DATOS LOCAL DE RESPALDO PARA FASE 1
-    if not datos:
-        print("⚠️ [BACKUP DATA] Usando directorio local garantizado para la prueba")
-        datos = [
-            {
-                "id": 1,
-                "nombre": "Dr. Manuel Canela",
-                "tipo_prestador": "Médico",
-                "especialidad": "Otorrinolaringología",
-                "especialidad_medico": "Otorrinolaringología",
-                "centro_medico": "Grupo Médico San Cristóbal",
-                "direccion": "Av. Constitución #45, San Cristóbal",
-                "ciudad_provincia": "San Cristóbal",
-                "sector": "Centro",
-                "telefono_institucional": "809-528-3000",
-                "whatsapp": "809-528-3000",
-                "aseguradoras": "Primera ARS, Humano, Mapfre"
-            },
-            {
-                "id": 2,
-                "nombre": "Dra. Carmen Rodríguez",
-                "tipo_prestador": "Médico",
-                "especialidad": "Cardiología",
-                "especialidad_medico": "Cardiología",
-                "centro_medico": "Clínica San Rafael",
-                "direccion": "Calle Maria Trinidad Sánchez #12, San Cristóbal",
-                "ciudad_provincia": "San Cristóbal",
-                "sector": "Canastica",
-                "telefono_institucional": "809-528-1122",
-                "whatsapp": "809-528-1122",
-                "aseguradoras": "Humano, Senasa, Futuro"
-            }
-        ]
+        # Mapeo de raíz
+        if "otorrin" in term_sin_tilde:
+            term_sin_tilde = "otorrin"
+        elif "gastro" in term_sin_tilde:
+            term_sin_tilde = "gastro"
+        elif "ortoped" in term_sin_tilde or "traumatolog" in term_sin_tilde:
+            term_sin_tilde = "ortop"
 
-    # Filtrar por término
-    term_limpio = remover_tildes(termino_busqueda).lower() if termino_busqueda else ""
-    if "otorrin" in term_limpio:
-        term_limpio = "otorrin"
-    elif "cardiolog" in term_limpio:
-        term_limpio = "cardio"
+        print(f"🔍 [SUPABASE QUERY] Término: '{term_sin_tilde}' | Ubicación: '{loc_sin_tilde}'")
 
-    filtrados = []
-    for m in datos:
-        esp = remover_tildes(str(m.get("especialidad") or "") + " " + str(m.get("especialidad_medico") or "")).lower()
-        if term_limpio in esp:
-            filtrados.append(m)
+        query = supabase.table("vitalmi_directorio_master").select(
+            "id, nombre, tipo_prestador, especialidad, especialidad_clinica, especialidad_medico, subespecialidades_medico, "
+            "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
+        )
 
-    return filtrados if filtrados else datos[:limite]
+        # Filtro de especialidad
+        if term_sin_tilde:
+            query = query.or_(
+                f"especialidad_medico.ilike.%{term_sin_tilde}%,subespecialidades_medico.ilike.%{term_sin_tilde}%,especialidad_clinica.ilike.%{term_sin_tilde}%,especialidad.ilike.%{term_sin_tilde}%"
+            )
+
+        # Filtro geográfico incluyendo 'direccion' directamente en la consulta
+        if loc_sin_tilde:
+            query = query.or_(
+                f"direccion.ilike.%{loc_sin_tilde}%,ciudad_provincia.ilike.%{loc_sin_tilde}%,sector.ilike.%{loc_sin_tilde}%"
+            )
+
+        res = query.limit(limite).execute()
+        datos = res.data if res.data else []
+        print(f"📊 [SUPABASE RESULT] Médicos retornados: {len(datos)}")
+
+        # Normalización de contexto para registros con sector nulo
+        for m in datos:
+            if not m.get("sector") and m.get("direccion"):
+                m["sector_extraido"] = m["direccion"]
+
+        return datos
+
+    except Exception as e:
+        print(f"⚠️ [SUPABASE EXCEPTION] Error en buscar_medicos_master: {e}")
+        return []
 
 def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") -> dict:
     supabase = obtener_cliente_supabase()
@@ -215,7 +206,9 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     sector_detectado = ""
     texto_limpio_loc = remover_tildes(texto_contexto_completo).lower()
     if "san cristobal" in texto_limpio_loc:
-        sector_detectado = "SAN CRISTOBAL"
+        sector_detectado = "san cristobal"
+    elif "santo domingo" in texto_limpio_loc:
+        sector_detectado = "santo domingo"
 
     medicos_encontrados = buscar_medicos_master(sector_municipio=sector_detectado, termino_busqueda=termino_buscado)
 
@@ -224,7 +217,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     
     prompt_instruccion_medicos = (
         "\nINSTRUCCIÓN DIRECTA: Responde ÚNICAMENTE usando los datos de 'MÉDICOS REALES ENCONTRADOS'. "
-        "Entrega de inmediato el nombre del doctor, clínica y número telefónico."
+        "Muestra inmediatamente el nombre del doctor, la clínica/dirección y su número de contacto."
     )
 
     system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_usuario + contexto_medicos + prompt_instruccion_medicos
