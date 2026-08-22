@@ -38,7 +38,7 @@ Tu ÚNICA función actual es entregar la información de los médicos presentes 
 ### 🚫 REGLAS DE ORO (FASE 1):
 1. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
 2. LECTURA DIRECTA: Si la lista 'MÉDICOS REALES ENCONTRADOS' contiene datos, presenta la información del médico (nombre, especialidad, centro médico, dirección/contacto) de inmediato.
-3. SI NO HAY EN LA CIUDAD SOLICITADA PERO SÍ EN OTRA: Si los médicos devueltos corresponden a otra provincia/ciudad, indícalo amablemente (ej. "En Azua no tengo registrados actualmente, pero en San Cristóbal cuento con...").
+3. SI NO HAY EN LA CIUDAD SOLICITADA PERO SÍ EN OTRA: Si los médicos devueltos corresponden a otra provincia/ciudad, indícalo amablemente.
 4. CERO ALUCINACIONES: NUNCA inventes médicos ni números telefónicos.
 """
 
@@ -66,28 +66,23 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
         term_sin_tilde = remover_tildes(termino_busqueda).lower() if termino_busqueda else ""
         loc_sin_tilde = remover_tildes(sector_municipio).lower() if sector_municipio else ""
 
-        print(f"🔍 [SEARCH] Término: '{term_sin_tilde}' | Ubicación: '{loc_sin_tilde}'")
+        print(f"🔍 [SEARCH] Término/Nombre: '{term_sin_tilde}' | Ubicación: '{loc_sin_tilde}'")
 
         query = supabase.table("vitalmi_directorio_master").select(
             "id, nombre, tipo_prestador, especialidad, especialidad_clinica, especialidad_medico, subespecialidades_medico, "
             "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
         )
 
-        # 1. Consulta primaria por especialidad
+        # 1. Búsqueda amplia: Incluye NOMBRE, especialidad, subespecialidades y centro médico
         if term_sin_tilde:
             query = query.or_(
-                f"especialidad_medico.ilike.%{term_sin_tilde}%,subespecialidades_medico.ilike.%{term_sin_tilde}%,especialidad_clinica.ilike.%{term_sin_tilde}%,especialidad.ilike.%{term_sin_tilde}%"
+                f"nombre.ilike.%{term_sin_tilde}%,especialidad_medico.ilike.%{term_sin_tilde}%,subespecialidades_medico.ilike.%{term_sin_tilde}%,especialidad_clinica.ilike.%{term_sin_tilde}%,especialidad.ilike.%{term_sin_tilde}%,centro_medico.ilike.%{term_sin_tilde}%"
             )
 
-        res = query.limit(20).execute()
+        res = query.limit(25).execute()
         datos = res.data if res.data else []
 
-        if not datos:
-            # Plan B: Si no trajo por especialidad, traer lote general
-            res_gen = supabase.table("vitalmi_directorio_master").select("*").limit(20).execute()
-            datos = res_gen.data if res_gen.data else []
-
-        # 2. Filtrar por ubicación en memoria de Python
+        # 2. Filtrar por ubicación en memoria si fue especificada
         if datos and loc_sin_tilde:
             coincidencias_zona = [
                 m for m in datos
@@ -96,10 +91,9 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
                 or loc_sin_tilde in remover_tildes(m.get("direccion") or "").lower()
             ]
             if coincidencias_zona:
-                print(f"✅ [MATCH ZONA] {len(coincidencias_zona)} médicos encontrados en {loc_sin_tilde}")
+                print(f"✅ [MATCH ZONA Y NOMBRE/ESP] {len(coincidencias_zona)} encontrados")
                 return coincidencias_zona[:limite]
 
-        print(f"⚠️ [FALLBACK] No hubo match exacto en '{loc_sin_tilde}'. Retornando {len(datos)} médicos generales de la especialidad.")
         return datos[:limite]
 
     except Exception as e:
@@ -188,10 +182,10 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     texto_contexto_limpio = remover_tildes(texto_contexto_completo)
 
     raices_especialidades = {
+        "ginecolog": "ginecolog",
         "otorrin": "otorrin",
         "gastro": "gastro",
         "pediatr": "pediatr",
-        "ginecolog": "ginecolog",
         "cardiol": "cardiol",
         "ortoped": "ortop",
         "traumatolog": "ortop",
@@ -204,33 +198,36 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         "hematolog": "hematolog"
     }
 
+    # Detectar si hay una especialidad en la frase
     termino_buscado = ""
     for clave, raiz in raices_especialidades.items():
         if clave in texto_contexto_limpio:
             termino_buscado = raiz
             break
 
-    if not termino_buscado:
-        termino_buscado = mensaje_usuario
-
-    # Extracción de ubicación del mensaje
+    # Extracción de nombres propios / apellidos si el usuario busca a una persona específica
     mensaje_limpio = remover_tildes(mensaje_usuario).lower().replace("?", "").replace("¿", "")
-    palabras_mensaje = mensaje_limpio.split()
-    palabras_ignorar = ["en", "de", "el", "la", "los", "las", "tienes", "hay", "algun", "alguno", "por", "favor", "cardiol", "pediatr", "otorrin", "neumolog"]
-    
-    ubicacion_detectada = ""
-    for palabra in palabras_mensaje:
-        if len(palabra) > 3 and not any(p in palabra for p in palabras_ignorar):
-            ubicacion_detectada = palabra
-            break
+    mensaje_limpio = re.sub(r'\b(dr|dra|doctor|doctora|en|de|la|el|los|las|cual|clinica|atiene|que|es|buscar|al|y)\b', '', mensaje_limpio).strip()
 
-    if not ubicacion_detectada:
-        if "san cristobal" in texto_contexto_limpio:
-            ubicacion_detectada = "san cristobal"
-        elif "azua" in texto_contexto_limpio:
-            ubicacion_detectada = "azua"
-        elif "peravia" in texto_contexto_limpio or "bani" in texto_contexto_limpio:
-            ubicacion_detectada = "peravia"
+    # Si no se identificó especialidad, usar el nombre o apellido extraído
+    if not termino_buscado and mensaje_limpio:
+        palabras = mensaje_limpio.split()
+        # Tomamos la palabra principal (apellido/nombre) que no sea una ciudad conocida
+        ciudades = ["san cristobal", "santiago", "la vega", "azua", "peravia", "bani", "santo domingo"]
+        palabras_filtradas = [p for p in palabras if not any(c in p for c in ciudades) and len(p) > 2]
+        if palabras_filtradas:
+            termino_buscado = palabras_filtradas[0]
+
+    # Extracción de ubicación
+    ubicacion_detectada = ""
+    if "san cristobal" in texto_contexto_limpio:
+        ubicacion_detectada = "san cristobal"
+    elif "santiago" in texto_contexto_limpio:
+        ubicacion_detectada = "santiago"
+    elif "la vega" in texto_contexto_limpio:
+        ubicacion_detectada = "la vega"
+    elif "azua" in texto_contexto_limpio:
+        ubicacion_detectada = "azua"
 
     medicos_encontrados = buscar_medicos_master(sector_municipio=ubicacion_detectada, termino_busqueda=termino_buscado)
 
@@ -239,7 +236,8 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     
     prompt_instruccion_medicos = (
         "\nINSTRUCCIÓN DIRECTA: Responde ÚNICAMENTE usando los datos de 'MÉDICOS REALES ENCONTRADOS'. "
-        "Si la lista tiene médicos, presenta sus datos inmediatamente. Si no están exactamente en la ciudad que pidió el usuario, menciona amablemente su ubicación real."
+        "Si la lista tiene médicos, presenta sus datos de inmediato (nombre, especialidad, clínica y teléfono). "
+        "Si la lista está vacía, di de forma amigable que no tienes un médico con ese nombre o especialidad registrado en esa ubicación."
     )
 
     system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_usuario + contexto_medicos + prompt_instruccion_medicos
