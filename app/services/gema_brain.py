@@ -63,7 +63,7 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
     try:
         term_sin_tilde = remover_tildes(termino_busqueda).lower() if termino_busqueda else ""
         
-        # Mapeo de raíz médica
+        # Mapeo de raíz
         if "otorrin" in term_sin_tilde:
             term_sin_tilde = "otorrin"
         elif "gastro" in term_sin_tilde:
@@ -71,39 +71,52 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
         elif "ortoped" in term_sin_tilde or "traumatolog" in term_sin_tilde:
             term_sin_tilde = "ortop"
 
-        print(f"🔍 [SUPABASE SEARCH] Término: '{term_sin_tilde}' | Ubicación: '{sector_municipio}'")
+        print(f"🔍 [SUPABASE SEARCH] Término extraído: '{term_sin_tilde}' | Ubicación: '{sector_municipio}'")
 
-        # 1. Búsqueda principal por especialidad
-        query = supabase.table("vitalmi_directorio_master").select(
+        # Traer un lote directo sin filtros complejos de OR en SQL para no descartar NULLs
+        res = supabase.table("vitalmi_directorio_master").select(
             "id, nombre, tipo_prestador, especialidad, especialidad_clinica, especialidad_medico, subespecialidades_medico, "
             "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
-        )
+        ).limit(100).execute()
 
+        todos = res.data if res.data else []
+        print(f"📊 [SUPABASE RAW] Registros brutos leídos de la tabla: {len(todos)}")
+
+        if not todos:
+            return []
+
+        # Filtrar por especialidad en Python
+        medicos_especialidad = []
         if term_sin_tilde:
-            query = query.or_(
-                f"especialidad_medico.ilike.%{term_sin_tilde}%,subespecialidades_medico.ilike.%{term_sin_tilde}%,especialidad_clinica.ilike.%{term_sin_tilde}%,especialidad.ilike.%{term_sin_tilde}%"
-            )
+            for m in todos:
+                esp = remover_tildes(m.get("especialidad") or "").lower()
+                esp_med = remover_tildes(m.get("especialidad_medico") or "").lower()
+                esp_cli = remover_tildes(m.get("especialidad_clinica") or "").lower()
+                sub_esp = remover_tildes(m.get("subespecialidades_medico") or "").lower()
 
-        res = query.limit(10).execute()
-        datos = res.data if res.data else []
-        print(f"📊 [SUPABASE RESULT] Total por especialidad: {len(datos)}")
+                if term_sin_tilde in esp or term_sin_tilde in esp_med or term_sin_tilde in esp_cli or term_sin_tilde in sub_esp:
+                    medicos_especialidad.append(m)
+        else:
+            medicos_especialidad = todos
 
-        # 2. Filtrar por ciudad/sector
-        if datos and sector_municipio:
+        print(f"📊 [MATCH ESPECIALIDAD] Coincidencias por especialidad: {len(medicos_especialidad)}")
+
+        # Filtrar por ubicación en Python si se especificó
+        if medicos_especialidad and sector_municipio:
             loc_limpia = remover_tildes(sector_municipio).lower()
             datos_filtrados = [
-                m for m in datos 
-                if loc_limpia in remover_tildes(m.get("ciudad_provincia", "") or "").lower() 
-                or loc_limpia in remover_tildes(m.get("sector", "") or "").lower()
-                or loc_limpia in remover_tildes(m.get("direccion", "") or "").lower()
+                m for m in medicos_especialidad 
+                if loc_limpia in remover_tildes(m.get("ciudad_provincia") or "").lower() 
+                or loc_limpia in remover_tildes(m.get("sector") or "").lower()
+                or loc_limpia in remover_tildes(m.get("direccion") or "").lower()
             ]
             if datos_filtrados:
-                print(f"✅ [MATCH ZONA] Encontrados {len(datos_filtrados)} en {sector_municipio}")
+                print(f"✅ [MATCH ZONA] Coincidencias exactas en zona '{sector_municipio}': {len(datos_filtrados)}")
                 return datos_filtrados[:limite]
 
-        # 3. Fallback: Si no hay en la ciudad exacta, entregar los encontrados de la especialidad
-        print(f"⚠️ [FALLBACK GENERAL] Entregando los {len(datos)} disponibles")
-        return datos[:limite]
+        # Fallback: Entregar los de la especialidad general
+        print(f"⚠️ [FALLBACK] Retornando {len(medicos_especialidad)} registros de la especialidad")
+        return medicos_especialidad[:limite]
 
     except Exception as e:
         print(f"⚠️ [SUPABASE EXCEPTION] Error en buscar_medicos_master: {e}")
