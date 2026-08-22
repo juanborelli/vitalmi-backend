@@ -63,7 +63,6 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
     try:
         term_sin_tilde = remover_tildes(termino_busqueda).lower() if termino_busqueda else ""
         
-        # Mapeo de raíz
         if "otorrin" in term_sin_tilde:
             term_sin_tilde = "otorrin"
         elif "gastro" in term_sin_tilde:
@@ -73,7 +72,6 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
 
         print(f"🔍 [SUPABASE SEARCH] Término: '{term_sin_tilde}' | Ubicación: '{sector_municipio}'")
 
-        # 1. Búsqueda principal por especialidad
         query = supabase.table("vitalmi_directorio_master").select(
             "id, nombre, tipo_prestador, especialidad, especialidad_clinica, especialidad_medico, subespecialidades_medico, "
             "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
@@ -88,7 +86,6 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
         datos = res.data if res.data else []
         print(f"📊 [SUPABASE RESULT] Médicos por especialidad encontrados: {len(datos)}")
 
-        # 2. Filtrado por ubicación en Python (Si aplica)
         if datos and sector_municipio:
             loc_limpia = remover_tildes(sector_municipio).lower()
             datos_filtrados = [
@@ -101,7 +98,6 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
                 print(f"✅ [SUPABASE MATCH] Coincidencias en zona '{sector_municipio}': {len(datos_filtrados)}")
                 return datos_filtrados[:limite]
 
-        # 3. Fallback: Si no hay coincidencia exacta por sector/ciudad, entregar los encontrados de la especialidad
         print(f"⚠️ [SUPABASE FALLBACK] Entregando los {len(datos)} médicos de la especialidad general")
         return datos[:limite]
 
@@ -187,10 +183,8 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     historial = obtener_historial_supabase(numero_usuario, limite=10)
 
-    # Texto contexto completo
     texto_contexto_completo = " ".join([m["content"] for m in historial]).lower() + " " + mensaje_usuario.lower()
     
-    # Extraer especialidad
     palabras_clave = [
         "otorrinolaringolog", "otorrino", "gastroenterolog", "gastro", "pediatr", "ginecolog", "cardiolog", 
         "ortoped", "traumatolog", "internist", "dermatolog", "urolog",
@@ -207,7 +201,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     if not termino_buscado:
         termino_buscado = mensaje_usuario
 
-    # Detectar ubicación
     sector_detectado = ""
     texto_limpio_loc = remover_tildes(texto_contexto_completo).lower()
     if "san cristobal" in texto_limpio_loc:
@@ -217,7 +210,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     elif "azua" in texto_limpio_loc:
         sector_detectado = "AZUA"
 
-    # Consulta Supabase
     medicos_encontrados = buscar_medicos_master(sector_municipio=sector_detectado, termino_busqueda=termino_buscado)
 
     contexto_medicos = f"\nMÉDICOS REALES ENCONTRADOS EN SUPABASE: {medicos_encontrados}"
