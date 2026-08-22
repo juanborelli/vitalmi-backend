@@ -57,7 +57,7 @@ def limpiar_texto(texto: str) -> str:
         texto = texto.replace(a, b)
     return texto.strip().upper()
 
-def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = "", limite: int = 3) -> List[Dict]:
+def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = "", limite: int = 5) -> List[Dict]:
     supabase = obtener_cliente_supabase()
     if not supabase:
         return []
@@ -68,33 +68,36 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
             "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
         )
 
-        # Búsqueda limpia en columnas de especialidades
-        if termino_busqueda:
-            term_limpio = limpiar_texto(termino_busqueda).lower()
-            query = query.or_(
-                f"especialidad_medico.ilike.%{term_limpio}%,subespecialidades_medico.ilike.%{term_limpio}%,especialidad_clinica.ilike.%{term_limpio}%"
-            )
+        term_limpio = limpiar_texto(termino_busqueda).lower() if termino_busqueda else ""
         
-        # Filtro por ubicación
-        if sector_municipio:
-            loc_limpia = limpiar_texto(sector_municipio)
-            query = query.or_(f"sector.ilike.%{loc_limpia}%,ciudad_provincia.ilike.%{loc_limpia}%")
+        # Mapeo de comodines de raíz médica
+        if "otorrino" in term_limpio:
+            term_limpio = "otorrin"
+        elif "gastro" in term_limpio:
+            term_limpio = "gastro"
+        elif "ortoped" in term_limpio or "traumatolog" in term_limpio:
+            term_limpio = "ortop"
+
+        # Búsqueda amplia en todas las columnas de especialidades
+        if term_limpio:
+            query = query.or_(
+                f"especialidad_medico.ilike.%{term_limpio}%,subespecialidades_medico.ilike.%{term_limpio}%,especialidad_clinica.ilike.%{term_limpio}%,especialidad.ilike.%{term_limpio}%"
+            )
 
         res = query.limit(limite).execute()
         datos = res.data if res.data else []
 
-        # Plan B: Búsqueda general si no hay coincidencia exacta por zona
-        if not datos and termino_busqueda:
-            term_limpio = limpiar_texto(termino_busqueda).lower()
-            query_plan_b = supabase.table("vitalmi_directorio_master").select(
-                "id, nombre, tipo_prestador, especialidad, especialidad_clinica, especialidad_medico, subespecialidades_medico, "
-                "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
-            ).or_(
-                f"especialidad_medico.ilike.%{term_limpio}%,subespecialidades_medico.ilike.%{term_limpio}%,especialidad_clinica.ilike.%{term_limpio}%"
-            ).limit(limite)
-            
-            res_b = query_plan_b.execute()
-            datos = res_b.data if res_b.data else []
+        # Filtrado flexible por ubicación en Python
+        if datos and sector_municipio:
+            loc_limpia = limpiar_texto(sector_municipio).lower()
+            datos_filtrados = [
+                m for m in datos 
+                if loc_limpia in limpiar_texto(m.get("ciudad_provincia", "")).lower() 
+                or loc_limpia in limpiar_texto(m.get("sector", "")).lower()
+                or loc_limpia in limpiar_texto(m.get("direccion", "")).lower()
+            ]
+            if datos_filtrados:
+                return datos_filtrados
 
         return datos
     except Exception as e:
