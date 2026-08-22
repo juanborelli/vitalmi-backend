@@ -27,18 +27,17 @@ def obtener_cliente_openai() -> AsyncOpenAI:
     return None
 
 SYSTEM_PROMPT_FASE_1 = """
-Eres Gema, la asistente virtual de VitalMi en República Dominicana.
-Tu ÚNICA función es entregar la información de los médicos que se encuentran en el bloque 'MÉDICOS REALES ENCONTRADOS'.
+Eres Gema, la asistente virtual de VitalMi en República Dominicana. Tu ÚNICA función es entregar la información de los médicos que se encuentran en el bloque 'MÉDICOS REALES ENCONTRADOS'.
 
 ### 🎭 PERSONALIDAD Y TONO:
 - Calidez caribeña/dominicana profesional, amable, directa y natural.
 - Responde de forma fluida y conversacional (máximo 2-3 oraciones corridas).
 - NO utilices listas numeradas, viñetas (*, -) ni formatos rígidos.
 
-### 🚫 REGLAS DE ORO (ESTRICTO):
-1. CERO EVASIVAS Y CERO PROMESAS: JAMÁS digas "voy a buscar", "te daré los detalles en un momento", "te contactaré en breve" ni "deja revisar".
-2. SI 'MÉDICOS REALES ENCONTRADOS' TIENE DATOS: Entrega AHORA MISMO el nombre del médico, su especialidad, centro médico y número de contacto.
-3. SI 'MÉDICOS REALES ENCONTRADOS' ESTÁ VACÍO (NO HAY DATOS): Di directamente que en este momento no tienes ese especialista registrado en esa zona en el directorio.
+### 🚫 REGLAS STRICTAS DE RESPUESTA:
+1. CERO PROMESAS DE BÚSQUEDA: NUNCA digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
+2. SI 'MÉDICOS REALES ENCONTRADOS' TIENE DATOS: Presenta los nombres de los doctores, su centro médico y su contacto de inmediato.
+3. SI 'MÉDICOS REALES ENCONTRADOS' ESTÁ VACÍO: Responde exactamente: "En este momento no tengo registrado un especialista de esa área en esa zona en nuestro directorio."
 """
 
 def obtener_hora_rd_iso() -> str:
@@ -58,17 +57,13 @@ def remover_tildes(texto: str) -> str:
 def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = "", limite: int = 5) -> List[Dict]:
     supabase = obtener_cliente_supabase()
     if not supabase:
+        print("❌ [SUPABASE ERROR] No se pudo conectar a Supabase")
         return []
 
     try:
-        query = supabase.table("vitalmi_directorio_master").select(
-            "id, nombre, tipo_prestador, especialidad, especialidad_clinica, especialidad_medico, subespecialidades_medico, "
-            "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
-        )
-
         term_sin_tilde = remover_tildes(termino_busqueda).lower() if termino_busqueda else ""
         
-        # Mapeo de raíz médica
+        # Mapeo de raíz
         if "otorrin" in term_sin_tilde:
             term_sin_tilde = "otorrin"
         elif "gastro" in term_sin_tilde:
@@ -76,7 +71,14 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
         elif "ortoped" in term_sin_tilde or "traumatolog" in term_sin_tilde:
             term_sin_tilde = "ortop"
 
-        # Búsqueda en especialidades
+        print(f"🔍 [SUPABASE SEARCH] Término: '{term_sin_tilde}' | Ubicación: '{sector_municipio}'")
+
+        # 1. Búsqueda principal por especialidad
+        query = supabase.table("vitalmi_directorio_master").select(
+            "id, nombre, tipo_prestador, especialidad, especialidad_clinica, especialidad_medico, subespecialidades_medico, "
+            "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
+        )
+
         if term_sin_tilde:
             query = query.or_(
                 f"especialidad_medico.ilike.%{term_sin_tilde}%,subespecialidades_medico.ilike.%{term_sin_tilde}%,especialidad_clinica.ilike.%{term_sin_tilde}%,especialidad.ilike.%{term_sin_tilde}%"
@@ -84,16 +86,9 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
 
         res = query.limit(10).execute()
         datos = res.data if res.data else []
+        print(f"📊 [SUPABASE RESULT] Médicos por especialidad encontrados: {len(datos)}")
 
-        # Si no encontró con el término mapeado, intenta un SELECT amplio
-        if not datos:
-            res_all = supabase.table("vitalmi_directorio_master").select(
-                "id, nombre, tipo_prestador, especialidad, especialidad_clinica, especialidad_medico, subespecialidades_medico, "
-                "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
-            ).limit(10).execute()
-            datos = res_all.data if res_all.data else []
-
-        # Filtrar por ubicación en Python sin importar tildes
+        # 2. Filtrado por ubicación en Python (Si aplica)
         if datos and sector_municipio:
             loc_limpia = remover_tildes(sector_municipio).lower()
             datos_filtrados = [
@@ -103,9 +98,13 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
                 or loc_limpia in remover_tildes(m.get("direccion", "")).lower()
             ]
             if datos_filtrados:
+                print(f"✅ [SUPABASE MATCH] Coincidencias en zona '{sector_municipio}': {len(datos_filtrados)}")
                 return datos_filtrados[:limite]
 
+        # 3. Fallback: Si no hay coincidencia exacta por sector/ciudad, entregar los encontrados de la especialidad
+        print(f"⚠️ [SUPABASE FALLBACK] Entregando los {len(datos)} médicos de la especialidad general")
         return datos[:limite]
+
     except Exception as e:
         print(f"⚠️ [SUPABASE EXCEPTION] Error en buscar_medicos_master: {e}")
         return []
@@ -188,7 +187,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     historial = obtener_historial_supabase(numero_usuario, limite=10)
 
-    # Texto contexto
+    # Texto contexto completo
     texto_contexto_completo = " ".join([m["content"] for m in historial]).lower() + " " + mensaje_usuario.lower()
     
     # Extraer especialidad
@@ -208,7 +207,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     if not termino_buscado:
         termino_buscado = mensaje_usuario
 
-    # Ubicación
+    # Detectar ubicación
     sector_detectado = ""
     texto_limpio_loc = remover_tildes(texto_contexto_completo).lower()
     if "san cristobal" in texto_limpio_loc:
@@ -226,7 +225,8 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     
     prompt_instruccion_medicos = (
         "\nINSTRUCCIÓN DIRECTA: Responde ÚNICAMENTE usando los datos de 'MÉDICOS REALES ENCONTRADOS'. "
-        "Si la lista tiene médicos, da sus datos de inmediato. Si está vacía, di de una vez que no hay médicos de esa área en esa ciudad."
+        "Si la lista tiene médicos, entrega sus nombres y teléfonos inmediatamente. "
+        "Si está vacía, di abiertamente que no tienes registrados en esa zona."
     )
 
     system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_usuario + contexto_medicos + prompt_instruccion_medicos
