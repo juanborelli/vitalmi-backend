@@ -38,7 +38,7 @@ Tu ÚNICA función actual es entregar la información de los médicos presentes 
 ### 🚫 REGLAS DE ORO (FASE 1):
 1. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
 2. LECTURA DIRECTA: Si la lista 'MÉDICOS REALES ENCONTRADOS' contiene datos, presenta la información del médico (nombre, especialidad, centro médico, dirección/contacto) de inmediato.
-3. SI NO HAY EN LA CIUDAD SOLICITADA PERO SÍ EN OTRA: Si los médicos devueltos corresponden a otra provincia/ciudad, indícalo amablemente.
+3. SI EL MÉDICO ESTÁ EN OTRA CIUDAD: Si el médico existe pero en una ubicación distinta a la preguntada, indícalo claramente (ej. "El Dr. Martínez Toribio atiende en Santiago, no en La Vega...").
 4. CERO ALUCINACIONES: NUNCA inventes médicos ni números telefónicos.
 """
 
@@ -66,24 +66,36 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
         term_sin_tilde = remover_tildes(termino_busqueda).lower() if termino_busqueda else ""
         loc_sin_tilde = remover_tildes(sector_municipio).lower() if sector_municipio else ""
 
-        print(f"🔍 [SEARCH] Término/Nombre: '{term_sin_tilde}' | Ubicación: '{loc_sin_tilde}'")
+        print(f"🔍 [SEARCH TOKEN] Término/Nombre: '{term_sin_tilde}' | Ubicación: '{loc_sin_tilde}'")
+
+        # Extraer palabras individuales clave del término (ej: 'martinez', 'toribio')
+        palabras_clave = [p for p in term_sin_tilde.split() if len(p) > 2]
 
         query = supabase.table("vitalmi_directorio_master").select(
             "id, nombre, tipo_prestador, especialidad, especialidad_clinica, especialidad_medico, subespecialidades_medico, "
             "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
         )
 
-        # 1. Búsqueda amplia: Incluye NOMBRE, especialidad, subespecialidades y centro médico
-        if term_sin_tilde:
-            query = query.or_(
-                f"nombre.ilike.%{term_sin_tilde}%,especialidad_medico.ilike.%{term_sin_tilde}%,subespecialidades_medico.ilike.%{term_sin_tilde}%,especialidad_clinica.ilike.%{term_sin_tilde}%,especialidad.ilike.%{term_sin_tilde}%,centro_medico.ilike.%{term_sin_tilde}%"
-            )
+        # Construir filtros ilike por cada token o término completo
+        condiciones = [
+            f"nombre.ilike.%{term_sin_tilde}%",
+            f"especialidad_medico.ilike.%{term_sin_tilde}%",
+            f"especialidad.ilike.%{term_sin_tilde}%",
+            f"centro_medico.ilike.%{term_sin_tilde}%"
+        ]
+        for token in palabras_clave:
+            condiciones.append(f"nombre.ilike.%{token}%")
+
+        query = query.or_(",".join(condiciones))
 
         res = query.limit(25).execute()
         datos = res.data if res.data else []
 
-        # 2. Filtrar por ubicación en memoria si fue especificada
-        if datos and loc_sin_tilde:
+        if not datos:
+            return []
+
+        # Filtrar por ubicación en memoria de Python si fue especificada
+        if loc_sin_tilde:
             coincidencias_zona = [
                 m for m in datos
                 if loc_sin_tilde in remover_tildes(m.get("ciudad_provincia") or "").lower()
@@ -91,9 +103,11 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
                 or loc_sin_tilde in remover_tildes(m.get("direccion") or "").lower()
             ]
             if coincidencias_zona:
-                print(f"✅ [MATCH ZONA Y NOMBRE/ESP] {len(coincidencias_zona)} encontrados")
+                print(f"✅ [MATCH ZONA Y NOMBRE] {len(coincidencias_zona)} encontrados")
                 return coincidencias_zona[:limite]
 
+        # Si no está en esa ciudad pero sí existe el médico, retornar los médicos encontrados
+        print(f"⚠️ [FALLBACK NOMBRE] Entregando {len(datos)} médicos encontrados con ese nombre/especialidad")
         return datos[:limite]
 
     except Exception as e:
@@ -198,25 +212,21 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         "hematolog": "hematolog"
     }
 
-    # Detectar si hay una especialidad en la frase
     termino_buscado = ""
     for clave, raiz in raices_especialidades.items():
         if clave in texto_contexto_limpio:
             termino_buscado = raiz
             break
 
-    # Extracción de nombres propios / apellidos si el usuario busca a una persona específica
+    # Extracción del nombre si no hay especialidad directa
     mensaje_limpio = remover_tildes(mensaje_usuario).lower().replace("?", "").replace("¿", "")
     mensaje_limpio = re.sub(r'\b(dr|dra|doctor|doctora|en|de|la|el|los|las|cual|clinica|atiene|que|es|buscar|al|y)\b', '', mensaje_limpio).strip()
 
-    # Si no se identificó especialidad, usar el nombre o apellido extraído
     if not termino_buscado and mensaje_limpio:
-        palabras = mensaje_limpio.split()
-        # Tomamos la palabra principal (apellido/nombre) que no sea una ciudad conocida
         ciudades = ["san cristobal", "santiago", "la vega", "azua", "peravia", "bani", "santo domingo"]
-        palabras_filtradas = [p for p in palabras if not any(c in p for c in ciudades) and len(p) > 2]
+        palabras_filtradas = [p for p in mensaje_limpio.split() if not any(c in p for c in ciudades) and len(p) > 2]
         if palabras_filtradas:
-            termino_buscado = palabras_filtradas[0]
+            termino_buscado = " ".join(palabras_filtradas)
 
     # Extracción de ubicación
     ubicacion_detectada = ""
@@ -237,7 +247,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     prompt_instruccion_medicos = (
         "\nINSTRUCCIÓN DIRECTA: Responde ÚNICAMENTE usando los datos de 'MÉDICOS REALES ENCONTRADOS'. "
         "Si la lista tiene médicos, presenta sus datos de inmediato (nombre, especialidad, clínica y teléfono). "
-        "Si la lista está vacía, di de forma amigable que no tienes un médico con ese nombre o especialidad registrado en esa ubicación."
+        "Si la lista está vacía, indica amablemente que no tienes un médico registrado con ese nombre o especialidad en la base de datos."
     )
 
     system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_usuario + contexto_medicos + prompt_instruccion_medicos
