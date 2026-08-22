@@ -1,5 +1,4 @@
 import os
-import re
 from datetime import datetime
 import zoneinfo
 from pathlib import Path
@@ -26,18 +25,22 @@ def obtener_cliente_openai() -> AsyncOpenAI:
         return AsyncOpenAI(api_key=api_key)
     return None
 
-SYSTEM_PROMPT_BASE = """
-Eres Gema, la asistente médica ejecutiva y virtual de VitalMi en República Dominicana.
+# PROMPT ESTRICTO PARA FASE 1: LECTURA FIEL DEL DIRECTORIO
+SYSTEM_PROMPT_FASE_1 = """
+Eres Gema, la asistente virtual de VitalMi en República Dominicana.
+Tu ÚNICA función actual es proporcionar información exacta del directorio médico disponible en la base de datos.
 
-### 🎭 PERSONALIDAD Y TONO ("EFECTO WOW"):
-- Hablas con calidez caribeña/dominicana profesional, amable, empática, fluida y muy natural.
-- Responde de forma directa, breve y conversacional (máximo 2-3 oraciones corridas). 
-- EVITA strictly usar listas numeradas o viñetas (*, -). Escribe de forma corrida.
+### 🎭 PERSONALIDAD Y TONO:
+- Calidez caribeña/dominicana profesional, amable, directa y natural.
+- Responde de forma fluida y conversacional en un máximo de 2-3 oraciones corridas.
+- NO utilices listas numeradas, viñetas (*, -) ni formatos rígidos.
 
-### 🚫 REGLA DE ORO CONTRA EVASIVAS:
-- JAMÁS digas "voy a buscar", "te contactaré en breve", "te daré la información en un momento" ni pidas esperar. 
-- Responde De INMEDIATO con la información contenida en 'MÉDICOS REALES ENCONTRADOS'.
-- Si la lista está vacía o no hay disponibilidad en la zona solicitada, indícalo abiertamente y presenta las opciones disponibles en la lista (ej. en Santo Domingo o zonas cercanas).
+### 🚫 REGLAS DE ORO DE FASE 1 (LECTURA DIRECTA):
+1. CERO ALUCINACIONES: NUNCA inventes nombres de médicos, clínicas o números telefónicos.
+2. CERO GESTIÓN DE CITAS: NO menciones disponibilidad, horarios ni agendamiento de citas.
+3. CERO EVASIVAS: JAMÁS digas "voy a buscar", "te contactaré en breve" o "espera un momento".
+4. SI HAY RESULTADOS en 'MÉDICOS REALES ENCONTRADOS': Entrega inmediatamente el nombre del médico, su especialidad/subespecialidad, el centro médico y su contacto (teléfono/WhatsApp).
+5. SI LA LISTA ESTÁ VACÍA: Informa amablemente que en este momento no hay un especialista con ese criterio exacto registrado en esa zona en la base de datos.
 """
 
 def obtener_hora_rd_iso() -> str:
@@ -54,7 +57,7 @@ def limpiar_texto(texto: str) -> str:
         texto = texto.replace(a, b)
     return texto.strip().upper()
 
-def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = "", ars: str = "", limite: int = 3) -> List[Dict]:
+def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = "", limite: int = 3) -> List[Dict]:
     supabase = obtener_cliente_supabase()
     if not supabase:
         return []
@@ -65,14 +68,14 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
             "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
         )
 
-        # Búsqueda limpia sobre las 3 columnas de especialidades atómicas
+        # Búsqueda limpia en columnas de especialidades
         if termino_busqueda:
             term_limpio = limpiar_texto(termino_busqueda).lower()
             query = query.or_(
                 f"especialidad_medico.ilike.%{term_limpio}%,subespecialidades_medico.ilike.%{term_limpio}%,especialidad_clinica.ilike.%{term_limpio}%"
             )
         
-        # Filtro de ubicación flexible (sector o provincia/ciudad)
+        # Filtro por ubicación
         if sector_municipio:
             loc_limpia = limpiar_texto(sector_municipio)
             query = query.or_(f"sector.ilike.%{loc_limpia}%,ciudad_provincia.ilike.%{loc_limpia}%")
@@ -80,7 +83,7 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
         res = query.limit(limite).execute()
         datos = res.data if res.data else []
 
-        # Plan B: Búsqueda general por especialidad si no hay coincidencia directa en el municipio/sector
+        # Plan B: Búsqueda general si no hay coincidencia exacta por zona
         if not datos and termino_busqueda:
             term_limpio = limpiar_texto(termino_busqueda).lower()
             query_plan_b = supabase.table("vitalmi_directorio_master").select(
@@ -176,10 +179,10 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     historial = obtener_historial_supabase(numero_usuario, limite=10)
 
-    # Reconstrucción del contexto acumulado
+    # Contexto unificado
     texto_contexto_completo = " ".join([m["content"] for m in historial]).lower() + " " + mensaje_usuario.lower()
     
-    # EXTRAER TÉRMINO DE BÚSQUEDA DINÁMICO (Palabras clave de especialidad/médico)
+    # Detección dinámica de especialidades
     palabras_clave = [
         "otorrino", "gastro", "pediatra", "ginecologo", "cardiologo", 
         "ortopeda", "traumatologo", "internista", "dermatologo", "urologo",
@@ -193,7 +196,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             termino_buscado = palabra
             break
 
-    # Extracción de Ubicación (Prioriza el mensaje actual)
+    # Detección de zona geográfica
     mensaje_actual_lc = mensaje_usuario.lower()
     sector_detectado = ""
     if "san cristobal" in mensaje_actual_lc or "san cristóbal" in mensaje_actual_lc:
@@ -208,20 +211,19 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         elif "azua" in texto_contexto_completo:
             sector_detectado = "AZUA"
 
-    # Búsqueda en Supabase
+    # Consulta a la base de datos
     medicos_encontrados = buscar_medicos_master(sector_municipio=sector_detectado, termino_busqueda=termino_buscado)
 
     contexto_medicos = f"\nMÉDICOS REALES ENCONTRADOS EN SUPABASE: {medicos_encontrados}"
     contexto_usuario = f"\nTe estás comunicando por WhatsApp con '{nombre_contacto}' (ID: {numero_usuario})."
     
     prompt_instruccion_medicos = (
-        "\nINSTRUCCIÓN CRÍTICA: Usa 'MÉDICOS REALES ENCONTRADOS'. "
-        "Si la lista contiene médicos, entrega sus nombres, centro médico y teléfonos DE INMEDIATO. "
-        "JAMÁS digas 'voy a buscar' ni 'te contactaré en breve'. Entrega los datos disponibles ahora mismo. "
-        "Si la lista está vacía, di exactamente que no hay disponibles en esa zona y ofrece los que estén en la lista."
+        "\nINSTRUCCIÓN DE LECTURA DIRECTA: Muestra de inmediato la información de la lista 'MÉDICOS REALES ENCONTRADOS'. "
+        "Menciona el nombre del médico, especialidad, clínica y número de contacto. "
+        "No hables de agendar citas ni de buscar disponibilidad posterior."
     )
 
-    system_prompt = SYSTEM_PROMPT_BASE + contexto_usuario + contexto_medicos + prompt_instruccion_medicos
+    system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_usuario + contexto_medicos + prompt_instruccion_medicos
 
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(historial)
