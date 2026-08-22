@@ -3,7 +3,7 @@ import re
 from datetime import datetime
 import zoneinfo
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from app.core.supabase import obtener_cliente_supabase
@@ -28,17 +28,17 @@ def obtener_cliente_openai() -> AsyncOpenAI:
 
 SYSTEM_PROMPT_FASE_1 = """
 Eres Gema, la asistente virtual de VitalMi en República Dominicana.
-Tu ÚNICA función actual es entregar la información de los médicos presentes en 'MÉDICOS REALES ENCONTRADOS'.
+Tu función es entregar información exacta sobre los médicos y prestadores del directorio según los datos en 'MÉDICOS REALES ENCONTRADOS'.
 
 ### 🎭 PERSONALIDAD Y TONO:
 - Calidez caribeña/dominicana profesional, amable, directa y natural.
 - Responde de forma fluida y conversacional en un máximo de 2-3 oraciones corridas.
 - NO utilices listas numeradas, viñetas (*, -) ni formatos rígidos.
 
-### 🚫 REGLAS DE ORO (FASE 1):
+### 🚫 REGLAS DE ORO:
 1. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
-2. LECTURA DIRECTA: Si la lista 'MÉDICOS REALES ENCONTRADOS' contiene datos, presenta la información del médico (nombre, especialidad, centro médico, dirección/contacto) de inmediato.
-3. SI EL MÉDICO ESTÁ EN OTRA CIUDAD: Si el médico existe pero en una ubicación distinta a la preguntada, indícalo claramente (ej. "El Dr. Martínez Toribio atiende en Santiago, no en La Vega...").
+2. PRECISIÓN EN CONTEOS: Si en el contexto se especifica el TOTAL REAL REGISTRADO, usa esa cifra exacta.
+3. LECTURA DIRECTA: Muestra los datos de los médicos encontrados (nombre, especialidad, centro médico, dirección/contacto).
 4. CERO ALUCINACIONES: NUNCA inventes médicos ni números telefónicos.
 """
 
@@ -56,63 +56,68 @@ def remover_tildes(texto: str) -> str:
         texto = texto.replace(a, b)
     return texto.strip()
 
-def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = "", limite: int = 5) -> List[Dict]:
+def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = "", limite: int = 10) -> Tuple[List[Dict], int]:
     supabase = obtener_cliente_supabase()
     if not supabase:
         print("❌ [SUPABASE ERROR] Sin cliente Supabase activo.")
-        return []
+        return [], 0
 
     try:
         term_sin_tilde = remover_tildes(termino_busqueda).lower() if termino_busqueda else ""
         loc_sin_tilde = remover_tildes(sector_municipio).lower() if sector_municipio else ""
 
-        print(f"🔍 [SEARCH TOKEN] Término/Nombre: '{term_sin_tilde}' | Ubicación: '{loc_sin_tilde}'")
-
-        # Extraer palabras individuales clave del término (ej: 'martinez', 'toribio')
-        palabras_clave = [p for p in term_sin_tilde.split() if len(p) > 2]
+        print(f"🔍 [SEARCH ENGINE] Término/Nombre: '{term_sin_tilde}' | Ubicación: '{loc_sin_tilde}'")
 
         query = supabase.table("vitalmi_directorio_master").select(
             "id, nombre, tipo_prestador, especialidad, especialidad_clinica, especialidad_medico, subespecialidades_medico, "
-            "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
+            "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras",
+            count="exact"
         )
 
-        # Construir filtros ilike por cada token o término completo
-        condiciones = [
-            f"nombre.ilike.%{term_sin_tilde}%",
-            f"especialidad_medico.ilike.%{term_sin_tilde}%",
-            f"especialidad.ilike.%{term_sin_tilde}%",
-            f"centro_medico.ilike.%{term_sin_tilde}%"
-        ]
-        for token in palabras_clave:
-            condiciones.append(f"nombre.ilike.%{token}%")
+        # 1. Filtro por especialidad / nombre / centro
+        if term_sin_tilde:
+            tokens = [t for t in term_sin_tilde.split() if len(t) > 2]
+            condiciones = [
+                f"especialidad_medico.ilike.%{term_sin_tilde}%",
+                f"subespecialidades_medico.ilike.%{term_sin_tilde}%",
+                f"especialidad_clinica.ilike.%{term_sin_tilde}%",
+                f"especialidad.ilike.%{term_sin_tilde}%",
+                f"nombre.ilike.%{term_sin_tilde}%",
+                f"centro_medico.ilike.%{term_sin_tilde}%"
+            ]
+            for tok in tokens:
+                condiciones.append(f"nombre.ilike.%{tok}%")
+            
+            query = query.or_(",".join(condiciones))
 
-        query = query.or_(",".join(condiciones))
-
-        res = query.limit(25).execute()
-        datos = res.data if res.data else []
-
-        if not datos:
-            return []
-
-        # Filtrar por ubicación en memoria de Python si fue especificada
+        # 2. Filtro de ubicación directo en SQL
         if loc_sin_tilde:
-            coincidencias_zona = [
+            query = query.or_(
+                f"ciudad_provincia.ilike.%{loc_sin_tilde}%,sector.ilike.%{loc_sin_tilde}%,direccion.ilike.%{loc_sin_tilde}%"
+            )
+
+        res = query.limit(100).execute()
+        datos = res.data if res.data else []
+        total_count = res.count if res.count is not None else len(datos)
+
+        print(f"📊 [DATABASE METRICS] Encontrados en DB: {total_count} | Retornados: {len(datos)}")
+
+        # Filtrado fino en memoria para coincidencia de ubicación si se requiere
+        if datos and loc_sin_tilde:
+            datos_filtrados = [
                 m for m in datos
                 if loc_sin_tilde in remover_tildes(m.get("ciudad_provincia") or "").lower()
                 or loc_sin_tilde in remover_tildes(m.get("sector") or "").lower()
                 or loc_sin_tilde in remover_tildes(m.get("direccion") or "").lower()
             ]
-            if coincidencias_zona:
-                print(f"✅ [MATCH ZONA Y NOMBRE] {len(coincidencias_zona)} encontrados")
-                return coincidencias_zona[:limite]
+            if datos_filtrados:
+                return datos_filtrados[:limite], len(datos_filtrados)
 
-        # Si no está en esa ciudad pero sí existe el médico, retornar los médicos encontrados
-        print(f"⚠️ [FALLBACK NOMBRE] Entregando {len(datos)} médicos encontrados con ese nombre/especialidad")
-        return datos[:limite]
+        return datos[:limite], total_count
 
     except Exception as e:
         print(f"⚠️ [SUPABASE EXCEPTION] Error en buscar_medicos_master: {e}")
-        return []
+        return [], 0
 
 def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") -> dict:
     supabase = obtener_cliente_supabase()
@@ -218,9 +223,9 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             termino_buscado = raiz
             break
 
-    # Extracción del nombre si no hay especialidad directa
+    # Extracción de nombres de médicos si no hay especialidad
     mensaje_limpio = remover_tildes(mensaje_usuario).lower().replace("?", "").replace("¿", "")
-    mensaje_limpio = re.sub(r'\b(dr|dra|doctor|doctora|en|de|la|el|los|las|cual|clinica|atiene|que|es|buscar|al|y)\b', '', mensaje_limpio).strip()
+    mensaje_limpio = re.sub(r'\b(dr|dra|doctor|doctora|en|de|la|el|los|las|cual|clinica|atiene|que|es|buscar|al|y|cuantos|cuantas|tienes|hay)\b', '', mensaje_limpio).strip()
 
     if not termino_buscado and mensaje_limpio:
         ciudades = ["san cristobal", "santiago", "la vega", "azua", "peravia", "bani", "santo domingo"]
@@ -228,7 +233,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         if palabras_filtradas:
             termino_buscado = " ".join(palabras_filtradas)
 
-    # Extracción de ubicación
+    # Ubicación
     ubicacion_detectada = ""
     if "san cristobal" in texto_contexto_limpio:
         ubicacion_detectada = "san cristobal"
@@ -239,18 +244,17 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     elif "azua" in texto_contexto_limpio:
         ubicacion_detectada = "azua"
 
-    medicos_encontrados = buscar_medicos_master(sector_municipio=ubicacion_detectada, termino_busqueda=termino_buscado)
+    medicos_encontrados, total_real = buscar_medicos_master(sector_municipio=ubicacion_detectada, termino_busqueda=termino_buscado)
 
-    contexto_medicos = f"\nMÉDICOS REALES ENCONTRADOS EN SUPABASE: {medicos_encontrados}"
+    contexto_medicos = f"\nMÉDICOS REALES ENCONTRADOS EN SUPABASE (MUESTRA): {medicos_encontrados}\nTOTAL REAL EN BASE DE DATOS: {total_real}"
     contexto_usuario = f"\nTe estás comunicando por WhatsApp con '{nombre_contacto}' (ID: {numero_usuario})."
     
-    prompt_instruccion_medicos = (
-        "\nINSTRUCCIÓN DIRECTA: Responde ÚNICAMENTE usando los datos de 'MÉDICOS REALES ENCONTRADOS'. "
-        "Si la lista tiene médicos, presenta sus datos de inmediato (nombre, especialidad, clínica y teléfono). "
-        "Si la lista está vacía, indica amablemente que no tienes un médico registrado con ese nombre o especialidad en la base de datos."
+    prompt_instruccion = (
+        f"\nINSTRUCCIÓN DIRECTA: Si el usuario pregunta CUÁNTOS médicos hay, responde indicando exactamente la cifra de TOTAL REAL EN BASE DE DATOS ({total_real}). "
+        "Si pide recomendaciones o nombres, presenta los médicos encontrados en la muestra disponible."
     )
 
-    system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_usuario + contexto_medicos + prompt_instruccion_medicos
+    system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_usuario + contexto_medicos + prompt_instruccion
 
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(historial)
