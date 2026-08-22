@@ -63,6 +63,7 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
     try:
         term_sin_tilde = remover_tildes(termino_busqueda).lower() if termino_busqueda else ""
         
+        # Mapeo de raíz médica
         if "otorrin" in term_sin_tilde:
             term_sin_tilde = "otorrin"
         elif "gastro" in term_sin_tilde:
@@ -72,6 +73,7 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
 
         print(f"🔍 [SUPABASE SEARCH] Término: '{term_sin_tilde}' | Ubicación: '{sector_municipio}'")
 
+        # 1. Búsqueda principal por especialidad
         query = supabase.table("vitalmi_directorio_master").select(
             "id, nombre, tipo_prestador, especialidad, especialidad_clinica, especialidad_medico, subespecialidades_medico, "
             "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
@@ -84,21 +86,23 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
 
         res = query.limit(10).execute()
         datos = res.data if res.data else []
-        print(f"📊 [SUPABASE RESULT] Médicos por especialidad encontrados: {len(datos)}")
+        print(f"📊 [SUPABASE RESULT] Total por especialidad: {len(datos)}")
 
+        # 2. Filtrar por ciudad/sector
         if datos and sector_municipio:
             loc_limpia = remover_tildes(sector_municipio).lower()
             datos_filtrados = [
                 m for m in datos 
-                if loc_limpia in remover_tildes(m.get("ciudad_provincia", "")).lower() 
-                or loc_limpia in remover_tildes(m.get("sector", "")).lower()
-                or loc_limpia in remover_tildes(m.get("direccion", "")).lower()
+                if loc_limpia in remover_tildes(m.get("ciudad_provincia", "") or "").lower() 
+                or loc_limpia in remover_tildes(m.get("sector", "") or "").lower()
+                or loc_limpia in remover_tildes(m.get("direccion", "") or "").lower()
             ]
             if datos_filtrados:
-                print(f"✅ [SUPABASE MATCH] Coincidencias en zona '{sector_municipio}': {len(datos_filtrados)}")
+                print(f"✅ [MATCH ZONA] Encontrados {len(datos_filtrados)} en {sector_municipio}")
                 return datos_filtrados[:limite]
 
-        print(f"⚠️ [SUPABASE FALLBACK] Entregando los {len(datos)} médicos de la especialidad general")
+        # 3. Fallback: Si no hay en la ciudad exacta, entregar los encontrados de la especialidad
+        print(f"⚠️ [FALLBACK GENERAL] Entregando los {len(datos)} disponibles")
         return datos[:limite]
 
     except Exception as e:
