@@ -37,7 +37,7 @@ Tu ÚNICA función actual es entregar la información de los médicos presentes 
 
 ### 🚫 REGLAS DE ORO (FASE 1):
 1. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
-2. LECTURA DIRECTA: Si la lista 'MÉDICOS REALES ENCONTRADOS' contiene datos, presenta la información del médico (nombre, especialidad, centro médico, dirección/contacto) en el primer mensaje.
+2. LECTURA DIRECTA: Si la lista 'MÉDICOS REALES ENCONTRADOS' contiene datos, presenta la información del médico (nombre, especialidad, centro médico, dirección/contacto) de inmediato.
 3. CERO ALUCINACIONES: Si la lista está vacía, indica amablemente que no tienes un especialista de esa área registrado en esa ubicación en el directorio.
 """
 
@@ -65,28 +65,20 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
         term_sin_tilde = remover_tildes(termino_busqueda).lower() if termino_busqueda else ""
         loc_sin_tilde = remover_tildes(sector_municipio).lower() if sector_municipio else ""
 
-        # Mapeo de raíz
-        if "otorrin" in term_sin_tilde:
-            term_sin_tilde = "otorrin"
-        elif "gastro" in term_sin_tilde:
-            term_sin_tilde = "gastro"
-        elif "ortoped" in term_sin_tilde or "traumatolog" in term_sin_tilde:
-            term_sin_tilde = "ortop"
-
-        print(f"🔍 [SUPABASE QUERY] Término: '{term_sin_tilde}' | Ubicación: '{loc_sin_tilde}'")
+        print(f"🔍 [SUPABASE QUERY DINÁMICA] Término: '{term_sin_tilde}' | Ubicación: '{loc_sin_tilde}'")
 
         query = supabase.table("vitalmi_directorio_master").select(
             "id, nombre, tipo_prestador, especialidad, especialidad_clinica, especialidad_medico, subespecialidades_medico, "
             "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
         )
 
-        # Filtro de especialidad
+        # Filtro de especialidad por raíz
         if term_sin_tilde:
             query = query.or_(
                 f"especialidad_medico.ilike.%{term_sin_tilde}%,subespecialidades_medico.ilike.%{term_sin_tilde}%,especialidad_clinica.ilike.%{term_sin_tilde}%,especialidad.ilike.%{term_sin_tilde}%"
             )
 
-        # Filtro geográfico incluyendo 'direccion' directamente en la consulta
+        # Filtro dinámico de ubicación (aplica para cualquier provincia o municipio)
         if loc_sin_tilde:
             query = query.or_(
                 f"direccion.ilike.%{loc_sin_tilde}%,ciudad_provincia.ilike.%{loc_sin_tilde}%,sector.ilike.%{loc_sin_tilde}%"
@@ -95,11 +87,6 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
         res = query.limit(limite).execute()
         datos = res.data if res.data else []
         print(f"📊 [SUPABASE RESULT] Médicos retornados: {len(datos)}")
-
-        # Normalización de contexto para registros con sector nulo
-        for m in datos:
-            if not m.get("sector") and m.get("direccion"):
-                m["sector_extraido"] = m["direccion"]
 
         return datos
 
@@ -185,39 +172,64 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     historial = obtener_historial_supabase(numero_usuario, limite=10)
 
+    # Reconstrucción de contexto completo acumulando mensajes anteriores
     texto_contexto_completo = " ".join([m["content"] for m in historial]).lower() + " " + mensaje_usuario.lower()
-    
-    palabras_clave = [
-        "otorrinolaringolog", "otorrino", "gastroenterolog", "gastro", "pediatr", "ginecolog", "cardiolog", 
-        "ortoped", "traumatolog", "internist", "dermatolog", "urolog",
-        "anestesiolog", "hematolog", "fisiatr", "nefrolog", "neumolog",
-        "patolog", "reumatolog", "medico general", "obstetr", "cirujan"
-    ]
-    
+    texto_contexto_limpio = remover_tildes(texto_contexto_completo)
+
+    # Mapeo de raíces de especialidad (singular y plural)
+    raices_especialidades = {
+        "otorrin": "otorrin",
+        "gastro": "gastro",
+        "pediatr": "pediatr",
+        "ginecolog": "ginecolog",
+        "cardiol": "cardiol",
+        "ortoped": "ortop",
+        "traumatolog": "ortop",
+        "internist": "internist",
+        "dermatolog": "dermatolog",
+        "urolog": "urolog",
+        "neumolog": "neumolog",
+        "nefrolog": "nefrolog",
+        "fisiatr": "fisiatr",
+        "hematolog": "hematolog"
+    }
+
     termino_buscado = ""
-    for palabra in palabras_clave:
-        if palabra in texto_contexto_completo:
-            termino_buscado = palabra
+    for clave, raiz in raices_especialidades.items():
+        if clave in texto_contexto_limpio:
+            termino_buscado = raiz
             break
 
-    if not termino_buscado:
-        termino_buscado = mensaje_usuario
+    # Extracción dinámica de ciudad/ubicación (San Cristóbal, Azua, Peravia, Bani, Santiago, Santo Domingo, etc.)
+    palabras_mensaje = remover_tildes(mensaje_usuario).lower().replace("?", "").replace("¿", "").split()
+    palabras_ignorar = ["en", "de", "el", "la", "los", "las", "tienes", "hay", "algun", "alguno", "por", "favor", "cardiol", "pediatr", "otorrin", "neumolog"]
+    
+    ubicacion_detectada = ""
+    for palabra in palabras_mensaje:
+        if len(palabra) > 3 and not any(p in palabra for p in palabras_ignorar):
+            ubicacion_detectada = palabra
+            break
 
-    sector_detectado = ""
-    texto_limpio_loc = remover_tildes(texto_contexto_completo).lower()
-    if "san cristobal" in texto_limpio_loc:
-        sector_detectado = "san cristobal"
-    elif "santo domingo" in texto_limpio_loc:
-        sector_detectado = "santo domingo"
+    # Si no detecta ubicación en el mensaje actual, evalúa la frase entera
+    if not ubicacion_detectada:
+        if "san cristobal" in texto_contexto_limpio:
+            ubicacion_detectada = "san cristobal"
+        elif "azua" in texto_contexto_limpio:
+            ubicacion_detectada = "azua"
+        elif "peravia" in texto_contexto_limpio or "bani" in texto_contexto_limpio:
+            ubicacion_detectada = "peravia"
+        elif "santiago" in texto_contexto_limpio:
+            ubicacion_detectada = "santiago"
 
-    medicos_encontrados = buscar_medicos_master(sector_municipio=sector_detectado, termino_busqueda=termino_buscado)
+    medicos_encontrados = buscar_medicos_master(sector_municipio=ubicacion_detectada, termino_busqueda=termino_buscado)
 
     contexto_medicos = f"\nMÉDICOS REALES ENCONTRADOS EN SUPABASE: {medicos_encontrados}"
     contexto_usuario = f"\nTe estás comunicando por WhatsApp con '{nombre_contacto}' (ID: {numero_usuario})."
     
     prompt_instruccion_medicos = (
         "\nINSTRUCCIÓN DIRECTA: Responde ÚNICAMENTE usando los datos de 'MÉDICOS REALES ENCONTRADOS'. "
-        "Muestra inmediatamente el nombre del doctor, la clínica/dirección y su número de contacto."
+        "Si hay médicos en la lista, presenta sus nombres, clínica y teléfonos de inmediato. "
+        "Si la lista está vacía, di de forma concisa que no tienes ese especialista registrado en esa provincia/ciudad."
     )
 
     system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_usuario + contexto_medicos + prompt_instruccion_medicos
