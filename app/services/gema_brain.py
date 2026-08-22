@@ -32,7 +32,7 @@ Eres Gema, la asistente médica ejecutiva y virtual de VitalMi en República Dom
 ### 🎭 PERSONALIDAD Y TONO ("EFECTO WOW"):
 - Hablas con calidez caribeña/dominicana profesional, amable, empática, fluida y muy natural.
 - Responde de forma directa, breve y conversacional (máximo 2-3 oraciones corridas). 
-- EVITA estrictamente usar listas numeradas o viñetas (*, -). Escribe de forma corrida.
+- EVITA strictly usar listas numeradas o viñetas (*, -). Escribe de forma corrida.
 
 ### 🚫 REGLA DE ORO CONTRA EVASIVAS:
 - JAMÁS digas "voy a buscar", "te contactaré en breve", "te daré la información en un momento" ni pidas esperar. 
@@ -176,27 +176,24 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     historial = obtener_historial_supabase(numero_usuario, limite=10)
 
-    # Reconstruir la conversación reciente para mantener memoria persistente de la especialidad buscada
+    # Reconstrucción del contexto acumulado
     texto_contexto_completo = " ".join([m["content"] for m in historial]).lower() + " " + mensaje_usuario.lower()
     
-    # Identificar la especialidad solicitada (en lenguaje común o término formal)
+    # EXTRAER TÉRMINO DE BÚSQUEDA DINÁMICO (Palabras clave de especialidad/médico)
+    palabras_clave = [
+        "otorrino", "gastro", "pediatra", "ginecologo", "cardiologo", 
+        "ortopeda", "traumatologo", "internista", "dermatologo", "urologo",
+        "anestesiologo", "hematologo", "fisiatra", "nefrologo", "neumologo",
+        "patologo", "reumatologo", "medico general", "obstetra", "cirujano"
+    ]
+    
     termino_buscado = ""
-    if "pediat" in texto_contexto_completo:
-        termino_buscado = "pediatra"
-    elif "ginec" in texto_contexto_completo or "obstet" in texto_contexto_completo:
-        termino_buscado = "ginecologo"
-    elif "cardiol" in texto_contexto_completo:
-        termino_buscado = "cardiologo"
-    elif "otorrino" in texto_contexto_completo:
-        termino_buscado = "otorrino"
-    elif "gastro" in texto_contexto_completo:
-        termino_buscado = "gastroenterologo"
-    elif "ortoped" in texto_contexto_completo or "traumatolog" in texto_contexto_completo:
-        termino_buscado = "ortopeda"
-    elif "dermatolog" in texto_contexto_completo:
-        termino_buscado = "dermatologo"
+    for palabra in palabras_clave:
+        if palabra in texto_contexto_completo:
+            termino_buscado = palabra
+            break
 
-    # Priorizar la ubicación del último mensaje o usar la presente en el historial acumulado
+    # Extracción de Ubicación (Prioriza el mensaje actual)
     mensaje_actual_lc = mensaje_usuario.lower()
     sector_detectado = ""
     if "san cristobal" in mensaje_actual_lc or "san cristóbal" in mensaje_actual_lc:
@@ -211,18 +208,17 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         elif "azua" in texto_contexto_completo:
             sector_detectado = "AZUA"
 
-    # Ejecutar búsqueda en Supabase
-    medicos_encontrados = []
-    if termino_buscado or sector_detectado:
-        medicos_encontrados = buscar_medicos_master(sector_municipio=sector_detectado, termino_busqueda=termino_buscado)
+    # Búsqueda en Supabase
+    medicos_encontrados = buscar_medicos_master(sector_municipio=sector_detectado, termino_busqueda=termino_buscado)
 
     contexto_medicos = f"\nMÉDICOS REALES ENCONTRADOS EN SUPABASE: {medicos_encontrados}"
     contexto_usuario = f"\nTe estás comunicando por WhatsApp con '{nombre_contacto}' (ID: {numero_usuario})."
     
     prompt_instruccion_medicos = (
-        "\nINSTRUCCIÓN DIRECTA: Usa la lista 'MÉDICOS REALES ENCONTRADOS'. "
-        "Si hay médicos en la lista, da sus nombres y contactos de inmediato en este mensaje. "
-        "Si la lista está vacía o no hay en la ciudad solicitada, dilo abiertamente y presenta las alternativas de la lista."
+        "\nINSTRUCCIÓN CRÍTICA: Usa 'MÉDICOS REALES ENCONTRADOS'. "
+        "Si la lista contiene médicos, entrega sus nombres, centro médico y teléfonos DE INMEDIATO. "
+        "JAMÁS digas 'voy a buscar' ni 'te contactaré en breve'. Entrega los datos disponibles ahora mismo. "
+        "Si la lista está vacía, di exactamente que no hay disponibles en esa zona y ofrece los que estén en la lista."
     )
 
     system_prompt = SYSTEM_PROMPT_BASE + contexto_usuario + contexto_medicos + prompt_instruccion_medicos
@@ -234,7 +230,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
-            temperature=0.2,
+            temperature=0.1,
             max_tokens=350
         )
         respuesta_texto = response.choices[0].message.content.strip()
