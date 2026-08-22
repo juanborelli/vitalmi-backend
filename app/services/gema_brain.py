@@ -8,12 +8,10 @@ from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from app.core.supabase import obtener_cliente_supabase
 
-# Cargar variables del archivo .env buscando desde la raíz
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 env_path = BASE_DIR / ".env"
 load_dotenv(dotenv_path=env_path, override=True)
 
-# Zona horaria oficial de República Dominicana (UTC-4)
 TZ_RD = zoneinfo.ZoneInfo("America/Santo_Domingo")
 
 def obtener_cliente_openai() -> AsyncOpenAI:
@@ -32,36 +30,20 @@ SYSTEM_PROMPT_BASE = """
 Eres Gema, la asistente médica ejecutiva y virtual de VitalMi en República Dominicana.
 
 ### 🎭 PERSONALIDAD Y TONO ("EFECTO WOW"):
-- Hablas con una calidez caribeña/dominicana profesional, amable, empática, fluida y muy natural.
-- Valida la emoción o necesidad inicial del usuario.
+- Hablas con calidez caribeña/dominicana profesional, amable, empática, fluida y muy natural.
 - Responde de forma directa, breve y conversacional (máximo 2-3 oraciones corridas). 
 - EVITA estrictamente usar listas numeradas o viñetas (*, -). Escribe de forma corrida.
 
-### 🎯 FLUJO OBLIGATORIO DE BIENVENIDA Y UBICACIÓN:
-1. Si el usuario saluda o pide cita por primera vez:
-   "Hola [Nombre], es un placer asistirte. ¿La cita médica es para ti o para otra persona? Si es para otra persona, por favor indícame el nombre completo y teléfono de dicha persona."
-2. Cuando soliciten una cita o especialidad, confirma en qué sector o municipio se encuentra para buscar en el directorio.
-
-### 🔄 PLAN B Y BÚSQUEDA INTELIGENTE:
-- Usa ÚNICAMENTE los datos provistos en el contexto de la base de datos real.
-- Prioriza en este orden los números de contacto del médico/centro:
-  1. Enlace de WhatsApp directo (ej: https://wa.me/18095346299) si existe `whatsapp`.
-  2. `telefono_institucional`.
-  3. `telefono_alterno`.
-
-### 💎 CONVERSIÓN PROGRESIVA:
-- Al entregar la solución o contacto, resalta el tiempo ahorrado e introduce la suscripción:
-  "Con VitalMi Premium puedo recordarte esta cita y guardar tus recetas en un solo lugar. ¿Te gustaría probarlo? Soy Gema de VitalMi 💚"
-
-### 🚫 REGLA DE ORO (ESTRICTA):
-- JAMÁS inventes nombres de doctores, números telefónicos ni clínicas. Si la lista de médicos disponibles en el contexto está vacía, indica amablemente que en este momento no cuentas con un especialista registrado en ese sector exacto.
+### 🚫 REGLA DE ORO CONTRA EVASIVAS:
+- JAMÁS digas "voy a buscar", "te contactaré en breve", "te daré la información en un momento" ni pidas esperar. 
+- Responde De INMEDIATO con la información contenida en 'MÉDICOS REALES ENCONTRADOS'.
+- Si la lista está vacía o no hay disponibilidad en la zona solicitada, indícalo abiertamente y presenta las opciones disponibles en la lista (ej. en Santo Domingo o zonas cercanas).
 """
 
 def obtener_hora_rd_iso() -> str:
     return datetime.now(TZ_RD).isoformat()
 
 def limpiar_texto(texto: str) -> str:
-    """Elimina acentos y caracteres especiales para búsquedas flexibles."""
     if not texto:
         return ""
     replacements = (
@@ -72,37 +54,25 @@ def limpiar_texto(texto: str) -> str:
         texto = texto.replace(a, b)
     return texto.strip().upper()
 
-def normalizar_especialidad(especialidad: str) -> str:
-    """Mapea variaciones gramaticales (pediatra/pediatría, ginecólogo/ginecología, etc.) a la raíz clave."""
-    esp = limpiar_texto(especialidad)
-    if "PEDIAT" in esp:
-        return "PEDIATR"
-    if "GINEC" in esp or "OBSTET" in esp:
-        return "GINEC"
-    if "CARDIOL" in esp:
-        return "CARDIOL"
-    if "DERMAT" in esp:
-        return "DERMAT"
-    if "OFTHAL" in esp or "OFTALM" in esp:
-        return "OFTALM"
-    if "ORTOP" in esp or "TRAUMAT" in esp:
-        return "ORTOP"
-    return esp
-
-def buscar_medicos_master(sector_municipio: str = "", especialidad: str = "", ars: str = "", limite: int = 3) -> List[Dict]:
+def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = "", ars: str = "", limite: int = 3) -> List[Dict]:
     supabase = obtener_cliente_supabase()
     if not supabase:
         return []
 
     try:
         query = supabase.table("vitalmi_directorio_master").select(
-            "id, nombre, tipo_prestador, especialidad, centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
+            "id, nombre, tipo_prestador, especialidad, especialidad_clinica, especialidad_medico, subespecialidades_medico, "
+            "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
         )
 
-        if especialidad:
-            raiz_esp = normalizar_especialidad(especialidad)
-            query = query.ilike("especialidad", f"%{raiz_esp}%")
+        # Búsqueda limpia sobre las 3 columnas de especialidades atómicas
+        if termino_busqueda:
+            term_limpio = limpiar_texto(termino_busqueda).lower()
+            query = query.or_(
+                f"especialidad_medico.ilike.%{term_limpio}%,subespecialidades_medico.ilike.%{term_limpio}%,especialidad_clinica.ilike.%{term_limpio}%"
+            )
         
+        # Filtro de ubicación flexible (sector o provincia/ciudad)
         if sector_municipio:
             loc_limpia = limpiar_texto(sector_municipio)
             query = query.or_(f"sector.ilike.%{loc_limpia}%,ciudad_provincia.ilike.%{loc_limpia}%")
@@ -110,20 +80,18 @@ def buscar_medicos_master(sector_municipio: str = "", especialidad: str = "", ar
         res = query.limit(limite).execute()
         datos = res.data if res.data else []
 
-        if not datos and especialidad:
-            raiz_esp = normalizar_especialidad(especialidad)
+        # Plan B: Búsqueda general por especialidad si no hay coincidencia directa en el municipio/sector
+        if not datos and termino_busqueda:
+            term_limpio = limpiar_texto(termino_busqueda).lower()
             query_plan_b = supabase.table("vitalmi_directorio_master").select(
-                "id, nombre, tipo_prestador, especialidad, centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
-            ).ilike("especialidad", f"%{raiz_esp}%").limit(limite)
+                "id, nombre, tipo_prestador, especialidad, especialidad_clinica, especialidad_medico, subespecialidades_medico, "
+                "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
+            ).or_(
+                f"especialidad_medico.ilike.%{term_limpio}%,subespecialidades_medico.ilike.%{term_limpio}%,especialidad_clinica.ilike.%{term_limpio}%"
+            ).limit(limite)
+            
             res_b = query_plan_b.execute()
             datos = res_b.data if res_b.data else []
-
-        if ars and datos:
-            filtrados = [
-                r for r in datos
-                if any(ars.lower() in str(a).lower() for a in r.get("aseguradoras", []))
-            ]
-            return filtrados if filtrados else datos
 
         return datos
     except Exception as e:
@@ -208,35 +176,53 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     historial = obtener_historial_supabase(numero_usuario, limite=10)
 
-    # 1. Analizar intención combinando el mensaje actual y el historial reciente
+    # Reconstruir la conversación reciente para mantener memoria persistente de la especialidad buscada
     texto_contexto_completo = " ".join([m["content"] for m in historial]).lower() + " " + mensaje_usuario.lower()
     
-    especialidad_detectada = ""
+    # Identificar la especialidad solicitada (en lenguaje común o término formal)
+    termino_buscado = ""
     if "pediat" in texto_contexto_completo:
-        especialidad_detectada = "PEDIATRIA"
+        termino_buscado = "pediatra"
     elif "ginec" in texto_contexto_completo or "obstet" in texto_contexto_completo:
-        especialidad_detectada = "GINECOLOGIA"
+        termino_buscado = "ginecologo"
     elif "cardiol" in texto_contexto_completo:
-        especialidad_detectada = "CARDIOLOGIA"
+        termino_buscado = "cardiologo"
+    elif "otorrino" in texto_contexto_completo:
+        termino_buscado = "otorrino"
+    elif "gastro" in texto_contexto_completo:
+        termino_buscado = "gastroenterologo"
+    elif "ortoped" in texto_contexto_completo or "traumatolog" in texto_contexto_completo:
+        termino_buscado = "ortopeda"
+    elif "dermatolog" in texto_contexto_completo:
+        termino_buscado = "dermatologo"
 
+    # Priorizar la ubicación del último mensaje o usar la presente en el historial acumulado
+    mensaje_actual_lc = mensaje_usuario.lower()
     sector_detectado = ""
-    if "san cristobal" in texto_contexto_completo or "san cristóbal" in texto_contexto_completo:
+    if "san cristobal" in mensaje_actual_lc or "san cristóbal" in mensaje_actual_lc:
         sector_detectado = "SAN CRISTOBAL"
-    elif "santo domingo" in texto_contexto_completo:
+    elif "santo domingo" in mensaje_actual_lc:
         sector_detectado = "SANTO DOMINGO"
+    elif "azua" in mensaje_actual_lc:
+        sector_detectado = "AZUA"
+    else:
+        if "san cristobal" in texto_contexto_completo or "san cristóbal" in texto_contexto_completo:
+            sector_detectado = "SAN CRISTOBAL"
+        elif "azua" in texto_contexto_completo:
+            sector_detectado = "AZUA"
 
-    # 2. Búsqueda en Supabase
+    # Ejecutar búsqueda en Supabase
     medicos_encontrados = []
-    if especialidad_detectada or sector_detectado:
-        medicos_encontrados = buscar_medicos_master(sector_municipio=sector_detectado, especialidad=especialidad_detectada)
+    if termino_buscado or sector_detectado:
+        medicos_encontrados = buscar_medicos_master(sector_municipio=sector_detectado, termino_busqueda=termino_buscado)
 
     contexto_medicos = f"\nMÉDICOS REALES ENCONTRADOS EN SUPABASE: {medicos_encontrados}"
     contexto_usuario = f"\nTe estás comunicando por WhatsApp con '{nombre_contacto}' (ID: {numero_usuario})."
     
     prompt_instruccion_medicos = (
-        "\nINSTRUCCIÓN DE RESPUESTA: Tienes datos en la lista 'MÉDICOS REALES ENCONTRADOS'. "
-        "Entrega directamente los nombres, números y enlaces de WhatsApp de esos médicos. "
-        "No menciones otras ciudades ni digas lo que no tienes; enfócate 100% en presentar los médicos encontrados."
+        "\nINSTRUCCIÓN DIRECTA: Usa la lista 'MÉDICOS REALES ENCONTRADOS'. "
+        "Si hay médicos en la lista, da sus nombres y contactos de inmediato en este mensaje. "
+        "Si la lista está vacía o no hay en la ciudad solicitada, dilo abiertamente y presenta las alternativas de la lista."
     )
 
     system_prompt = SYSTEM_PROMPT_BASE + contexto_usuario + contexto_medicos + prompt_instruccion_medicos
