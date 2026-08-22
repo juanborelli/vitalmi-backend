@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime
 import zoneinfo
 from pathlib import Path
@@ -25,37 +26,34 @@ def obtener_cliente_openai() -> AsyncOpenAI:
         return AsyncOpenAI(api_key=api_key)
     return None
 
-# PROMPT ESTRICTO PARA FASE 1: LECTURA FIEL DEL DIRECTORIO
 SYSTEM_PROMPT_FASE_1 = """
 Eres Gema, la asistente virtual de VitalMi en República Dominicana.
-Tu ÚNICA función actual es proporcionar información exacta del directorio médico disponible en la base de datos.
+Tu ÚNICA función es entregar la información de los médicos que se encuentran en el bloque 'MÉDICOS REALES ENCONTRADOS'.
 
 ### 🎭 PERSONALIDAD Y TONO:
 - Calidez caribeña/dominicana profesional, amable, directa y natural.
-- Responde de forma fluida y conversacional en un máximo de 2-3 oraciones corridas.
+- Responde de forma fluida y conversacional (máximo 2-3 oraciones corridas).
 - NO utilices listas numeradas, viñetas (*, -) ni formatos rígidos.
 
-### 🚫 REGLAS DE ORO DE FASE 1 (LECTURA DIRECTA):
-1. CERO ALUCINACIONES: NUNCA inventes nombres de médicos, clínicas o números telefónicos.
-2. CERO GESTIÓN DE CITAS: NO menciones disponibilidad, horarios ni agendamiento de citas.
-3. CERO EVASIVAS: JAMÁS digas "voy a buscar", "te contactaré en breve" o "espera un momento".
-4. SI HAY RESULTADOS en 'MÉDICOS REALES ENCONTRADOS': Entrega inmediatamente el nombre del médico, su especialidad/subespecialidad, el centro médico y su contacto (teléfono/WhatsApp).
-5. SI LA LISTA ESTÁ VACÍA: Informa amablemente que en este momento no hay un especialista con ese criterio exacto registrado en esa zona en la base de datos.
+### 🚫 REGLAS DE ORO (ESTRICTO):
+1. CERO EVASIVAS Y CERO PROMESAS: JAMÁS digas "voy a buscar", "te daré los detalles en un momento", "te contactaré en breve" ni "deja revisar".
+2. SI 'MÉDICOS REALES ENCONTRADOS' TIENE DATOS: Entrega AHORA MISMO el nombre del médico, su especialidad, centro médico y número de contacto.
+3. SI 'MÉDICOS REALES ENCONTRADOS' ESTÁ VACÍO (NO HAY DATOS): Di directamente que en este momento no tienes ese especialista registrado en esa zona en el directorio.
 """
 
 def obtener_hora_rd_iso() -> str:
     return datetime.now(TZ_RD).isoformat()
 
-def limpiar_texto(texto: str) -> str:
+def remover_tildes(texto: str) -> str:
     if not texto:
         return ""
     replacements = (
         ("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u"),
-        ("Á", "A"), ("É", "E"), ("Í", "I"), ("Ó", "O"), ("Ú", "U")
+        ("Á", "A"), ("É", "E"), ("Í", "I"), ("Ó", "O"), ("Ú", "U"), ("ñ", "n"), ("Ñ", "N")
     )
     for a, b in replacements:
         texto = texto.replace(a, b)
-    return texto.strip().upper()
+    return texto.strip()
 
 def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = "", limite: int = 5) -> List[Dict]:
     supabase = obtener_cliente_supabase()
@@ -68,38 +66,46 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
             "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
         )
 
-        term_limpio = limpiar_texto(termino_busqueda).lower() if termino_busqueda else ""
+        term_sin_tilde = remover_tildes(termino_busqueda).lower() if termino_busqueda else ""
         
-        # Mapeo de comodines de raíz médica
-        if "otorrino" in term_limpio:
-            term_limpio = "otorrin"
-        elif "gastro" in term_limpio:
-            term_limpio = "gastro"
-        elif "ortoped" in term_limpio or "traumatolog" in term_limpio:
-            term_limpio = "ortop"
+        # Mapeo de raíz médica
+        if "otorrin" in term_sin_tilde:
+            term_sin_tilde = "otorrin"
+        elif "gastro" in term_sin_tilde:
+            term_sin_tilde = "gastro"
+        elif "ortoped" in term_sin_tilde or "traumatolog" in term_sin_tilde:
+            term_sin_tilde = "ortop"
 
-        # Búsqueda amplia en todas las columnas de especialidades
-        if term_limpio:
+        # Búsqueda en especialidades
+        if term_sin_tilde:
             query = query.or_(
-                f"especialidad_medico.ilike.%{term_limpio}%,subespecialidades_medico.ilike.%{term_limpio}%,especialidad_clinica.ilike.%{term_limpio}%,especialidad.ilike.%{term_limpio}%"
+                f"especialidad_medico.ilike.%{term_sin_tilde}%,subespecialidades_medico.ilike.%{term_sin_tilde}%,especialidad_clinica.ilike.%{term_sin_tilde}%,especialidad.ilike.%{term_sin_tilde}%"
             )
 
-        res = query.limit(limite).execute()
+        res = query.limit(10).execute()
         datos = res.data if res.data else []
 
-        # Filtrado flexible por ubicación en Python
+        # Si no encontró con el término mapeado, intenta un SELECT amplio
+        if not datos:
+            res_all = supabase.table("vitalmi_directorio_master").select(
+                "id, nombre, tipo_prestador, especialidad, especialidad_clinica, especialidad_medico, subespecialidades_medico, "
+                "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
+            ).limit(10).execute()
+            datos = res_all.data if res_all.data else []
+
+        # Filtrar por ubicación en Python sin importar tildes
         if datos and sector_municipio:
-            loc_limpia = limpiar_texto(sector_municipio).lower()
+            loc_limpia = remover_tildes(sector_municipio).lower()
             datos_filtrados = [
                 m for m in datos 
-                if loc_limpia in limpiar_texto(m.get("ciudad_provincia", "")).lower() 
-                or loc_limpia in limpiar_texto(m.get("sector", "")).lower()
-                or loc_limpia in limpiar_texto(m.get("direccion", "")).lower()
+                if loc_limpia in remover_tildes(m.get("ciudad_provincia", "")).lower() 
+                or loc_limpia in remover_tildes(m.get("sector", "")).lower()
+                or loc_limpia in remover_tildes(m.get("direccion", "")).lower()
             ]
             if datos_filtrados:
-                return datos_filtrados
+                return datos_filtrados[:limite]
 
-        return datos
+        return datos[:limite]
     except Exception as e:
         print(f"⚠️ [SUPABASE EXCEPTION] Error en buscar_medicos_master: {e}")
         return []
@@ -182,15 +188,15 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     historial = obtener_historial_supabase(numero_usuario, limite=10)
 
-    # Contexto unificado
+    # Texto contexto
     texto_contexto_completo = " ".join([m["content"] for m in historial]).lower() + " " + mensaje_usuario.lower()
     
-    # Detección dinámica de especialidades
+    # Extraer especialidad
     palabras_clave = [
-        "otorrino", "gastro", "pediatra", "ginecologo", "cardiologo", 
-        "ortopeda", "traumatologo", "internista", "dermatologo", "urologo",
-        "anestesiologo", "hematologo", "fisiatra", "nefrologo", "neumologo",
-        "patologo", "reumatologo", "medico general", "obstetra", "cirujano"
+        "otorrinolaringolog", "otorrino", "gastroenterolog", "gastro", "pediatr", "ginecolog", "cardiolog", 
+        "ortoped", "traumatolog", "internist", "dermatolog", "urolog",
+        "anestesiolog", "hematolog", "fisiatr", "nefrolog", "neumolog",
+        "patolog", "reumatolog", "medico general", "obstetr", "cirujan"
     ]
     
     termino_buscado = ""
@@ -199,31 +205,28 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             termino_buscado = palabra
             break
 
-    # Detección de zona geográfica
-    mensaje_actual_lc = mensaje_usuario.lower()
-    sector_detectado = ""
-    if "san cristobal" in mensaje_actual_lc or "san cristóbal" in mensaje_actual_lc:
-        sector_detectado = "SAN CRISTOBAL"
-    elif "santo domingo" in mensaje_actual_lc:
-        sector_detectado = "SANTO DOMINGO"
-    elif "azua" in mensaje_actual_lc:
-        sector_detectado = "AZUA"
-    else:
-        if "san cristobal" in texto_contexto_completo or "san cristóbal" in texto_contexto_completo:
-            sector_detectado = "SAN CRISTOBAL"
-        elif "azua" in texto_contexto_completo:
-            sector_detectado = "AZUA"
+    if not termino_buscado:
+        termino_buscado = mensaje_usuario
 
-    # Consulta a la base de datos
+    # Ubicación
+    sector_detectado = ""
+    texto_limpio_loc = remover_tildes(texto_contexto_completo).lower()
+    if "san cristobal" in texto_limpio_loc:
+        sector_detectado = "SAN CRISTOBAL"
+    elif "santo domingo" in texto_limpio_loc:
+        sector_detectado = "SANTO DOMINGO"
+    elif "azua" in texto_limpio_loc:
+        sector_detectado = "AZUA"
+
+    # Consulta Supabase
     medicos_encontrados = buscar_medicos_master(sector_municipio=sector_detectado, termino_busqueda=termino_buscado)
 
     contexto_medicos = f"\nMÉDICOS REALES ENCONTRADOS EN SUPABASE: {medicos_encontrados}"
     contexto_usuario = f"\nTe estás comunicando por WhatsApp con '{nombre_contacto}' (ID: {numero_usuario})."
     
     prompt_instruccion_medicos = (
-        "\nINSTRUCCIÓN DE LECTURA DIRECTA: Muestra de inmediato la información de la lista 'MÉDICOS REALES ENCONTRADOS'. "
-        "Menciona el nombre del médico, especialidad, clínica y número de contacto. "
-        "No hables de agendar citas ni de buscar disponibilidad posterior."
+        "\nINSTRUCCIÓN DIRECTA: Responde ÚNICAMENTE usando los datos de 'MÉDICOS REALES ENCONTRADOS'. "
+        "Si la lista tiene médicos, da sus datos de inmediato. Si está vacía, di de una vez que no hay médicos de esa área en esa ciudad."
     )
 
     system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_usuario + contexto_medicos + prompt_instruccion_medicos
@@ -235,7 +238,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
-            temperature=0.1,
+            temperature=0.0,
             max_tokens=350
         )
         respuesta_texto = response.choices[0].message.content.strip()
