@@ -34,7 +34,7 @@ Tu función es entregar información exacta sobre los médicos y prestadores del
 ### 🎭 PERSONALIDAD Y TONO:
 - Calidez caribeña/dominicana profesional, amable, directa y natural.
 - Responde de forma fluida y conversacional en un máximo de 2-3 oraciones corridas.
-- NO utilices listas numeradas, viñetas (*, -) ni formatos rígidos.
+- NO utilices listas numeradas, viñetas (*, -) ni formatos rígidos salvo que el usuario pida explícitamente una lista de nombres.
 
 ### 🚫 REGLAS DE ORO:
 1. SIEMPRE QUE TE PREGUNTEN POR CONTEOS O CANTIDADES DE MÉDICOS, DEBES REPORTAR EXACTAMENTE EL 'total_exacto' QUE DEVUELVE LA HERRAMIENTA.
@@ -63,34 +63,38 @@ def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: s
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        # Recuperación de respaldo: extraer provincia y especialidad si la IA omitió argumentos
         raw_clean = remover_tildes(mensaje_raw).lower()
         if not ciudad_provincia:
             if "san cristobal" in raw_clean:
-                ciudad_provincia = "san cristobal"
+                ciudad_provincia = "San Cristóbal"
             elif "peravia" in raw_clean or "bani" in raw_clean:
-                ciudad_provincia = "peravia"
+                ciudad_provincia = "Peravia"
             elif "distrito nacional" in raw_clean or "santo domingo" in raw_clean:
-                ciudad_provincia = "distrito nacional"
+                ciudad_provincia = "Distrito Nacional"
+            elif "santiago" in raw_clean:
+                ciudad_provincia = "Santiago"
 
         if not especialidad:
             if "ginec" in raw_clean or "obstet" in raw_clean:
-                especialidad = "ginecolog"
+                especialidad = "ginec"
+            elif "urol" in raw_clean:
+                especialidad = "urol"
             elif "cardio" in raw_clean:
-                especialidad = "cardiolog"
+                especialidad = "cardio"
             elif "pediat" in raw_clean:
-                especialidad = "pediatra"
+                especialidad = "pediat"
 
         query = supabase.table("vitalmi_directorio_master").select("*", count="exact")
 
+        # Filtro geográfico usando la columna oficial estandarizada
         if ciudad_provincia:
-            prov_clean = remover_tildes(ciudad_provincia).lower().strip()
-            query = query.or_(f"ciudad_provincia.ilike.%{prov_clean}%,direccion.ilike.%{prov_clean}%")
+            prov_clean = remover_tildes(ciudad_provincia).strip()
+            query = query.ilike("provincia", f"%{prov_clean}%")
 
+        # Filtro flexible de especialidad
         if especialidad:
             esp_clean = remover_tildes(especialidad).lower().strip()
-            raiz_esp = "ginec" if ("ginec" in esp_clean or "obstet" in esp_clean) else esp_clean[:5]
-            query = query.ilike("especialidad_medico", f"%{raiz_esp}%")
+            query = query.or_(f"especialidad.ilike.%{esp_clean}%,especialidad_medico.ilike.%{esp_clean}%")
 
         if nombre_medico:
             nom_clean = remover_tildes(nombre_medico).lower().strip()
@@ -110,7 +114,7 @@ def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: s
         
         return json.dumps({
             "total_exacto": total,
-            "medicos_muestra": res.data[:10] if not solo_conteo else []
+            "medicos_muestra": res.data[:15]  # Mantiene hasta 15 médicos para responder listas completas
         }, ensure_ascii=False)
 
     except Exception as e:
@@ -208,10 +212,10 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                     "type": "object",
                     "properties": {
                         "ciudad_provincia": {"type": "string", "description": "Nombre de la ciudad o provincia (ej. 'San Cristóbal')"},
-                        "especialidad": {"type": "string", "description": "Especialidad médica (ej. 'Ginecólogo')"},
+                        "especialidad": {"type": "string", "description": "Especialidad médica (ej. 'Ginecológo', 'Urólogo')"},
                         "nombre_medico": {"type": "string", "description": "Nombre o apellido del médico"},
                         "centro_medico": {"type": "string", "description": "Nombre del centro médico o clínica"},
-                        "solo_conteo": {"type": "boolean", "description": "True si la pregunta solicita un total o cantidad"}
+                        "solo_conteo": {"type": "boolean", "description": "True si la pregunta solicita UNICAMENTE un conteo o total"}
                     },
                     "required": []
                 }
