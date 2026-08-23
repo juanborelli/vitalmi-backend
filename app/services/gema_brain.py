@@ -37,7 +37,7 @@ Tu función es entregar información exacta sobre los médicos y prestadores del
 
 ### 🚫 REGLAS DE ORO:
 1. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
-2. PRECISIÓN EN CONTEOS: Si el usuario pregunta cuántos médicos hay, responde ÚNICAMENTE con la cifra de 'TOTAL EXACTO EN ESTA ZONA Y ESPECIALIDAD'.
+2. PRECISIÓN EN CONTEOS: Si el usuario pregunta cuántos médicos hay, responde ÚNICAMENTE indicando el número de 'TOTAL EXACTO EN ESTA ZONA Y ESPECIALIDAD'.
 3. LECTURA DIRECTA: Muestra los datos de los médicos encontrados (nombre, especialidad, centro médico, dirección/contacto).
 4. CERO ALUCINACIONES: NUNCA inventes médicos ni números telefónicos.
 """
@@ -66,46 +66,81 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
         term_sin_tilde = remover_tildes(termino_busqueda).lower() if termino_busqueda else ""
         loc_sin_tilde = remover_tildes(sector_municipio).lower() if sector_municipio else ""
 
-        print(f"🔍 [STRICT SEARCH] Término/Nombre: '{term_sin_tilde}' | Ubicación: '{loc_sin_tilde}'")
+        print(f"🔍 [EXACT ENGINE] Término/Nombre: '{term_sin_tilde}' | Ubicación: '{loc_sin_tilde}'")
 
-        # 1. SI ES BÚSQUEDA POR NOMBRE DE MÉDICO ESPECÍFICO
-        if term_sin_tilde and not any(esp in term_sin_tilde for esp in ["ginecolog", "pediatr", "cardiol", "otorrin", "gastro", "ortop", "urolog", "neumolog"]):
-            tokens = [t for t in term_sin_tilde.split() if len(t) > 2]
-            condiciones_nombre = [f"nombre.ilike.%{term_sin_tilde}%"]
-            for tok in tokens:
-                condiciones_nombre.append(f"nombre.ilike.%{tok}%")
-            
-            res_nom = supabase.table("vitalmi_directorio_master").select("*", count="exact").or_(",".join(condiciones_nombre)).limit(limite).execute()
-            datos_nom = res_nom.data if res_nom.data else []
-            count_nom = res_nom.count if res_nom.count is not None else len(datos_nom)
-            return datos_nom, count_nom
+        # Traer universo completo para cómputo de intersección exacta sin truncamiento SQL
+        res = supabase.table("vitalmi_directorio_master").select("*").execute()
+        todos = res.data if res.data else []
 
-        # 2. BÚSQUEDA POR ESPECIALIDAD Y UBICACIÓN (LÓGICA STRICT AND)
-        query = supabase.table("vitalmi_directorio_master").select(
-            "id, nombre, tipo_prestador, especialidad, especialidad_clinica, especialidad_medico, subespecialidades_medico, "
-            "centro_medico, direccion, ciudad_provincia, sector, telefono_institucional, telefono_alterno, whatsapp, aseguradoras",
-            count="exact"
-        )
+        if not todos:
+            return [], 0
 
-        if term_sin_tilde:
-            query = query.or_(
-                f"especialidad_medico.ilike.%{term_sin_tilde}%,subespecialidades_medico.ilike.%{term_sin_tilde}%,especialidad_clinica.ilike.%{term_sin_tilde}%,especialidad.ilike.%{term_sin_tilde}%"
-            )
+        # Definición de raíces asociadas para cobertura 100%
+        raices = []
+        if "ginecolog" in term_sin_tilde or "obstetr" in term_sin_tilde:
+            raices = ["ginecolog", "obstetr", "ginecobstetr"]
+        elif "cardiol" in term_sin_tilde:
+            raices = ["cardiol"]
+        elif "pediatr" in term_sin_tilde:
+            raices = ["pediatr"]
+        elif "otorrin" in term_sin_tilde:
+            raices = ["otorrin"]
+        else:
+            raices = [term_sin_tilde] if term_sin_tilde else []
 
-        res_temp = query.limit(1000).execute()
-        datos_base = res_temp.data if res_temp.data else []
+        # Variantes geográficas de San Cristóbal
+        variantes_loc = []
+        if "san cristobal" in loc_sin_tilde:
+            variantes_loc = ["san cristobal", "madre vieja", "canastica", "lavalapies", "bajos de haina", "haina", "yaguate", "cambita"]
+        elif loc_sin_tilde:
+            variantes_loc = [loc_sin_tilde]
 
-        if loc_sin_tilde and datos_base:
-            filtrados_exactos = [
-                m for m in datos_base
-                if loc_sin_tilde in remover_tildes(m.get("ciudad_provincia") or "").lower()
-                or loc_sin_tilde in remover_tildes(m.get("sector") or "").lower()
-                or loc_sin_tilde in remover_tildes(m.get("direccion") or "").lower()
-            ]
-            print(f"📊 [EXACT INTERSECTION] {len(filtrados_exactos)} coinciden con '{term_sin_tilde}' Y '{loc_sin_tilde}'")
-            return filtrados_exactos[:limite], len(filtrados_exactos)
+        coincidencias = []
+        for m in todos:
+            # Concatenar todos los campos de especialidad
+            esp_full = remover_tildes(
+                str(m.get("especialidad") or "") + " " +
+                str(m.get("especialidad_medico") or "") + " " +
+                str(m.get("especialidad_clinica") or "") + " " +
+                str(m.get("subespecialidades_medico") or "") + " " +
+                str(m.get("nombre") or "")
+            ).lower()
 
-        return datos_base[:limite], len(datos_base)
+            # Concatenar todos los campos de ubicación
+            loc_full = remover_tildes(
+                str(m.get("ciudad_provincia") or "") + " " +
+                str(m.get("sector") or "") + " " +
+                str(m.get("direccion") or "") + " " +
+                str(m.get("centro_medico") or "")
+            ).lower()
+
+            # Evaluar Match de Especialidad
+            match_esp = False
+            if not raices:
+                match_esp = True
+            else:
+                for r in raices:
+                    if r in esp_full:
+                        match_esp = True
+                        break
+
+            # Evaluar Match de Ubicación
+            match_loc = False
+            if not variantes_loc:
+                match_loc = True
+            else:
+                for v in variantes_loc:
+                    if v in loc_full:
+                        match_loc = True
+                        break
+
+            if match_esp and match_loc:
+                coincidencias.append(m)
+
+        total_exacto = len(coincidencias)
+        print(f"📊 [MATCH COMPLETO EXCEL MATCHING] Total encontrado: {total_exacto}")
+
+        return coincidencias[:limite], total_exacto
 
     except Exception as e:
         print(f"⚠️ [SUPABASE EXCEPTION] Error en buscar_medicos_master: {e}")
@@ -194,6 +229,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     raices_especialidades = {
         "ginecolog": "ginecolog",
+        "obstetr": "ginecolog",
         "otorrin": "otorrin",
         "gastro": "gastro",
         "pediatr": "pediatr",
@@ -215,7 +251,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             termino_buscado = raiz
             break
 
-    # Nombres de médicos
+    # Extracción de nombres
     mensaje_limpio = remover_tildes(mensaje_usuario).lower().replace("?", "").replace("¿", "")
     mensaje_limpio = re.sub(r'\b(dr|dra|doctor|doctora|en|de|la|el|los|las|cual|clinica|atiene|que|es|buscar|al|y|cuantos|cuantas|tienes|hay)\b', '', mensaje_limpio).strip()
 
@@ -242,8 +278,8 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     contexto_usuario = f"\nTe estás comunicando por WhatsApp con '{nombre_contacto}' (ID: {numero_usuario})."
     
     prompt_instruccion = (
-        f"\nINSTRUCCIÓN DIRECTA: Si el usuario pregunta CUÁNTOS médicos hay, responde diciendo el número EXACTO contenido en 'TOTAL EXACTO EN ESTA ZONA Y ESPECIALIDAD' ({total_exacto}). "
-        "No menciones conteos generales de la base de datos ni hagas aproximaciones. Da la cifra precisa directamente."
+        f"\nINSTRUCCIÓN DIRECTA: Si el usuario pregunta CUÁNTOS médicos hay, responde ÚNICAMENTE indicando el número exacto contenido en 'TOTAL EXACTO EN ESTA ZONA Y ESPECIALIDAD' ({total_exacto}). "
+        "No des explicaciones largas ni menciones totales de otras ciudades. Da la cifra precisa directamente."
     )
 
     system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_usuario + contexto_medicos + prompt_instruccion
