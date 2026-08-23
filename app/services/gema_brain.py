@@ -29,17 +29,19 @@ def obtener_cliente_openai() -> AsyncOpenAI:
 
 SYSTEM_PROMPT_FASE_1 = """
 Eres Gema, la asistente virtual médica de VitalMi en República Dominicana.
-Tu objetivo es entregar información exacta sobre los médicos y prestadores del directorio según los datos devueltos por 'consultar_directorio_inteligente' y gestionar disponibilidades por TANDAS (Mañana / Tarde) con 'consultar_horario_y_bloqueos'.
+Tu objetivo es entregar información exacta sobre los médicos y prestadores del directorio ('consultar_directorio_inteligente'), gestionar disponibilidades por TANDAS ('consultar_horario_y_bloqueos') y AGENDAR CITAS MÉDICAS ('agendar_cita_medica').
 
 ### 🎭 PERSONALIDAD Y FORMATO DE AGENDAMIENTO:
 - Calidez caribeña/dominicana profesional, amable, fluida y precisa.
-- Cuando el usuario solicite cita o disponibilidad para un médico, consulta sus horarios y ofrece las TANDAS disponibles (ej. "Tanda de la Mañana a partir de las 9:00 AM" o "Tanda de la Tarde a partir de las 3:00 PM").
-- Si una tanda está bloqueada por el doctor, no la menciones o aclara amablemente que para esa tanda no habrá consulta.
+- Cuando el usuario indique que desea agendar una cita (ej. "Agéndame para el martes en la mañana con la Dra. Ana Noesi"):
+  1. Verifica que tengas el nombre del médico, el día/fecha y la tanda deseada (Mañana o Tarde).
+  2. Invoca la herramienta 'agendar_cita_medica'.
+  3. Confirma amablemente la cita indicando que ha sido registrada en la red oficial de VitalMi.
 
 ### 🚫 REGLAS DE ORO:
-1. SIEMPRE REPORTA DATOS REALES DE VITALMI_DIRECTORIO_MASTER Y DOCTORES_HORARIOS.
+1. SIEMPRE REPORTA DATOS REALES DE VITALMI_DIRECTORIO_MASTER, DOCTORES_HORARIOS Y CITAS.
 2. CONTINUIDAD DE CONTEXTO: Conserva la provincia, médico y especialidad consultados en mensajes anteriores.
-3. CERO ALUCINACIONES: Muestra únicamente las tandas y fechas verificadas por las herramientas.
+3. CERO ALUCINACIONES: Muestra únicamente datos y confirmaciones reales generadas por las herramientas.
 """
 
 def obtener_hora_rd_iso() -> str:
@@ -56,10 +58,53 @@ def remover_tildes(texto: str) -> str:
         texto = texto.replace(a, b)
     return texto.strip()
 
+def agendar_cita_medica(
+    telefono_jid: str, 
+    medico_nombre: str, 
+    fecha_cita: str, 
+    tanda: str, 
+    motivo_consulta: str = "Consulta General"
+) -> str:
+    """
+    Registra una solicitud de cita médica real en la tabla 'citas' de Supabase.
+    """
+    supabase = obtener_cliente_supabase()
+    if not supabase:
+        return json.dumps({"error": "Sin conexión a base de datos"})
+
+    try:
+        # 1. Obtener o verificar el paciente
+        res_pac = supabase.table("pacientes").select("*").eq("telefono_jid", telefono_jid).execute()
+        paciente_id = res_pac.data[0].get("id") if (res_pac.data and len(res_pac.data) > 0) else None
+
+        # 2. Registrar la cita
+        datos_cita = {
+            "paciente_id": paciente_id,
+            "motivo_consulta": f"Médico: {medico_nombre} | Tanda: {tanda} | Motivo: {motivo_consulta} | Fecha: {fecha_cita}",
+            "estado": "solicitada",
+            "created_at": obtener_hora_rd_iso()
+        }
+
+        res_cita = supabase.table("citas").insert(datos_cita).execute()
+        cita_creada = res_cita.data[0] if res_cita.data else {}
+
+        return json.dumps({
+            "status": "exitoso",
+            "mensaje": "Cita registrada correctamente en el sistema de VitalMi.",
+            "cita_id": cita_creada.get("id"),
+            "detalles": {
+                "medico": medico_nombre,
+                "fecha": fecha_cita,
+                "tanda": tanda,
+                "estado": "solicitada"
+            }
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        print(f"❌ Error en agendar_cita_medica: {e}")
+        return json.dumps({"error": str(e)})
+
 def consultar_horario_y_bloqueos(medico_master_id: int, fecha_consulta: str = "") -> str:
-    """
-    Verifica el horario base por tandas de un médico y cruza con la tabla bloqueos_medicos.
-    """
     supabase = obtener_cliente_supabase()
     if not supabase:
         return json.dumps({"error": "Sin conexión a base de datos"})
@@ -75,7 +120,6 @@ def consultar_horario_y_bloqueos(medico_master_id: int, fecha_consulta: str = ""
         if nombre_dia == "domingo":
             return json.dumps({"status": "no_disponible", "motivo": "Los domingos no se ofrece consulta regular."})
 
-        # 1. Obtener Horario Base del Doctor desde doctores_horarios
         res_doc = supabase.table("doctores_horarios").select("*").eq("medico_master_id", medico_master_id).execute()
         
         horario_base = {
@@ -96,7 +140,6 @@ def consultar_horario_y_bloqueos(medico_master_id: int, fecha_consulta: str = ""
 
         tandas_dia = horario_base.get(nombre_dia, [])
 
-        # 2. Revisar si existen bloqueos para esa fecha
         bloqueos_existentes = []
         if doctor_horario_id:
             res_bloqueos = supabase.table("bloqueos_medicos") \
@@ -107,7 +150,6 @@ def consultar_horario_y_bloqueos(medico_master_id: int, fecha_consulta: str = ""
                 .execute()
             bloqueos_existentes = res_bloqueos.data or []
 
-        # 3. Filtrar Tandas Disponibles
         tandas_finales = []
         for t in tandas_dia:
             bloqueado = False
@@ -345,6 +387,23 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                     "required": ["medico_master_id"]
                 }
             }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "agendar_cita_medica",
+                "description": "Registra una cita médica formal para el usuario en la tabla 'citas' de Supabase.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "medico_nombre": {"type": "string", "description": "Nombre completo del médico"},
+                        "fecha_cita": {"type": "string", "description": "Fecha solicitada para la cita (ej. '2026-08-25' o 'Próximo Martes')"},
+                        "tanda": {"type": "string", "description": "Tanda elegida: 'Mañana' o 'Tarde'"},
+                        "motivo_consulta": {"type": "string", "description": "Motivo de la consulta médica"}
+                    },
+                    "required": ["medico_nombre", "fecha_cita", "tanda"]
+                }
+            }
         }
     ]
 
@@ -389,6 +448,18 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                         "tool_call_id": tool_call.id,
                         "role": "tool",
                         "name": "consultar_horario_y_bloqueos",
+                        "content": resultado_json
+                    })
+
+                elif tool_call.function.name == "agendar_cita_medica":
+                    args = json.loads(tool_call.function.arguments)
+                    args["telefono_jid"] = numero_usuario
+                    resultado_json = agendar_cita_medica(**args)
+                    
+                    messages.append({
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": "agendar_cita_medica",
                         "content": resultado_json
                     })
 
