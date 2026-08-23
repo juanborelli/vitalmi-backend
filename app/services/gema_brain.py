@@ -33,13 +33,15 @@ Tu objetivo es entregar información exacta del directorio ('consultar_directori
 
 ### 🎭 PERSONALIDAD Y FORMATO:
 - Calidez caribeña/dominicana profesional, amable, fluida y precisa.
+- Cuando el usuario indique que desea agendar una cita, confirma amablemente la fecha y la tanda (Mañana / Tarde).
 - Si el usuario pregunta por sus citas agendadas, usa 'consultar_mis_citas' y muéstraselas claramente.
-- Si el usuario desea cancelar una cita, usa 'gestionar_estado_cita' pasando el ID de la cita y confirmando amablemente la cancelación.
+- Si el usuario desea cancelar una cita, usa 'gestionar_estado_cita' pasando el ID de la cita y confirmando la cancelación.
 
 ### 🚫 REGLAS DE ORO:
-1. SIEMPRE REPORTA DATOS REALES DE VITALMI_DIRECTORIO_MASTER, DOCTORES_HORARIOS Y CITAS.
-2. CONTINUIDAD DE CONTEXTO: Conserva los datos de citas y preferencias mencionadas previamente.
-3. CERO ALUCINACIONES: Muestra únicamente confirmaciones e IDs reales devueltos por la base de datos.
+1. SIEMPRE CALCULA LAS FECHAS TOMANDO COMO REFERENCIA EL AÑO Y FECHA ACTUAL EN CURSO INYECTADO EN EL PROMPT.
+2. SIEMPRE REPORTA DATOS REALES DE VITALMI_DIRECTORIO_MASTER, DOCTORES_HORARIOS Y CITAS.
+3. CONTINUIDAD DE CONTEXTO: Conserva los datos de citas, médicos y preferencias mencionadas previamente.
+4. CERO ALUCINACIONES: Muestra únicamente confirmaciones e IDs reales devueltos por la base de datos.
 """
 
 def obtener_hora_rd_iso() -> str:
@@ -57,9 +59,6 @@ def remover_tildes(texto: str) -> str:
     return texto.strip()
 
 def consultar_mis_citas(telefono_jid: str) -> str:
-    """
-    Recupera las citas activas del paciente vinculadas a su teléfono.
-    """
     supabase = obtener_cliente_supabase()
     if not supabase:
         return json.dumps({"error": "Sin conexión a base de datos"})
@@ -87,9 +86,6 @@ def consultar_mis_citas(telefono_jid: str) -> str:
         return json.dumps({"error": str(e)})
 
 def gestionar_estado_cita(cita_id: str, nuevo_estado: str = "cancelada") -> str:
-    """
-    Actualiza el estado de una cita en Supabase (ej. 'cancelada' o 'reprogramada').
-    """
     supabase = obtener_cliente_supabase()
     if not supabase:
         return json.dumps({"error": "Sin conexión a base de datos"})
@@ -397,6 +393,23 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     historial = obtener_historial_supabase(numero_usuario, limite=10)
     contexto_previo_str = " ".join([m["content"] for m in historial if m["role"] == "user"])
 
+    # Evaluación dinámica de fecha y año actual desde la zona horaria de RD
+    ahora_rd = datetime.now(TZ_RD)
+    anio_actual = ahora_rd.year
+    dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+    nombre_dia_actual = dias_semana[ahora_rd.weekday()]
+    
+    contexto_temporal = (
+        f"\n\n### ⏰ ANCLA TEMPORAL DINÁMICA:\n"
+        f"Hoy es {nombre_dia_actual}, {ahora_rd.strftime('%d de %B de %Y')}. "
+        f"El año actual en curso es {anio_actual}. "
+        f"Todas las citas deben calcularse a partir de esta fecha hacia el futuro. "
+        f"NUNCA agendes ni menciones años anteriores a {anio_actual}."
+    )
+    contexto_usuario = f"\nTe estás comunicando por WhatsApp con '{nombre_contacto}' (ID: {numero_usuario})."
+    
+    system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_temporal + contexto_usuario
+
     tools = [
         {
             "type": "function",
@@ -425,7 +438,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                     "type": "object",
                     "properties": {
                         "medico_master_id": {"type": "integer", "description": "ID del médico en vitalmi_directorio_master"},
-                        "fecha_consulta": {"type": "string", "description": "Fecha en formato YYYY-MM-DD (ej. '2026-08-25')"}
+                        "fecha_consulta": {"type": "string", "description": "Fecha en formato YYYY-MM-DD"}
                     },
                     "required": ["medico_master_id"]
                 }
@@ -440,7 +453,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                     "type": "object",
                     "properties": {
                         "medico_nombre": {"type": "string", "description": "Nombre completo del médico"},
-                        "fecha_cita": {"type": "string", "description": "Fecha solicitada para la cita"},
+                        "fecha_cita": {"type": "string", "description": "Fecha solicitada para la cita en año presente/futuro"},
                         "tanda": {"type": "string", "description": "Tanda elegida: 'Mañana' o 'Tarde'"},
                         "motivo_consulta": {"type": "string", "description": "Motivo de la consulta médica"}
                     },
@@ -476,9 +489,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             }
         }
     ]
-
-    contexto_usuario = f"\nTe estás comunicando por WhatsApp con '{nombre_contacto}' (ID: {numero_usuario})."
-    system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_usuario
 
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(historial)
