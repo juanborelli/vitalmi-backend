@@ -37,9 +37,10 @@ Tu función es entregar información exacta sobre los médicos y prestadores del
 - NO utilices listas numeradas, viñetas (*, -) ni formatos rígidos.
 
 ### 🚫 REGLAS DE ORO:
-1. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
-2. PRECISIÓN ABSOLUTA: Reporta exactamente los nombres, especialidades, clínicas/direcciones y teléfonos retornados por la base de datos.
-3. CERO ALUCINACIONES: NUNCA inventes médicos, clínicas ni números telefónicos.
+1. SIEMPRE QUE TE PREGUNTEN POR CONTEOS O CANTIDADES DE MÉDICOS, DEBES EJECUTAR OBLIGATORIAMENTE 'consultar_directorio_inteligente'.
+2. PRECISIÓN ABSOLUTA EN CONTEOS: Reporta ÚNICAMENTE la cifra exacta devuelta en 'total_exacto' por la herramienta. NUNCA respondas con saludos genéricos si hay una pregunta explícita.
+3. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
+4. CERO ALUCINACIONES: NUNCA inventes médicos, clínicas ni números telefónicos.
 """
 
 def obtener_hora_rd_iso() -> str:
@@ -64,18 +65,15 @@ def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: s
     try:
         query = supabase.table("vitalmi_directorio_master").select("*", count="exact")
 
-        # 1. Filtro flexible para Ubicación/Provincia
         if ciudad_provincia:
             prov_clean = remover_tildes(ciudad_provincia).lower().strip()
             query = query.or_(f"ciudad_provincia.ilike.%{prov_clean}%,direccion.ilike.%{prov_clean}%")
 
-        # 2. Filtro flexible para Especialidad
         if especialidad:
             esp_clean = remover_tildes(especialidad).lower().strip()
             raiz_esp = "ginec" if ("ginec" in esp_clean or "obstet" in esp_clean) else esp_clean[:5]
             query = query.ilike("especialidad_medico", f"%{raiz_esp}%")
 
-        # 3. Filtro por Nombre de Médico
         if nombre_medico:
             nom_clean = remover_tildes(nombre_medico).lower().strip()
             tokens = [t for t in nom_clean.split() if len(t) > 2]
@@ -85,7 +83,6 @@ def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: s
             else:
                 query = query.ilike("nombre", f"%{nom_clean}%")
 
-        # 4. CRUCIAL: Busca el centro médico TANTO en la columna centro_medico COMO en direccion
         if centro_medico:
             cen_clean = remover_tildes(centro_medico).lower().strip()
             query = query.or_(f"centro_medico.ilike.%{cen_clean}%,direccion.ilike.%{cen_clean}%")
@@ -178,7 +175,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     guardar_mensaje_supabase(numero_usuario, "user", mensaje_usuario)
 
-    # Limpia memoria previa para consultas de conteo y evitar arrastrar arrastres viejos
     if "cuantos" in mensaje_usuario.lower() or "cuantas" in mensaje_usuario.lower() or "total" in mensaje_usuario.lower():
         historial = []
     else:
@@ -189,15 +185,15 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             "type": "function",
             "function": {
                 "name": "consultar_directorio_inteligente",
-                "description": "Consulta directa sobre vitalmi_directorio_master en Supabase.",
+                "description": "OBLIGATORIA para consultar cuántos médicos hay o buscar doctores por provincia, centro o especialidad.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "ciudad_provincia": {"type": "string", "description": "Nombre de la ciudad o provincia (ej. 'Peravia', 'San Cristóbal')"},
-                        "especialidad": {"type": "string", "description": "Especialidad médica (ej. 'Cardiólogo', 'Ginecólogo')"},
+                        "ciudad_provincia": {"type": "string", "description": "Nombre de la ciudad o provincia (ej. 'San Cristóbal', 'Peravia')"},
+                        "especialidad": {"type": "string", "description": "Especialidad médica (ej. 'Ginecólogo', 'Cardiólogo')"},
                         "nombre_medico": {"type": "string", "description": "Nombre o apellido del médico"},
-                        "centro_medico": {"type": "string", "description": "Nombre del centro médico o clínica (ej. 'Cemeco', 'Bethancourt', 'Haina')"},
-                        "solo_conteo": {"type": "boolean", "description": "True si la pregunta es cuántos médicos hay"}
+                        "centro_medico": {"type": "string", "description": "Nombre del centro médico o clínica (ej. 'Cemeco', 'Haina')"},
+                        "solo_conteo": {"type": "boolean", "description": "True si la pregunta es sobre el total o cuántos médicos existen"}
                     },
                     "required": []
                 }
@@ -216,7 +212,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             model="gpt-4o-mini",
             messages=messages,
             tools=tools,
-            tool_choice="auto",
+            tool_choice={"type": "function", "function": {"name": "consultar_directorio_inteligente"}} if ("cuantos" in mensaje_usuario.lower() or "total" in mensaje_usuario.lower()) else "auto",
             temperature=0.0
         )
 
