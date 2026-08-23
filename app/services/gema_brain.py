@@ -28,20 +28,18 @@ def obtener_cliente_openai() -> AsyncOpenAI:
     return None
 
 SYSTEM_PROMPT_FASE_1 = """
-Eres Gema, la asistente virtual de VitalMi en República Dominicana.
-Tu función es entregar información exacta sobre los médicos y prestadores del directorio según los datos devueltos por la herramienta de consulta.
+Eres Gema, la asistente virtual médica de VitalMi en República Dominicana.
+Tu objetivo es entregar información exacta sobre los médicos y prestadores del directorio según los datos devueltos por la herramienta 'consultar_directorio_inteligente' sobre la tabla 'vitalmi_directorio_master'.
 
-### 🎭 PERSONALIDAD Y TONO:
-- Calidez caribeña/dominicana profesional, amable, directa y natural.
-- Responde de forma fluida y conversacional en un máximo de 2-3 oraciones corridas.
-- NO utilices listas numeradas, viñetas (*, -) ni formatos rígidos salvo que el usuario pida explícitamente una lista de nombres.
+### 🎭 PERSONALIDAD Y FORMATO:
+- Calidez caribeña/dominicana profesional, amable, fluida y precisa.
+- Para saludos, preguntas generales o conteos: responde de forma conversacional indicando la cifra exacta devuelta en 'total_exacto'.
+- CUANDO EL USUARIO PIDA LA LISTA O NOMBRES: Muestra los médicos encontrados indicando Nombre, Especialidad, Centro Médico y Teléfono/WhatsApp de contacto.
 
 ### 🚫 REGLAS DE ORO:
-1. SIEMPRE QUE TE PREGUNTEN POR CONTEOS O CANTIDADES DE MÉDICOS, DEBES REPORTAR EXACTAMENTE EL 'total_exacto' QUE DEVUELVE LA HERRAMIENTA.
-2. PRECISIÓN ABSOLUTA EN CONTEOS: NUNCA menciones el total general de la base de datos si la pregunta especifica una provincia o especialidad.
-3. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
-4. CERO ALUCINACIONES: NUNCA inventes médicos, clínicas ni números telefónicos.
-5. CONTINUIDAD DE BÚSQUEDA: Si el usuario pide "dame la lista", "cuáles son" o "dame los nombres" en seguimiento a una pregunta previa, MANTÉN la provincia y especialidad consultadas anteriormente.
+1. SIEMPRE QUE TE PREGUNTEN POR CONTEOS, REPORTA EXACTAMENTE EL 'total_exacto' DEVUELTO POR LA HERRAMIENTA EN VITALMI_DIRECTORIO_MASTER.
+2. CONTINUIDAD DE CONTEXTO: Si el usuario pide "dame la lista", "cuáles son" o "dame los nombres", MANTÉN la especialidad, provincia, municipio o centro médico consultados anteriormente.
+3. CERO ALUCINACIONES: Muestra únicamente los médicos reales devueltos en 'medicos_muestra'. NUNCA inventes números ni clínicas.
 """
 
 def obtener_hora_rd_iso() -> str:
@@ -58,29 +56,37 @@ def remover_tildes(texto: str) -> str:
         texto = texto.replace(a, b)
     return texto.strip()
 
-def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: str = "", nombre_medico: str = "", centro_medico: str = "", solo_conteo: bool = False, mensaje_raw: str = "", contexto_previo: str = "") -> str:
+def consultar_directorio_inteligente(
+    provincia: str = "", 
+    municipio_cabecera: str = "", 
+    especialidad: str = "", 
+    nombre_medico: str = "", 
+    centro_medico: str = "", 
+    mensaje_raw: str = "", 
+    contexto_previo: str = ""
+) -> str:
     supabase = obtener_cliente_supabase()
     if not supabase:
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
         texto_analizar = remover_tildes(f"{mensaje_raw} {contexto_previo}").lower()
-        
-        # Inferencia de provincia acumulada
-        if not ciudad_provincia:
-            if "san cristobal" in texto_analizar:
-                ciudad_provincia = "San Cristóbal"
-            elif "peravia" in texto_analizar or "bani" in texto_analizar:
-                ciudad_provincia = "Peravia"
-            elif "distrito nacional" in texto_analizar or "santo domingo" in texto_analizar:
-                ciudad_provincia = "Distrito Nacional"
-            elif "santiago" in texto_analizar:
-                ciudad_provincia = "Santiago"
 
-        # Inferencia de especialidad acumulada
+        # Inferencia de Ubicación/Provincia si viene vacía
+        if not provincia:
+            if "san cristobal" in texto_analizar:
+                provincia = "San Cristóbal"
+            elif "peravia" in texto_analizar or "bani" in texto_analizar:
+                provincia = "Peravia"
+            elif "distrito nacional" in texto_analizar or "santo domingo" in texto_analizar:
+                provincia = "Distrito Nacional"
+            elif "santiago" in texto_analizar:
+                provincia = "Santiago"
+
+        # Inferencia de Especialidad si viene vacía
         if not especialidad:
             if "urol" in texto_analizar:
-                especialidad = "urolog"
+                especialidad = "urol"
             elif "ginec" in texto_analizar or "obstet" in texto_analizar:
                 especialidad = "ginec"
             elif "cardio" in texto_analizar:
@@ -90,17 +96,22 @@ def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: s
 
         query = supabase.table("vitalmi_directorio_master").select("*", count="exact")
 
-        if ciudad_provincia:
-            prov_clean = remover_tildes(ciudad_provincia).strip()
+        # Filtros Geográficos
+        if provincia:
+            prov_clean = remover_tildes(provincia).strip()
             query = query.ilike("provincia", f"%{prov_clean}%")
 
+        if municipio_cabecera:
+            muni_clean = remover_tildes(municipio_cabecera).strip()
+            query = query.ilike("municipio_cabecera", f"%{muni_clean}%")
+
+        # Filtro Flexible de Especialidad en todas las columnas posibles
         if especialidad:
             esp_clean = remover_tildes(especialidad).lower().strip()
-            raiz_esp = "urolog" if "urol" in esp_clean else ("ginec" if "ginec" in esp_clean else esp_clean[:5])
-            pattern = f"%{raiz_esp}%"
+            pattern = f"%{esp_clean}%"
             query = query.or_(
-                f"especialidad.ilike.{pattern},"
                 f"especialidad_medico.ilike.{pattern},"
+                f"especialidad.ilike.{pattern},"
                 f"especialidad_clinica.ilike.{pattern}"
             )
 
@@ -117,12 +128,25 @@ def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: s
             cen_clean = remover_tildes(centro_medico).lower().strip()
             query = query.or_(f"centro_medico.ilike.%{cen_clean}%,direccion.ilike.%{cen_clean}%")
 
-        res = query.execute()
+        # Ejecución sin límite restrictivo para capturar el total real
+        res = query.limit(200).execute()
         total = res.count if res.count is not None else len(res.data)
-        
+
+        medicos_limpios = []
+        if res.data:
+            for item in res.data[:20]: # Envía hasta 20 en la muestra para respuesta del chat
+                medicos_limpios.append({
+                    "nombre": item.get("nombre"),
+                    "especialidad": item.get("especialidad_medico") or item.get("especialidad"),
+                    "centro_medico": item.get("centro_medico"),
+                    "municipio": item.get("municipio_cabecera"),
+                    "provincia": item.get("provincia"),
+                    "telefono": item.get("telefono_institucional") or item.get("telefono_alterno") or item.get("whatsapp")
+                })
+
         return json.dumps({
             "total_exacto": total,
-            "medicos_muestra": res.data[:15]
+            "medicos_muestra": medicos_limpios
         }, ensure_ascii=False)
 
     except Exception as e:
@@ -205,10 +229,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     guardar_mensaje_supabase(numero_usuario, "user", mensaje_usuario)
 
-    # NO borramos el historial para que Gema no pierda el contexto de la conversación
     historial = obtener_historial_supabase(numero_usuario, limite=10)
-
-    # Extraer mensajes previos como texto de contexto para la herramienta
     contexto_previo_str = " ".join([m["content"] for m in historial if m["role"] == "user"])
 
     tools = [
@@ -216,15 +237,15 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             "type": "function",
             "function": {
                 "name": "consultar_directorio_inteligente",
-                "description": "Consulta sobre la tabla de medicos en Supabase. OBLIGATORIO extraer provincia y especialidad si estan en la pregunta o en el contexto previo.",
+                "description": "Consulta sobre la tabla 'vitalmi_directorio_master' en Supabase. Permite filtrar por provincia, municipio_cabecera, centro_medico o especialidad_medico.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "ciudad_provincia": {"type": "string", "description": "Nombre de la ciudad o provincia (ej. 'San Cristóbal')"},
-                        "especialidad": {"type": "string", "description": "Especialidad médica (ej. 'Ginecológo', 'Urólogo')"},
+                        "provincia": {"type": "string", "description": "Nombre de la provincia (ej. 'San Cristóbal', 'Santiago')"},
+                        "municipio_cabecera": {"type": "string", "description": "Municipio cabecera (ej. 'Bani', 'San Cristóbal')"},
+                        "especialidad": {"type": "string", "description": "Especialidad del médico (ej. 'Urólogo', 'Ginecólogo')"},
                         "nombre_medico": {"type": "string", "description": "Nombre o apellido del médico"},
-                        "centro_medico": {"type": "string", "description": "Nombre del centro médico o clínica"},
-                        "solo_conteo": {"type": "boolean", "description": "True si la pregunta solicita UNICAMENTE un conteo o total"}
+                        "centro_medico": {"type": "string", "description": "Nombre del centro médico o clínica"}
                     },
                     "required": []
                 }
@@ -269,7 +290,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 model="gpt-4o-mini",
                 messages=messages,
                 temperature=0.0,
-                max_tokens=350
+                max_tokens=700
             )
             respuesta_texto = second_response.choices[0].message.content.strip()
         else:
