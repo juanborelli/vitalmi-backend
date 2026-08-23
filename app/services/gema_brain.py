@@ -41,6 +41,7 @@ Tu función es entregar información exacta sobre los médicos y prestadores del
 2. PRECISIÓN ABSOLUTA EN CONTEOS: NUNCA menciones el total general de la base de datos si la pregunta especifica una provincia o especialidad.
 3. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
 4. CERO ALUCINACIONES: NUNCA inventes médicos, clínicas ni números telefónicos.
+5. CONTINUIDAD DE BÚSQUEDA: Si el usuario pide "dame la lista", "cuáles son" o "dame los nombres" en seguimiento a una pregunta previa, MANTÉN la provincia y especialidad consultadas anteriormente.
 """
 
 def obtener_hora_rd_iso() -> str:
@@ -57,41 +58,42 @@ def remover_tildes(texto: str) -> str:
         texto = texto.replace(a, b)
     return texto.strip()
 
-def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: str = "", nombre_medico: str = "", centro_medico: str = "", solo_conteo: bool = False, mensaje_raw: str = "") -> str:
+def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: str = "", nombre_medico: str = "", centro_medico: str = "", solo_conteo: bool = False, mensaje_raw: str = "", contexto_previo: str = "") -> str:
     supabase = obtener_cliente_supabase()
     if not supabase:
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        raw_clean = remover_tildes(mensaje_raw).lower()
+        texto_analizar = remover_tildes(f"{mensaje_raw} {contexto_previo}").lower()
+        
+        # Inferencia de provincia acumulada
         if not ciudad_provincia:
-            if "san cristobal" in raw_clean:
+            if "san cristobal" in texto_analizar:
                 ciudad_provincia = "San Cristóbal"
-            elif "peravia" in raw_clean or "bani" in raw_clean:
+            elif "peravia" in texto_analizar or "bani" in texto_analizar:
                 ciudad_provincia = "Peravia"
-            elif "distrito nacional" in raw_clean or "santo domingo" in raw_clean:
+            elif "distrito nacional" in texto_analizar or "santo domingo" in texto_analizar:
                 ciudad_provincia = "Distrito Nacional"
-            elif "santiago" in raw_clean:
+            elif "santiago" in texto_analizar:
                 ciudad_provincia = "Santiago"
 
+        # Inferencia de especialidad acumulada
         if not especialidad:
-            if "ginec" in raw_clean or "obstet" in raw_clean:
-                especialidad = "ginec"
-            elif "urol" in raw_clean:
+            if "urol" in texto_analizar:
                 especialidad = "urolog"
-            elif "cardio" in raw_clean:
+            elif "ginec" in texto_analizar or "obstet" in texto_analizar:
+                especialidad = "ginec"
+            elif "cardio" in texto_analizar:
                 especialidad = "cardio"
-            elif "pediat" in raw_clean:
+            elif "pediat" in texto_analizar:
                 especialidad = "pediat"
 
         query = supabase.table("vitalmi_directorio_master").select("*", count="exact")
 
-        # Filtro geográfico en columna estandarizada provincia
         if ciudad_provincia:
             prov_clean = remover_tildes(ciudad_provincia).strip()
             query = query.ilike("provincia", f"%{prov_clean}%")
 
-        # Filtro de especialidad multi-columna (especialidad, especialidad_medico, especialidad_clinica)
         if especialidad:
             esp_clean = remover_tildes(especialidad).lower().strip()
             raiz_esp = "urolog" if "urol" in esp_clean else ("ginec" if "ginec" in esp_clean else esp_clean[:5])
@@ -203,17 +205,18 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     guardar_mensaje_supabase(numero_usuario, "user", mensaje_usuario)
 
-    if "cuantos" in mensaje_usuario.lower() or "cuantas" in mensaje_usuario.lower() or "total" in mensaje_usuario.lower():
-        historial = []
-    else:
-        historial = obtener_historial_supabase(numero_usuario, limite=10)
+    # NO borramos el historial para que Gema no pierda el contexto de la conversación
+    historial = obtener_historial_supabase(numero_usuario, limite=10)
+
+    # Extraer mensajes previos como texto de contexto para la herramienta
+    contexto_previo_str = " ".join([m["content"] for m in historial if m["role"] == "user"])
 
     tools = [
         {
             "type": "function",
             "function": {
                 "name": "consultar_directorio_inteligente",
-                "description": "Consulta sobre la tabla de medicos en Supabase. OBLIGATORIO extraer provincia y especialidad si estan en la pregunta.",
+                "description": "Consulta sobre la tabla de medicos en Supabase. OBLIGATORIO extraer provincia y especialidad si estan en la pregunta o en el contexto previo.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -252,6 +255,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 if tool_call.function.name == "consultar_directorio_inteligente":
                     args = json.loads(tool_call.function.arguments)
                     args["mensaje_raw"] = mensaje_usuario
+                    args["contexto_previo"] = contexto_previo_str
                     resultado_json = consultar_directorio_inteligente(**args)
                     
                     messages.append({
