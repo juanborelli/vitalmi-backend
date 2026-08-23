@@ -1,4 +1,5 @@
 import os
+import re
 import json
 from datetime import datetime
 import zoneinfo
@@ -28,17 +29,18 @@ def obtener_cliente_openai() -> AsyncOpenAI:
 
 SYSTEM_PROMPT_FASE_1 = """
 Eres Gema, la asistente virtual de VitalMi en República Dominicana.
-Tu función es responder preguntas sobre el directorio médico usando la información EXACTA obtenida de la base de datos mediante tus herramientas de consulta.
+Tu función es entregar información exacta sobre los médicos y prestadores del directorio según los datos en 'MÉDICOS REALES ENCONTRADOS'.
 
 ### 🎭 PERSONALIDAD Y TONO:
 - Calidez caribeña/dominicana profesional, amable, directa y natural.
-- Responde de forma fluida y conversacional en máximo 2-3 oraciones corridas.
+- Responde de forma fluida y conversacional en un máximo de 2-3 oraciones corridas.
 - NO utilices listas numeradas, viñetas (*, -) ni formatos rígidos.
 
 ### 🚫 REGLAS DE ORO:
 1. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
-2. PRECISIÓN ABSOLUTA: Confía al 100% en los números y datos devueltos por la herramienta 'consultar_directorio_inteligente'.
-3. CERO ALUCINACIONES: NUNCA inventes médicos, clínicas ni números telefónicos.
+2. PRECISIÓN EN CONTEOS: Responde ÚNICAMENTE indicando la cifra exacta devuelta por la herramienta de consulta.
+3. LECTURA DIRECTA: Muestra los datos de los médicos encontrados (nombre, especialidad, centro médico, dirección/contacto).
+4. CERO ALUCINACIONES: NUNCA inventes médicos ni números telefónicos.
 """
 
 def obtener_hora_rd_iso() -> str:
@@ -55,98 +57,34 @@ def remover_tildes(texto: str) -> str:
         texto = texto.replace(a, b)
     return texto.strip()
 
-def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: str = "", nombre_medico: str = "", centro_medico: str = "", horario_tarde: bool = False, solo_conteo: bool = False) -> str:
-    """
-    Peina el 100% de la tabla vitalmi_directorio_master en Supabase.
-    """
+def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: str = "", nombre_medico: str = "", centro_medico: str = "", solo_conteo: bool = False) -> str:
     supabase = obtener_cliente_supabase()
     if not supabase:
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        # Petición con límite alto explícito (5000) para evitar que Supabase corte en 23 o 100
-        res = supabase.table("vitalmi_directorio_master").select("*").limit(5000).execute()
-        registros = res.data if res.data else []
+        # Consulta directa delegando el filtro a PostgREST / Supabase
+        query = supabase.table("vitalmi_directorio_master").select("*", count="exact")
 
-        if not registros:
-            return json.dumps({"total_exacto": 0, "medicos_muestra": []})
+        if ciudad_provincia:
+            query = query.ilike("ciudad_provincia", f"%{remover_tildes(ciudad_provincia)}%")
+        
+        if especialidad:
+            query = query.ilike("especialidad_medico", f"%{remover_tildes(especialidad)}%")
 
-        prov_busqueda = remover_tildes(ciudad_provincia).lower().strip()
-        esp_busqueda = remover_tildes(especialidad).lower().strip()
-        nom_busqueda = remover_tildes(nombre_medico).lower().strip()
-        centro_busqueda = remover_tildes(centro_medico).lower().strip()
+        if nombre_medico:
+            query = query.ilike("nombre", f"%{remover_tildes(nombre_medico)}%")
 
-        # Mapeo flexible de raíces clínicas
-        raices_especialidad = []
-        if "ginecolog" in esp_busqueda or "obstetr" in esp_busqueda:
-            raices_especialidad = ["ginecolog", "obstetr", "ginecobstetr"]
-        elif "cardiol" in esp_busqueda:
-            raices_especialidad = ["cardiol"]
-        elif "pediatr" in esp_busqueda:
-            raices_especialidad = ["pediatr"]
-        elif "otorrin" in esp_busqueda:
-            raices_especialidad = ["otorrin"]
-        elif esp_busqueda:
-            raices_especialidad = [esp_busqueda]
+        if centro_medico:
+            query = query.ilike("centro_medico", f"%{remover_tildes(centro_medico)}%")
 
-        filtrados = []
-        for m in registros:
-            prov = remover_tildes(str(m.get("ciudad_provincia") or "")).lower()
-            dir_text = remover_tildes(str(m.get("direccion") or "")).lower()
-            sec_text = remover_tildes(str(m.get("sector") or "")).lower()
-            
-            esp_full = remover_tildes(
-                str(m.get("especialidad_medico") or "") + " " +
-                str(m.get("especialidad") or "") + " " +
-                str(m.get("especialidad_clinica") or "") + " " +
-                str(m.get("subespecialidades_medico") or "")
-            ).lower()
-            
-            nom_med = remover_tildes(str(m.get("nombre") or "")).lower()
-            cen_med = remover_tildes(str(m.get("centro_medico") or "")).lower()
-            horarios = remover_tildes(str(m.get("horario_atencion") or m.get("observaciones") or "")).lower()
-
-            # 1. Ubicación/Provincia
-            match_loc = True
-            if prov_busqueda:
-                match_loc = (prov_busqueda in prov) or (prov_busqueda in dir_text) or (prov_busqueda in sec_text)
-
-            # 2. Especialidad
-            match_esp = True
-            if raices_especialidad:
-                match_esp = any(r in esp_full for r in raices_especialidad)
-
-            # 3. Nombre
-            match_nom = True
-            if nom_busqueda:
-                tokens_nombre = [t for t in nom_busqueda.split() if len(t) > 2]
-                match_nom = any(tok in nom_med for tok in tokens_nombre) if tokens_nombre else (nom_busqueda in nom_med)
-
-            # 4. Centro Médico / Clínica
-            match_centro = True
-            if centro_busqueda:
-                match_centro = (centro_busqueda in cen_med) or (centro_busqueda in dir_text)
-
-            # 5. Horario Tarde
-            match_horario = True
-            if horario_tarde:
-                match_horario = any(p in horarios for p in ["tarde", "pm", "14:", "15:", "16:", "17:", "18:", "2:00", "3:00", "4:00", "5:00", "6:00"])
-
-            if match_loc and match_esp and match_nom and match_centro and match_horario:
-                filtrados.append({
-                    "nombre": m.get("nombre"),
-                    "especialidad": m.get("especialidad_medico") or m.get("especialidad"),
-                    "centro_medico": m.get("centro_medico"),
-                    "direccion": m.get("direccion"),
-                    "ciudad_provincia": m.get("ciudad_provincia"),
-                    "telefono": m.get("telefono_institucional") or m.get("whatsapp"),
-                    "horarios": m.get("horario_atencion") or m.get("observaciones")
-                })
-
-        total = len(filtrados)
+        res = query.execute()
+        
+        total = res.count if res.count is not None else len(res.data)
+        
         return json.dumps({
             "total_exacto": total,
-            "medicos_muestra": filtrados[:10] if not solo_conteo else []
+            "medicos_muestra": res.data[:10] if not solo_conteo else []
         }, ensure_ascii=False)
 
     except Exception as e:
@@ -228,23 +166,27 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     nombre_contacto = paciente.get("nombre", nombre_usuario) if paciente.get("nombre") else "Estimado/a"
 
     guardar_mensaje_supabase(numero_usuario, "user", mensaje_usuario)
-    historial = obtener_historial_supabase(numero_usuario, limite=10)
+
+    # Forzar historial limpio en consultas de conteo directo para evitar arrastrar '23'
+    if "cuantos" in mensaje_usuario.lower() or "cuantas" in mensaje_usuario.lower():
+        historial = []
+    else:
+        historial = obtener_historial_supabase(numero_usuario, limite=10)
 
     tools = [
         {
             "type": "function",
             "function": {
                 "name": "consultar_directorio_inteligente",
-                "description": "Consulta y peina la totalidad de registros (hasta 5000) en vitalmi_directorio_master para responder conteos o búsquedas detalladas.",
+                "description": "Consulta directa sobre vitalmi_directorio_master en Supabase.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "ciudad_provincia": {"type": "string", "description": "Nombre de la ciudad o provincia (ej. 'San Cristóbal', 'Santiago')"},
-                        "especialidad": {"type": "string", "description": "Especialidad médica (ej. 'Ginecología', 'Obstetricia', 'Cardiología')"},
+                        "especialidad": {"type": "string", "description": "Especialidad médica (ej. 'Ginecol', 'Cardiol')"},
                         "nombre_medico": {"type": "string", "description": "Nombre o apellido del médico"},
-                        "centro_medico": {"type": "string", "description": "Nombre de la clínica o centro médico (ej. 'Cemeco', 'Constitución')"},
-                        "horario_tarde": {"type": "boolean", "description": "True si el usuario pregunta si atienden por la tarde"},
-                        "solo_conteo": {"type": "boolean", "description": "True si la pregunta es 'cuántos'"}
+                        "centro_medico": {"type": "string", "description": "Nombre del centro médico o clínica"},
+                        "solo_conteo": {"type": "boolean", "description": "True si la pregunta es cuántos médicos hay"}
                     },
                     "required": []
                 }
