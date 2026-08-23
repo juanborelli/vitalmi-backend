@@ -29,19 +29,17 @@ def obtener_cliente_openai() -> AsyncOpenAI:
 
 SYSTEM_PROMPT_FASE_1 = """
 Eres Gema, la asistente virtual médica de VitalMi en República Dominicana.
-Tu objetivo es entregar información exacta sobre los médicos y prestadores del directorio ('consultar_directorio_inteligente'), gestionar disponibilidades por TANDAS ('consultar_horario_y_bloqueos') y AGENDAR CITAS MÉDICAS ('agendar_cita_medica').
+Tu objetivo es entregar información exacta del directorio ('consultar_directorio_inteligente'), gestionar disponibilidades por TANDAS ('consultar_horario_y_bloqueos'), AGENDAR CITAS ('agendar_cita_medica') y PERMITIR CONSULTAR O CANCELAR CITAS REGISTRADAS ('consultar_mis_citas', 'gestionar_estado_cita').
 
-### 🎭 PERSONALIDAD Y FORMATO DE AGENDAMIENTO:
+### 🎭 PERSONALIDAD Y FORMATO:
 - Calidez caribeña/dominicana profesional, amable, fluida y precisa.
-- Cuando el usuario indique que desea agendar una cita (ej. "Agéndame para el martes en la mañana con la Dra. Ana Noesi"):
-  1. Verifica que tengas el nombre del médico, el día/fecha y la tanda deseada (Mañana o Tarde).
-  2. Invoca la herramienta 'agendar_cita_medica'.
-  3. Confirma amablemente la cita indicando que ha sido registrada en la red oficial de VitalMi.
+- Si el usuario pregunta por sus citas agendadas, usa 'consultar_mis_citas' y muéstraselas claramente.
+- Si el usuario desea cancelar una cita, usa 'gestionar_estado_cita' pasando el ID de la cita y confirmando amablemente la cancelación.
 
 ### 🚫 REGLAS DE ORO:
 1. SIEMPRE REPORTA DATOS REALES DE VITALMI_DIRECTORIO_MASTER, DOCTORES_HORARIOS Y CITAS.
-2. CONTINUIDAD DE CONTEXTO: Conserva la provincia, médico y especialidad consultados en mensajes anteriores.
-3. CERO ALUCINACIONES: Muestra únicamente datos y confirmaciones reales generadas por las herramientas.
+2. CONTINUIDAD DE CONTEXTO: Conserva los datos de citas y preferencias mencionadas previamente.
+3. CERO ALUCINACIONES: Muestra únicamente confirmaciones e IDs reales devueltos por la base de datos.
 """
 
 def obtener_hora_rd_iso() -> str:
@@ -58,6 +56,56 @@ def remover_tildes(texto: str) -> str:
         texto = texto.replace(a, b)
     return texto.strip()
 
+def consultar_mis_citas(telefono_jid: str) -> str:
+    """
+    Recupera las citas activas del paciente vinculadas a su teléfono.
+    """
+    supabase = obtener_cliente_supabase()
+    if not supabase:
+        return json.dumps({"error": "Sin conexión a base de datos"})
+
+    try:
+        res_pac = supabase.table("pacientes").select("id").eq("telefono_jid", telefono_jid).execute()
+        if not res_pac.data:
+            return json.dumps({"citas": [], "mensaje": "No se encontró registro de paciente."})
+
+        paciente_id = res_pac.data[0].get("id")
+        res_citas = supabase.table("citas") \
+            .select("*") \
+            .eq("paciente_id", paciente_id) \
+            .neq("estado", "cancelada") \
+            .order("created_at", desc=True) \
+            .execute()
+
+        return json.dumps({
+            "total_citas": len(res_citas.data) if res_citas.data else 0,
+            "citas": res_citas.data or []
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        print(f"❌ Error en consultar_mis_citas: {e}")
+        return json.dumps({"error": str(e)})
+
+def gestionar_estado_cita(cita_id: str, nuevo_estado: str = "cancelada") -> str:
+    """
+    Actualiza el estado de una cita en Supabase (ej. 'cancelada' o 'reprogramada').
+    """
+    supabase = obtener_cliente_supabase()
+    if not supabase:
+        return json.dumps({"error": "Sin conexión a base de datos"})
+
+    try:
+        res = supabase.table("citas").update({"estado": nuevo_estado}).eq("id", cita_id).execute()
+        return json.dumps({
+            "status": "exitoso",
+            "mensaje": f"La cita ha sido actualizada a estado '{nuevo_estado}' correctamente en VitalMi.",
+            "cita_id": cita_id
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        print(f"❌ Error en gestionar_estado_cita: {e}")
+        return json.dumps({"error": str(e)})
+
 def agendar_cita_medica(
     telefono_jid: str, 
     medico_nombre: str, 
@@ -65,19 +113,14 @@ def agendar_cita_medica(
     tanda: str, 
     motivo_consulta: str = "Consulta General"
 ) -> str:
-    """
-    Registra una solicitud de cita médica real en la tabla 'citas' de Supabase.
-    """
     supabase = obtener_cliente_supabase()
     if not supabase:
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        # 1. Obtener o verificar el paciente
         res_pac = supabase.table("pacientes").select("*").eq("telefono_jid", telefono_jid).execute()
         paciente_id = res_pac.data[0].get("id") if (res_pac.data and len(res_pac.data) > 0) else None
 
-        # 2. Registrar la cita
         datos_cita = {
             "paciente_id": paciente_id,
             "motivo_consulta": f"Médico: {medico_nombre} | Tanda: {tanda} | Motivo: {motivo_consulta} | Fecha: {fecha_cita}",
@@ -397,11 +440,38 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                     "type": "object",
                     "properties": {
                         "medico_nombre": {"type": "string", "description": "Nombre completo del médico"},
-                        "fecha_cita": {"type": "string", "description": "Fecha solicitada para la cita (ej. '2026-08-25' o 'Próximo Martes')"},
+                        "fecha_cita": {"type": "string", "description": "Fecha solicitada para la cita"},
                         "tanda": {"type": "string", "description": "Tanda elegida: 'Mañana' o 'Tarde'"},
                         "motivo_consulta": {"type": "string", "description": "Motivo de la consulta médica"}
                     },
                     "required": ["medico_nombre", "fecha_cita", "tanda"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "consultar_mis_citas",
+                "description": "Muestra las citas activas registradas para el usuario actual.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "gestionar_estado_cita",
+                "description": "Cancela o actualiza el estado de una cita médica.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "cita_id": {"type": "string", "description": "UUID de la cita a gestionar"},
+                        "nuevo_estado": {"type": "string", "description": "Nuevo estado (ej. 'cancelada')"}
+                    },
+                    "required": ["cita_id"]
                 }
             }
         }
@@ -427,41 +497,31 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         if response_message.tool_calls:
             messages.append(response_message)
             for tool_call in response_message.tool_calls:
-                if tool_call.function.name == "consultar_directorio_inteligente":
-                    args = json.loads(tool_call.function.arguments)
+                name = tool_call.function.name
+                args = json.loads(tool_call.function.arguments)
+
+                if name == "consultar_directorio_inteligente":
                     args["mensaje_raw"] = mensaje_usuario
                     args["contexto_previo"] = contexto_previo_str
-                    resultado_json = consultar_directorio_inteligente(**args)
-                    
-                    messages.append({
-                        "tool_call_id": tool_call.id,
-                        "role": "tool",
-                        "name": "consultar_directorio_inteligente",
-                        "content": resultado_json
-                    })
-
-                elif tool_call.function.name == "consultar_horario_y_bloqueos":
-                    args = json.loads(tool_call.function.arguments)
-                    resultado_json = consultar_horario_y_bloqueos(**args)
-                    
-                    messages.append({
-                        "tool_call_id": tool_call.id,
-                        "role": "tool",
-                        "name": "consultar_horario_y_bloqueos",
-                        "content": resultado_json
-                    })
-
-                elif tool_call.function.name == "agendar_cita_medica":
-                    args = json.loads(tool_call.function.arguments)
+                    res_tool = consultar_directorio_inteligente(**args)
+                elif name == "consultar_horario_y_bloqueos":
+                    res_tool = consultar_horario_y_bloqueos(**args)
+                elif name == "agendar_cita_medica":
                     args["telefono_jid"] = numero_usuario
-                    resultado_json = agendar_cita_medica(**args)
-                    
-                    messages.append({
-                        "tool_call_id": tool_call.id,
-                        "role": "tool",
-                        "name": "agendar_cita_medica",
-                        "content": resultado_json
-                    })
+                    res_tool = agendar_cita_medica(**args)
+                elif name == "consultar_mis_citas":
+                    res_tool = consultar_mis_citas(telefono_jid=numero_usuario)
+                elif name == "gestionar_estado_cita":
+                    res_tool = gestionar_estado_cita(**args)
+                else:
+                    res_tool = json.dumps({"error": "Herramienta no encontrada"})
+
+                messages.append({
+                    "tool_call_id": tool_call.id,
+                    "role": "tool",
+                    "name": name,
+                    "content": res_tool
+                })
 
             second_response = await client.chat.completions.create(
                 model="gpt-4o-mini",
