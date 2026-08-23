@@ -37,8 +37,8 @@ Tu función es entregar información exacta sobre los médicos y prestadores del
 - NO utilices listas numeradas, viñetas (*, -) ni formatos rígidos.
 
 ### 🚫 REGLAS DE ORO:
-1. SIEMPRE QUE TE PREGUNTEN POR CONTEOS O CANTIDADES DE MÉDICOS, DEBES EJECUTAR OBLIGATORIAMENTE 'consultar_directorio_inteligente'.
-2. PRECISIÓN ABSOLUTA EN CONTEOS: Reporta ÚNICAMENTE la cifra exacta devuelta en 'total_exacto' por la herramienta. NUNCA respondas con saludos genéricos si hay una pregunta explícita.
+1. SIEMPRE QUE TE PREGUNTEN POR CONTEOS O CANTIDADES DE MÉDICOS, DEBES REPORTAR EXACTAMENTE EL 'total_exacto' QUE DEVUELVE LA HERRAMIENTA.
+2. PRECISIÓN ABSOLUTA EN CONTEOS: NUNCA menciones el total general de la base de datos si la pregunta especifica una provincia o especialidad.
 3. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
 4. CERO ALUCINACIONES: NUNCA inventes médicos, clínicas ni números telefónicos.
 """
@@ -57,12 +57,30 @@ def remover_tildes(texto: str) -> str:
         texto = texto.replace(a, b)
     return texto.strip()
 
-def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: str = "", nombre_medico: str = "", centro_medico: str = "", solo_conteo: bool = False) -> str:
+def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: str = "", nombre_medico: str = "", centro_medico: str = "", solo_conteo: bool = False, mensaje_raw: str = "") -> str:
     supabase = obtener_cliente_supabase()
     if not supabase:
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
+        # Recuperación de respaldo: extraer provincia y especialidad si la IA omitió argumentos
+        raw_clean = remover_tildes(mensaje_raw).lower()
+        if not ciudad_provincia:
+            if "san cristobal" in raw_clean:
+                ciudad_provincia = "san cristobal"
+            elif "peravia" in raw_clean or "bani" in raw_clean:
+                ciudad_provincia = "peravia"
+            elif "distrito nacional" in raw_clean or "santo domingo" in raw_clean:
+                ciudad_provincia = "distrito nacional"
+
+        if not especialidad:
+            if "ginec" in raw_clean or "obstet" in raw_clean:
+                especialidad = "ginecolog"
+            elif "cardio" in raw_clean:
+                especialidad = "cardiolog"
+            elif "pediat" in raw_clean:
+                especialidad = "pediatra"
+
         query = supabase.table("vitalmi_directorio_master").select("*", count="exact")
 
         if ciudad_provincia:
@@ -185,15 +203,15 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             "type": "function",
             "function": {
                 "name": "consultar_directorio_inteligente",
-                "description": "OBLIGATORIA para consultar cuántos médicos hay o buscar doctores por provincia, centro o especialidad.",
+                "description": "Consulta sobre la tabla de medicos en Supabase. OBLIGATORIO extraer provincia y especialidad si estan en la pregunta.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "ciudad_provincia": {"type": "string", "description": "Nombre de la ciudad o provincia (ej. 'San Cristóbal', 'Peravia')"},
-                        "especialidad": {"type": "string", "description": "Especialidad médica (ej. 'Ginecólogo', 'Cardiólogo')"},
+                        "ciudad_provincia": {"type": "string", "description": "Nombre de la ciudad o provincia (ej. 'San Cristóbal')"},
+                        "especialidad": {"type": "string", "description": "Especialidad médica (ej. 'Ginecólogo')"},
                         "nombre_medico": {"type": "string", "description": "Nombre o apellido del médico"},
-                        "centro_medico": {"type": "string", "description": "Nombre del centro médico o clínica (ej. 'Cemeco', 'Haina')"},
-                        "solo_conteo": {"type": "boolean", "description": "True si la pregunta es sobre el total o cuántos médicos existen"}
+                        "centro_medico": {"type": "string", "description": "Nombre del centro médico o clínica"},
+                        "solo_conteo": {"type": "boolean", "description": "True si la pregunta solicita un total o cantidad"}
                     },
                     "required": []
                 }
@@ -212,7 +230,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             model="gpt-4o-mini",
             messages=messages,
             tools=tools,
-            tool_choice={"type": "function", "function": {"name": "consultar_directorio_inteligente"}} if ("cuantos" in mensaje_usuario.lower() or "total" in mensaje_usuario.lower()) else "auto",
+            tool_choice="auto",
             temperature=0.0
         )
 
@@ -223,6 +241,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             for tool_call in response_message.tool_calls:
                 if tool_call.function.name == "consultar_directorio_inteligente":
                     args = json.loads(tool_call.function.arguments)
+                    args["mensaje_raw"] = mensaje_usuario
                     resultado_json = consultar_directorio_inteligente(**args)
                     
                     messages.append({
