@@ -1,9 +1,9 @@
 import os
-import re
+import json
 from datetime import datetime
 import zoneinfo
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from app.core.supabase import obtener_cliente_supabase
@@ -28,18 +28,17 @@ def obtener_cliente_openai() -> AsyncOpenAI:
 
 SYSTEM_PROMPT_FASE_1 = """
 Eres Gema, la asistente virtual de VitalMi en República Dominicana.
-Tu función es entregar información exacta sobre los médicos y prestadores del directorio según los datos en 'MÉDICOS REALES ENCONTRADOS'.
+Tu función es responder preguntas sobre el directorio médico usando la información EXACTA obtenida de la base de datos mediante tus herramientas de consulta.
 
 ### 🎭 PERSONALIDAD Y TONO:
 - Calidez caribeña/dominicana profesional, amable, directa y natural.
-- Responde de forma fluida y conversacional en un máximo de 2-3 oraciones corridas.
+- Responde de forma fluida y conversacional en máximo 2-3 oraciones corridas.
 - NO utilices listas numeradas, viñetas (*, -) ni formatos rígidos.
 
 ### 🚫 REGLAS DE ORO:
 1. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
-2. PRECISIÓN EN CONTEOS: Si el usuario pregunta cuántos médicos hay, responde ÚNICAMENTE indicando el número exacto de 'TOTAL EXACTO EN ESTA ZONA Y ESPECIALIDAD'.
-3. LECTURA DIRECTA: Muestra los datos de los médicos encontrados (nombre, especialidad, centro médico, dirección/contacto).
-4. CERO ALUCINACIONES: NUNCA inventes médicos ni números telefónicos.
+2. PRECISIÓN EN CONTEOS Y CONSULTAS: Responde con las cifras y datos exactos retornados por la herramienta de consulta.
+3. CERO ALUCINACIONES: NUNCA inventes médicos, centros médicos ni números telefónicos.
 """
 
 def obtener_hora_rd_iso() -> str:
@@ -56,52 +55,88 @@ def remover_tildes(texto: str) -> str:
         texto = texto.replace(a, b)
     return texto.strip()
 
-def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = "", limite: int = 10) -> Tuple[List[Dict], int]:
+def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: str = "", nombre_medico: str = "", centro_medico: str = "", horario_tarde: bool = False, solo_conteo: bool = False) -> str:
+    """
+    Ejecuta una búsqueda flexible y precisa en la tabla vitalmi_directorio_master de Supabase.
+    """
     supabase = obtener_cliente_supabase()
     if not supabase:
-        print("❌ [SUPABASE ERROR] Sin cliente Supabase activo.")
-        return [], 0
+        return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        term_sin_tilde = remover_tildes(termino_busqueda).lower() if termino_busqueda else ""
-        loc_sin_tilde = remover_tildes(sector_municipio).lower() if sector_municipio else ""
-
-        print(f"🔍 [DIRECT EXCEL MATCHING] Término: '{term_sin_tilde}' | Provincia: '{loc_sin_tilde}'")
-
-        # Traer universo completo para cómputo directo
+        # Traer todos los datos para análisis completo en memoria
         res = supabase.table("vitalmi_directorio_master").select("*").execute()
-        todos = res.data if res.data else []
+        registros = res.data if res.data else []
 
-        if not todos:
-            return [], 0
+        if not registros:
+            return json.dumps({"total": 0, "medicos": []})
 
-        coincidencias = []
-        for m in todos:
-            provincia_val = remover_tildes(str(m.get("ciudad_provincia") or "")).lower()
-            especialidad_val = remover_tildes(str(m.get("especialidad_medico") or "")).lower()
-            nombre_val = remover_tildes(str(m.get("nombre") or "")).lower()
+        prov_busqueda = remover_tildes(ciudad_provincia).lower().strip()
+        esp_busqueda = remover_tildes(especialidad).lower().strip()
+        nom_busqueda = remover_tildes(nombre_medico).lower().strip()
+        centro_busqueda = remover_tildes(centro_medico).lower().strip()
 
-            # Evaluar coincidencia en provincia
-            match_provincia = True
-            if loc_sin_tilde:
-                match_provincia = loc_sin_tilde in provincia_val
+        filtrados = []
+        for m in registros:
+            prov = remover_tildes(str(m.get("ciudad_provincia") or "")).lower()
+            dir_text = remover_tildes(str(m.get("direccion") or "")).lower()
+            sec_text = remover_tildes(str(m.get("sector") or "")).lower()
+            
+            esp_med = remover_tildes(str(m.get("especialidad_medico") or "")).lower()
+            esp_gen = remover_tildes(str(m.get("especialidad") or "")).lower()
+            esp_cli = remover_tildes(str(m.get("especialidad_clinica") or "")).lower()
+            sub_esp = remover_tildes(str(m.get("subespecialidades_medico") or "")).lower()
+            
+            nom_med = remover_tildes(str(m.get("nombre") or "")).lower()
+            cen_med = remover_tildes(str(m.get("centro_medico") or "")).lower()
+            horarios = remover_tildes(str(m.get("horario_atencion") or m.get("observaciones") or "")).lower()
 
-            # Evaluar coincidencia en especialidad_medico (o nombre si se busca por médico específico)
-            match_especialidad = True
-            if term_sin_tilde:
-                match_especialidad = (term_sin_tilde in especialidad_val) or (term_sin_tilde in nombre_val)
+            # 1. Match de Ciudad/Provincia/Ubicación
+            match_loc = True
+            if prov_busqueda:
+                match_loc = (prov_busqueda in prov) or (prov_busqueda in dir_text) or (prov_busqueda in sec_text)
 
-            if match_provincia and match_especialidad:
-                coincidencias.append(m)
+            # 2. Match de Especialidad
+            match_esp = True
+            if esp_busqueda:
+                match_esp = (esp_busqueda in esp_med) or (esp_busqueda in esp_gen) or (esp_busqueda in esp_cli) or (esp_busqueda in sub_esp)
 
-        total_exacto = len(coincidencias)
-        print(f"📊 [EXCEL EXACT RESULT] Total exacto: {total_exacto}")
+            # 3. Match de Nombre de Médico
+            match_nom = True
+            if nom_busqueda:
+                tokens_nombre = [t for t in nom_busqueda.split() if len(t) > 2]
+                match_nom = any(tok in nom_med for tok in tokens_nombre) if tokens_nombre else (nom_busqueda in nom_med)
 
-        return coincidencias[:limite], total_exacto
+            # 4. Match de Centro Médico / Clínica
+            match_centro = True
+            if centro_busqueda:
+                match_centro = (centro_busqueda in cen_med) or (centro_busqueda in dir_text)
+
+            # 5. Match de Horario (Tarde)
+            match_horario = True
+            if horario_tarde:
+                match_horario = any(p in horarios for p in ["tarde", "pm", "14:", "15:", "16:", "17:", "18:", "2:00", "3:00", "4:00", "5:00", "6:00"])
+
+            if match_loc and match_esp and match_nom and match_centro and match_horario:
+                filtrados.append({
+                    "nombre": m.get("nombre"),
+                    "especialidad": m.get("especialidad_medico") or m.get("especialidad"),
+                    "centro_medico": m.get("centro_medico"),
+                    "direccion": m.get("direccion"),
+                    "ciudad_provincia": m.get("ciudad_provincia"),
+                    "telefono": m.get("telefono_institucional") or m.get("whatsapp"),
+                    "aseguradoras": m.get("aseguradoras")
+                })
+
+        total = len(filtrados)
+        return json.dumps({
+            "total_exacto": total,
+            "medicos_muestra": filtrados[:10] if not solo_conteo else []
+        }, ensure_ascii=False)
 
     except Exception as e:
-        print(f"⚠️ [SUPABASE EXCEPTION] Error en buscar_medicos_master: {e}")
-        return [], 0
+        print(f"❌ Error en consultar_directorio_inteligente: {e}")
+        return json.dumps({"error": str(e)})
 
 def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") -> dict:
     supabase = obtener_cliente_supabase()
@@ -178,82 +213,78 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     nombre_contacto = paciente.get("nombre", nombre_usuario) if paciente.get("nombre") else "Estimado/a"
 
     guardar_mensaje_supabase(numero_usuario, "user", mensaje_usuario)
-
     historial = obtener_historial_supabase(numero_usuario, limite=10)
 
-    texto_contexto_completo = " ".join([m["content"] for m in historial]).lower() + " " + mensaje_usuario.lower()
-    texto_contexto_limpio = remover_tildes(texto_contexto_completo)
+    # Definición de herramientas para OpenAI (Function Calling)
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "consultar_directorio_inteligente",
+                "description": "Consulta y peina la base de datos vitalmi_directorio_master para obtener conteos exactos o listas de médicos por cualquier criterio (provincia, especialidad, clínica, médico por nombre, horario de la tarde).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "ciudad_provincia": {"type": "string", "description": "Nombre de la ciudad o provincia (ej. 'San Cristóbal', 'Santiago')"},
+                        "especialidad": {"type": "string", "description": "Especialidad médica (ej. 'Ginecología', 'Cardiología', 'Pediatría')"},
+                        "nombre_medico": {"type": "string", "description": "Nombre o apellido del médico (ej. 'Gil Díaz', 'Martínez')"},
+                        "centro_medico": {"type": "string", "description": "Nombre de la clínica o centro médico (ej. 'Cemeco', 'HOMS')"},
+                        "horario_tarde": {"type": "boolean", "description": "True si el usuario pregunta expresamente por médicos que atiendan en la tarde"},
+                        "solo_conteo": {"type": "boolean", "description": "True si el usuario pregunta 'cuántos' médicos hay"}
+                    },
+                    "required": []
+                }
+            }
+        }
+    ]
 
-    raices_especialidades = {
-        "ginecolog": "ginecolog",
-        "otorrin": "otorrin",
-        "gastro": "gastro",
-        "pediatr": "pediatr",
-        "cardiol": "cardiol",
-        "ortoped": "ortop",
-        "traumatolog": "ortop",
-        "internist": "internist",
-        "dermatolog": "dermatolog",
-        "urolog": "urolog",
-        "neumolog": "neumolog",
-        "nefrolog": "nefrolog",
-        "fisiatr": "fisiatr",
-        "hematolog": "hematolog"
-    }
-
-    termino_buscado = ""
-    for clave, raiz in raices_especialidades.items():
-        if clave in texto_contexto_limpio:
-            termino_buscado = raiz
-            break
-
-    # Extracción de nombres de médicos si no hay especialidad
-    mensaje_limpio = remover_tildes(mensaje_usuario).lower().replace("?", "").replace("¿", "")
-    mensaje_limpio = re.sub(r'\b(dr|dra|doctor|doctora|en|de|la|el|los|las|cual|clinica|atiene|que|es|buscar|al|y|cuantos|cuantas|tienes|hay)\b', '', mensaje_limpio).strip()
-
-    if not termino_buscado and mensaje_limpio:
-        ciudades = ["san cristobal", "santiago", "la vega", "azua", "peravia", "bani", "santo domingo"]
-        palabras_filtradas = [p for p in mensaje_limpio.split() if not any(c in p for c in ciudades) and len(p) > 2]
-        if palabras_filtradas:
-            termino_buscado = " ".join(palabras_filtradas)
-
-    # Ubicación / Provincia
-    ubicacion_detectada = ""
-    if "san cristobal" in texto_contexto_limpio:
-        ubicacion_detectada = "san cristobal"
-    elif "santiago" in texto_contexto_limpio:
-        ubicacion_detectada = "santiago"
-    elif "la vega" in texto_contexto_limpio:
-        ubicacion_detectada = "la vega"
-    elif "azua" in texto_contexto_limpio:
-        ubicacion_detectada = "azua"
-
-    medicos_encontrados, total_exacto = buscar_medicos_master(sector_municipio=ubicacion_detectada, termino_busqueda=termino_buscado)
-
-    contexto_medicos = f"\nMÉDICOS REALES ENCONTRADOS EN SUPABASE (MUESTRA): {medicos_encontrados}\nTOTAL EXACTO EN ESTA ZONA Y ESPECIALIDAD: {total_exacto}"
     contexto_usuario = f"\nTe estás comunicando por WhatsApp con '{nombre_contacto}' (ID: {numero_usuario})."
-    
-    prompt_instruccion = (
-        f"\nINSTRUCCIÓN DIRECTA: Si el usuario pregunta CUÁNTOS médicos hay, responde ÚNICAMENTE indicando el número exacto contenido en 'TOTAL EXACTO EN ESTA ZONA Y ESPECIALIDAD' ({total_exacto}). "
-        "No des explicaciones ni aproximaciones. Entrega la cifra exacta directamente."
-    )
-
-    system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_usuario + contexto_medicos + prompt_instruccion
+    system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_usuario
 
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(historial)
 
     try:
+        # Primer paso: Generación de llamada a herramienta
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
-            temperature=0.0,
-            max_tokens=350
+            tools=tools,
+            tool_choice="auto",
+            temperature=0.0
         )
-        respuesta_texto = response.choices[0].message.content.strip()
+
+        response_message = response.choices[0].message
+
+        # Si el modelo decidió llamar a la función
+        if response_message.tool_calls:
+            messages.append(response_message)
+            for tool_call in response_message.tool_calls:
+                if tool_call.function.name == "consultar_directorio_inteligente":
+                    args = json.loads(tool_call.function.arguments)
+                    resultado_json = consultar_directorio_inteligente(**args)
+                    
+                    messages.append({
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": "consultar_directorio_inteligente",
+                        "content": resultado_json
+                    })
+
+            # Segunda llamada al modelo con los datos exactos devueltos por la base de datos
+            second_response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                temperature=0.0,
+                max_tokens=350
+            )
+            respuesta_texto = second_response.choices[0].message.content.strip()
+        else:
+            respuesta_texto = response_message.content.strip()
 
         guardar_mensaje_supabase(numero_usuario, "assistant", respuesta_texto)
         return respuesta_texto
+
     except Exception as e:
         print(f"❌ Error en gema_brain: {e}")
         return "Tuve un pequeño inconveniente técnico. ¿Podrías repetirme tu mensaje, por favor?"
