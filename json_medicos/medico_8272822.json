@@ -1,0 +1,51 @@
+{
+    "id": "8272822",
+    "name": "PERSIO FERNANDO PEÑA MUÑOZ",
+    "schedule": "",
+    "location": "CENTRO MEDICO INTEGRAL SANTANA GUZMAN S A",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Clinica Central",
+            "value": " (809) 788-1003"
+        }
+    ],
+    "address": "AV. SABANA LARGA ESQ. PTE. VASQUEZ ",
+    "icon_reference": "https://ventas.orange.com.do/arspalic/app/webroot/img/pins/PROVIDER_TYPE_PLACE.PNG",
+    "planType": [
+        {
+            "id": "1",
+            "name": "PLAN BASICO DE SALUD (PDSS)"
+        },
+        {
+            "id": "2",
+            "name": "PLAN EJECUTIVO"
+        },
+        {
+            "id": "3",
+            "name": "PLAN CORPORATIVO"
+        },
+        {
+            "id": "5",
+            "name": "PREFERENCIAL"
+        }
+    ],
+    "specialty": [
+        {
+            "id": "190",
+            "name": "ORTOPEDIA Y TRAUMATOLOGIA"
+        },
+        {
+            "id": "411",
+            "name": "CIRUGÍA DE COLUMNA"
+        }
+    ],
+    "city": "SANTO DOMINGO",
+    "sector": "SANTO DOMINGO",
+    "latitude": 0,
+    "longitude": 0,
+    "type": {
+        "id": 555,
+        "name": "MEDICO"
+    }
+}

@@ -1,0 +1,43 @@
+{
+    "id": "8272821",
+    "name": "LUISA MARIA GUILLEN HERNANDEZ",
+    "schedule": "",
+    "location": "PRIMED MILLON SRL",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Consultorio",
+            "value": " (809) 832-7609"
+        }
+    ],
+    "address": "DUARTE ",
+    "icon_reference": "https://ventas.orange.com.do/arspalic/app/webroot/img/pins/PROVIDER_TYPE_PLACE.PNG",
+    "planType": [
+        {
+            "id": "1",
+            "name": "PLAN BASICO DE SALUD (PDSS)"
+        },
+        {
+            "id": "2",
+            "name": "PLAN EJECUTIVO"
+        },
+        {
+            "id": "3",
+            "name": "PLAN CORPORATIVO"
+        }
+    ],
+    "specialty": [
+        {
+            "id": "190",
+            "name": "ORTOPEDIA Y TRAUMATOLOGIA"
+        }
+    ],
+    "city": "MONSENOR NOUEL",
+    "sector": "ZONA NORTE",
+    "latitude": 0,
+    "longitude": 0,
+    "type": {
+        "id": 555,
+        "name": "MEDICO"
+    }
+}

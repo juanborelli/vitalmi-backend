@@ -1,0 +1,31 @@
+{
+    "id": "8272906",
+    "name": "ROMMER DARIO LARA FIGUEREO",
+    "schedule": "",
+    "location": "INSTITUTO REGIONAL MATERNO INFANTIL Y ESPECIALIDADES MEDICAS S A",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Clinica Central",
+            "value": " (809) 898-7300"
+        }
+    ],
+    "address": "PRESIDENTE BILLINI ESQUINA CANELA MOTA ",
+    "icon_reference": "https://ventas.orange.com.do/arspalic/app/webroot/img/pins/PROVIDER_TYPE_PLACE.PNG",
+    "planType": null,
+    "specialty": [
+        {
+            "id": "120",
+            "name": "MEDICINA INTERNA"
+        },
+        {
+            "id": "430",
+            "name": "CUIDADOS INTENSIVOS ADULTOS"
+        }
+    ],
+    "city": null,
+    "sector": null,
+    "latitude": 0,
+    "longitude": 0,
+    "type": null
+}

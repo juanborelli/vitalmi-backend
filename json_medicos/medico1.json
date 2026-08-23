@@ -1,0 +1,32 @@
+{
+    "id": "1112118",
+    "name": "LAURA ELIZABETH SANTOS TEJADA",
+    "schedule": "",
+    "location": "CENTRO MEDICO POPULAR AZUANO C POR A",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Clinica Central",
+            "value": " (809) 521-1111"
+        }
+    ],
+    "address": "CALLE NICOLAS MAÑON ",
+    "planType": [
+        {
+            "id": "1",
+            "name": "PLAN BASICO DE SALUD (PDSS)"
+        }
+    ],
+    "specialty": [
+        {
+            "id": "190",
+            "name": "ORTOPEDIA Y TRAUMATOLOGIA"
+        }
+    ],
+    "city": "AZUA",
+    "sector": "ZONA SUR",
+    "type": {
+        "id": 555,
+        "name": "MEDICO"
+    }
+}

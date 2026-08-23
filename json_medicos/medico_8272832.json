@@ -1,0 +1,51 @@
+{
+    "id": "8272832",
+    "name": "DORIS MARIA LIZARDO GARCIA",
+    "schedule": "",
+    "location": "CENTRO MATERNO INFANTIL DEL NORDESTE SRL",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Consultorio",
+            "value": " (809) 588-7080"
+        },
+        {
+            "label": "Trabajo",
+            "value": " (809) 588-6656"
+        },
+        {
+            "label": "Directo",
+            "value": " (809) 588-7080"
+        }
+    ],
+    "address": "SALCEDO ESQ. PADRE BREA ",
+    "icon_reference": "https://ventas.orange.com.do/arspalic/app/webroot/img/pins/PROVIDER_TYPE_PLACE.PNG",
+    "planType": [
+        {
+            "id": "1",
+            "name": "PLAN BASICO DE SALUD (PDSS)"
+        },
+        {
+            "id": "2",
+            "name": "PLAN EJECUTIVO"
+        },
+        {
+            "id": "3",
+            "name": "PLAN CORPORATIVO"
+        }
+    ],
+    "specialty": [
+        {
+            "id": "170",
+            "name": "OFTALMOLOGIA"
+        }
+    ],
+    "city": "DUARTE",
+    "sector": "ZONA NORTE",
+    "latitude": 0,
+    "longitude": 0,
+    "type": {
+        "id": 555,
+        "name": "MEDICO"
+    }
+}

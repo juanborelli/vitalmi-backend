@@ -1,0 +1,47 @@
+{
+    "id": "8272943",
+    "name": "WANDA ELIZABETH PEREZ COLON",
+    "schedule": "",
+    "location": "CORPORACION VISTA HERMOSA / CENTRO POLICLINICO NACIONAL SRL",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Consultorio",
+            "value": " (809) 335-3276"
+        },
+        {
+            "label": "Directo",
+            "value": " (809) 788-2323"
+        }
+    ],
+    "address": "GUAYUBIN OLIVO NO. 1 CASI ESQ. CARR. MELLA  KM 7 1/2 ",
+    "icon_reference": "https://ventas.orange.com.do/arspalic/app/webroot/img/pins/PROVIDER_TYPE_PLACE.PNG",
+    "planType": [
+        {
+            "id": "1",
+            "name": "PLAN BASICO DE SALUD (PDSS)"
+        },
+        {
+            "id": "2",
+            "name": "PLAN EJECUTIVO"
+        },
+        {
+            "id": "3",
+            "name": "PLAN CORPORATIVO"
+        }
+    ],
+    "specialty": [
+        {
+            "id": "200",
+            "name": "OTORRINOLARINGOLOGIA"
+        }
+    ],
+    "city": "SANTO DOMINGO",
+    "sector": "SANTO DOMINGO",
+    "latitude": 0,
+    "longitude": 0,
+    "type": {
+        "id": 555,
+        "name": "MEDICO"
+    }
+}

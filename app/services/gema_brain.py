@@ -1,275 +1,113 @@
 import os
 import re
-import json
-from datetime import datetime
-import zoneinfo
-from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Any
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
 from app.core.supabase import obtener_cliente_supabase
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-env_path = BASE_DIR / ".env"
-load_dotenv(dotenv_path=env_path, override=True)
+load_dotenv(override=True)
+supabase = obtener_cliente_supabase()
 
-TZ_RD = zoneinfo.ZoneInfo("America/Santo_Domingo")
+# Diccionario de raíces de búsqueda para especialidades comunes
+MAPEO_RAICES_ESPECIALIDAD = {
+    "ginecologia": "GINEC",
+    "ginecologo": "GINEC",
+    "ginecologa": "GINEC",
+    "obstetricia": "OBSTETR",
+    "ginecologia y obstetricia": "GINEC",
+    "cardiologia": "CARDIO",
+    "cardiologo": "CARDIO",
+    "pediatria": "PEDIAT",
+    "pediatra": "PEDIAT",
+    "dermatologia": "DERMAT",
+    "dermatologo": "DERMAT",
+    "ortopedia": "ORTOP",
+    "traumatologia": "TRAUMAT",
+    "oftalmologia": "OFTALM",
+    "neurologia": "NEUROL",
+    "odontologia": "ODONT"
+}
 
-def obtener_cliente_openai() -> AsyncOpenAI:
-    api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    if not api_key and env_path.exists():
-        with open(env_path, "r") as f:
-            for line in f:
-                if line.startswith("OPENAI_API_KEY="):
-                    api_key = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    break
-    if api_key:
-        return AsyncOpenAI(api_key=api_key)
-    return None
+def obtener_raiz_especialidad(especialidad_input: str) -> str:
+    """Retorna la raíz óptima de búsqueda o la cadena limpia en mayúsculas."""
+    clean = (especialidad_input or "").strip().lower()
+    if clean in MAPEO_RAICES_ESPECIALIDAD:
+        return MAPEO_RAICES_ESPECIALIDAD[clean]
+    # Si no está en el mapa, toma los primeros 5 caracteres o la palabra completa en mayúsculas
+    return clean[:5].upper() if len(clean) >= 5 else clean.upper()
 
-SYSTEM_PROMPT_FASE_1 = """
-Eres Gema, la asistente virtual de VitalMi en República Dominicana.
-Tu función es entregar información exacta sobre los médicos y prestadores del directorio según los datos devueltos por la herramienta de consulta sobre la base de datos oficial.
+def consultar_directorio_master(
+    especialidad: str, 
+    provincia: str = None, 
+    municipio_cabecera: str = None,
+    limit: int = 100
+) -> Dict[str, Any]:
+    """
+    Realiza una búsqueda precisa y flexible en 'vitalmi_directorio_master'
+    evaluando simultáneamente 'especialidad', 'especialidad_medico' y 'especialidad_clinica'.
+    """
+    if not supabase:
+        return {"status": "error", "message": "Conexión a Supabase no disponible", "data": []}
 
-### 🎭 PERSONALIDAD Y TONO:
-- Calidez caribeña/dominicana profesional, amable, directa y natural.
-- Responde de forma fluida y conversacional en un máximo de 2-3 oraciones corridas.
-- NO utilices listas numeradas, viñetas (*, -) ni formatos rígidos.
+    raiz_esp = obtener_raiz_especialidad(especialidad)
+    pattern = f"%{raiz_esp}%"
 
-### 🚫 REGLAS DE ORO:
-1. SIEMPRE QUE TE PREGUNTEN POR CONTEOS O CANTIDADES DE MÉDICOS, DEBES REPORTAR EXACTAMENTE EL 'total_exacto' DEVUELTO POR LA HERRAMIENTA.
-2. PRECISIÓN ABSOLUTA EN CONTEOS: Reporta la cifra exacta según la provincia, municipio o especialidad solicitada.
-3. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
-4. CERO ALUCINACIONES: NUNCA inventes médicos, clínicas ni números telefónicos.
-"""
-
-def obtener_hora_rd_iso() -> str:
-    return datetime.now(TZ_RD).isoformat()
-
-def remover_tildes(texto: str) -> str:
-    if not texto:
-        return ""
-    replacements = (
-        ("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u"),
-        ("Á", "A"), ("É", "E"), ("Í", "I"), ("Ó", "O"), ("Ú", "U"), ("ñ", "n"), ("Ñ", "N")
+    # Construir la consulta a Supabase
+    query = supabase.table("vitalmi_directorio_master").select(
+        "id, nombre, tipo_prestador, especialidad, especialidad_medico, "
+        "centro_medico, direccion, provincia, municipio_cabecera, sector, "
+        "telefono_institucional, telefono_alterno, whatsapp, aseguradoras"
     )
-    for a, b in replacements:
-        texto = texto.replace(a, b)
-    return texto.strip()
 
-def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: str = "", nombre_medico: str = "", centro_medico: str = "", solo_conteo: bool = False, mensaje_raw: str = "") -> str:
-    supabase = obtener_cliente_supabase()
-    if not supabase:
-        return json.dumps({"error": "Sin conexión a base de datos"})
+    # Filtro multi-columna para capturar cualquier variación de la especialidad
+    query = query.or_(
+        f"especialidad.ilike.{pattern},"
+        f"especialidad_medico.ilike.{pattern},"
+        f"especialidad_clinica.ilike.{pattern}"
+    )
+
+    # Filtros geográficos opcionales
+    if provincia:
+        query = query.eq("provincia", provincia)
+    if municipio_cabecera:
+        query = query.eq("municipio_cabecera", municipio_cabecera)
 
     try:
-        # Extraer respaldo si la IA no parseó correctamente las palabras clave
-        raw_clean = remover_tildes(mensaje_raw).lower()
-        if not ciudad_provincia:
-            if "san cristobal" in raw_clean:
-                ciudad_provincia = "san cristobal"
-            elif "peravia" in raw_clean or "bani" in raw_clean:
-                ciudad_provincia = "peravia"
-            elif "santiago" in raw_clean:
-                ciudad_provincia = "santiago"
-            elif "duarte" in raw_clean or "san francisco" in raw_clean:
-                ciudad_provincia = "duarte"
-
-        if not especialidad:
-            if "ginec" in raw_clean or "obstet" in raw_clean:
-                especialidad = "ginecolog"
-            elif "cardio" in raw_clean:
-                especialidad = "cardiolog"
-            elif "pediat" in raw_clean:
-                especialidad = "pediatra"
-
-        # Consulta dirigida a la nueva tabla estandarizada vitalmi_directorio_v2
-        query = supabase.table("vitalmi_directorio_v2").select("*", count="exact")
-
-        if ciudad_provincia:
-            prov_clean = remover_tildes(ciudad_provincia).lower().strip()
-            query = query.or_(f"provincia.ilike.%{prov_clean}%,municipio_cabecera.ilike.%{prov_clean}%,direccion.ilike.%{prov_clean}%")
-
-        if especialidad:
-            esp_clean = remover_tildes(especialidad).lower().strip()
-            raiz_esp = "ginec" if ("ginec" in esp_clean or "obstet" in esp_clean) else esp_clean[:5]
-            query = query.ilike("especialidad_medico", f"%{raiz_esp}%")
-
-        if nombre_medico:
-            nom_clean = remover_tildes(nombre_medico).lower().strip()
-            tokens = [t for t in nom_clean.split() if len(t) > 2]
-            if tokens:
-                for tok in tokens:
-                    query = query.ilike("nombre", f"%{tok}%")
-            else:
-                query = query.ilike("nombre", f"%{nom_clean}%")
-
-        if centro_medico:
-            cen_clean = remover_tildes(centro_medico).lower().strip()
-            query = query.or_(f"centro_medico.ilike.%{cen_clean}%,direccion.ilike.%{cen_clean}%")
-
-        res = query.execute()
-        total = res.count if res.count is not None else len(res.data)
+        res = query.limit(limit).execute()
+        registros = res.data or []
         
-        return json.dumps({
-            "total_exacto": total,
-            "medicos_muestra": res.data[:10] if not solo_conteo else []
-        }, ensure_ascii=False)
-
-    except Exception as e:
-        print(f"❌ Error en consultar_directorio_inteligente: {e}")
-        return json.dumps({"error": str(e)})
-
-def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") -> dict:
-    supabase = obtener_cliente_supabase()
-    if not supabase:
-        return {}
-
-    try:
-        nombre_guardar = nombre_push.strip() if (nombre_push and nombre_push.strip()) else "Usuario WhatsApp"
-        res = supabase.table("pacientes").select("*").eq("telefono_jid", telefono_jid).execute()
-        
-        if res.data and len(res.data) > 0:
-            paciente_existente = res.data[0]
-            if paciente_existente.get("nombre") in ["Paciente", "Usuario WhatsApp", None] and nombre_guardar != "Usuario WhatsApp":
-                supabase.table("pacientes").update({
-                    "nombre": nombre_guardar,
-                    "updated_at": obtener_hora_rd_iso()
-                }).eq("telefono_jid", telefono_jid).execute()
-            return paciente_existente
-
-        datos_nuevo = {
-            "telefono_jid": telefono_jid,
-            "nombre": nombre_guardar,
-            "created_at": obtener_hora_rd_iso()
+        return {
+            "status": "success",
+            "total_encontrados": len(registros),
+            "filtros_aplicados": {
+                "especialidad_buscada": especialidad,
+                "raiz_patron": pattern,
+                "provincia": provincia,
+                "municipio_cabecera": municipio_cabecera
+            },
+            "data": registros
         }
-        res_insert = supabase.table("pacientes").insert(datos_nuevo).execute()
-        return res_insert.data[0] if res_insert.data else {}
     except Exception as e:
-        print(f"❌ [SUPABASE EXCEPTION] Error registrando en 'pacientes': {e}")
-        return {}
-
-def obtener_historial_supabase(telefono_jid: str, limite: int = 10) -> List[Dict[str, str]]:
-    supabase = obtener_cliente_supabase()
-    if not supabase:
-        return []
-
-    try:
-        response = (
-            supabase.table("historial_chats")
-            .select("rol, contenido")
-            .eq("telefono_jid", telefono_jid)
-            .order("created_at", desc=True)
-            .limit(limite)
-            .execute()
-        )
-        registros = response.data[::-1] if response.data else []
-        return [{"role": item["rol"], "content": item["contenido"]} for item in registros]
-    except Exception as e:
-        print(f"⚠️ [SUPABASE EXCEPTION] Error obteniendo historial: {e}")
-        return []
-
-def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_mensaje: str = "texto"):
-    supabase = obtener_cliente_supabase()
-    if not supabase:
-        return
-
-    try:
-        data = {
-            "telefono_jid": telefono_jid,
-            "rol": rol,
-            "contenido": contenido,
-            "tipo_mensaje": tipo_mensaje,
-            "created_at": obtener_hora_rd_iso()
+        return {
+            "status": "error",
+            "message": str(e),
+            "data": []
         }
-        supabase.table("historial_chats").insert(data).execute()
-    except Exception as e:
-        print(f"❌ [SUPABASE EXCEPTION] Error guardando en 'historial_chats': {e}")
 
-async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
-    client = obtener_cliente_openai()
-    if not client:
-        return "Hola, en este momento estamos actualizando el sistema. Escríbeme en un minuto y con gusto te ayudo."
-
-    paciente = registrar_o_actualizar_paciente(numero_usuario, nombre_usuario)
-    nombre_contacto = paciente.get("nombre", nombre_usuario) if paciente.get("nombre") else "Estimado/a"
-
-    guardar_mensaje_supabase(numero_usuario, "user", mensaje_usuario)
-
-    if "cuantos" in mensaje_usuario.lower() or "cuantas" in mensaje_usuario.lower() or "total" in mensaje_usuario.lower():
-        historial = []
-    else:
-        historial = obtener_historial_supabase(numero_usuario, limite=10)
-
-    tools = [
-        {
-            "type": "function",
-            "function": {
-                "name": "consultar_directorio_inteligente",
-                "description": "Consulta sobre vitalmi_directorio_v2 en Supabase. OBLIGATORIO extraer provincia y especialidad.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "ciudad_provincia": {"type": "string", "description": "Nombre de la ciudad o provincia (ej. 'San Cristóbal')"},
-                        "especialidad": {"type": "string", "description": "Especialidad médica (ej. 'Ginecólogo')"},
-                        "nombre_medico": {"type": "string", "description": "Nombre o apellido del médico"},
-                        "centro_medico": {"type": "string", "description": "Nombre del centro médico o clínica"},
-                        "solo_conteo": {"type": "boolean", "description": "True si la pregunta solicita un total o cantidad"}
-                    },
-                    "required": []
-                }
-            }
-        }
-    ]
-
-    contexto_usuario = f"\nTe estás comunicando por WhatsApp con '{nombre_contacto}' (ID: {numero_usuario})."
-    system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_usuario
-
-    messages = [{"role": "system", "content": system_prompt}]
-    messages.extend(historial)
-
-    try:
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-            temperature=0.0
-        )
-
-        response_message = response.choices[0].message
-
-        if response_message.tool_calls:
-            messages.append(response_message)
-            for tool_call in response_message.tool_calls:
-                if tool_call.function.name == "consultar_directorio_inteligente":
-                    args = json.loads(tool_call.function.arguments)
-                    args["mensaje_raw"] = mensaje_usuario
-                    resultado_json = consultar_directorio_inteligente(**args)
-                    
-                    messages.append({
-                        "tool_call_id": tool_call.id,
-                        "role": "tool",
-                        "name": "consultar_directorio_inteligente",
-                        "content": resultado_json
-                    })
-
-            second_response = await client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages,
-                temperature=0.0,
-                max_tokens=350
-            )
-            respuesta_texto = second_response.choices[0].message.content.strip()
-        else:
-            respuesta_texto = response_message.content.strip()
-
-        guardar_mensaje_supabase(numero_usuario, "assistant", respuesta_texto)
-        return respuesta_texto
-
-    except Exception as e:
-        print(f"❌ Error en gema_brain: {e}")
-        return "Tuve un pequeño inconveniente técnico. ¿Podrías repetirme tu mensaje, por favor?"
-
-async def procesar_mensaje_gema(usuario_jid: str, mensaje: str) -> str:
-    return await obtener_respuesta_gema(mensaje_usuario=mensaje, numero_usuario=usuario_jid)
+if __name__ == "__main__":
+    # Prueba del motor con San Cristóbal
+    print("🧪 PRUEBA DE BÚSQUEDA DE GEMA EN VITALMI_DIRECTORIO_MASTER:\n")
+    
+    resultado = consultar_directorio_master(
+        especialidad="ginecologo",
+        provincia="San Cristóbal"
+    )
+    
+    print(f"Status: {resultado['status']}")
+    print(f"Total encontrados: {resultado['total_encontrados']}")
+    print(f"Filtros: {resultado['filtros_aplicados']}\n")
+    
+    if resultado["data"]:
+        print("📋 Muestra del primer registro devuelto:")
+        primer_reg = resultado["data"][0]
+        for k, v in primer_reg.items():
+            print(f"  • {k}: {v}")

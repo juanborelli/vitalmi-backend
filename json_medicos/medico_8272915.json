@@ -1,0 +1,27 @@
+{
+    "id": "8272915",
+    "name": "CESAR ALBERTO VILLAR FRANCO",
+    "schedule": "",
+    "location": "CENTRO MEDICO REGIONAL DR AGUASVIVAS S A",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Clinica Central",
+            "value": " (809) 346-4400"
+        }
+    ],
+    "address": "PRESIDENTE BILLINI ",
+    "icon_reference": "https://ventas.orange.com.do/arspalic/app/webroot/img/pins/PROVIDER_TYPE_PLACE.PNG",
+    "planType": null,
+    "specialty": [
+        {
+            "id": "1",
+            "name": "ANESTESIOLOGIA"
+        }
+    ],
+    "city": null,
+    "sector": null,
+    "latitude": 0,
+    "longitude": 0,
+    "type": null
+}

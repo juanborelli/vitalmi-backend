@@ -1,0 +1,47 @@
+{
+    "id": "8272936",
+    "name": "ANA MARIA ORTEGA JIMENEZ",
+    "schedule": "",
+    "location": "CENTRO MATERNO INFANTIL SAN MARTIN DE PORRES SRL",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Directo",
+            "value": " (809) 724-4214"
+        },
+        {
+            "label": "Clinica Central",
+            "value": " (809) 581-4445"
+        }
+    ],
+    "address": "BISONO TORIBIO, AV. JUAN PABLO DUARTE ",
+    "icon_reference": "https://ventas.orange.com.do/arspalic/app/webroot/img/pins/PROVIDER_TYPE_PLACE.PNG",
+    "planType": [
+        {
+            "id": "1",
+            "name": "PLAN BASICO DE SALUD (PDSS)"
+        },
+        {
+            "id": "2",
+            "name": "PLAN EJECUTIVO"
+        },
+        {
+            "id": "3",
+            "name": "PLAN CORPORATIVO"
+        }
+    ],
+    "specialty": [
+        {
+            "id": "220",
+            "name": "PEDIATRIA"
+        }
+    ],
+    "city": "SANTIAGO",
+    "sector": "ZONA NORTE",
+    "latitude": 0,
+    "longitude": 0,
+    "type": {
+        "id": 555,
+        "name": "MEDICO"
+    }
+}

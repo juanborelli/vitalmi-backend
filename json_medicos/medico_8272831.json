@@ -1,0 +1,43 @@
+{
+    "id": "8272831",
+    "name": "JUAN JOSE BATISTA PERDOMO",
+    "schedule": "",
+    "location": "CENTRO MATERNO INFANTIL SAN MARTIN DE PORRES SRL",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Clinica Central",
+            "value": " (809) 581-4445"
+        }
+    ],
+    "address": "AV. JUAN PABLO DUARTE ESQ. CALLE BISONO TORIBIO ",
+    "icon_reference": "https://ventas.orange.com.do/arspalic/app/webroot/img/pins/PROVIDER_TYPE_PLACE.PNG",
+    "planType": [
+        {
+            "id": "1",
+            "name": "PLAN BASICO DE SALUD (PDSS)"
+        },
+        {
+            "id": "2",
+            "name": "PLAN EJECUTIVO"
+        },
+        {
+            "id": "3",
+            "name": "PLAN CORPORATIVO"
+        }
+    ],
+    "specialty": [
+        {
+            "id": "190",
+            "name": "ORTOPEDIA Y TRAUMATOLOGIA"
+        }
+    ],
+    "city": "SANTIAGO",
+    "sector": "ZONA NORTE",
+    "latitude": 0,
+    "longitude": 0,
+    "type": {
+        "id": 555,
+        "name": "MEDICO"
+    }
+}

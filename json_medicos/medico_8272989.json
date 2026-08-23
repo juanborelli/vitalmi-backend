@@ -1,0 +1,47 @@
+{
+    "id": "8272989",
+    "name": "ROSA LILIANA GONELL TORRES",
+    "schedule": "",
+    "location": "UNION MEDICA DEL NORTE",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Consultorio",
+            "value": " (809) 226-8686"
+        }
+    ],
+    "address": "AV. JUAN PABLO DUARTE ",
+    "icon_reference": "https://ventas.orange.com.do/arspalic/app/webroot/img/pins/PROVIDER_TYPE_PLACE.PNG",
+    "planType": [
+        {
+            "id": "1",
+            "name": "PLAN BASICO DE SALUD (PDSS)"
+        },
+        {
+            "id": "2",
+            "name": "PLAN EJECUTIVO"
+        },
+        {
+            "id": "3",
+            "name": "PLAN CORPORATIVO"
+        },
+        {
+            "id": "5",
+            "name": "PREFERENCIAL"
+        }
+    ],
+    "specialty": [
+        {
+            "id": "50",
+            "name": "DERMATOLOGIA"
+        }
+    ],
+    "city": "SANTIAGO",
+    "sector": "ZONA NORTE",
+    "latitude": 0,
+    "longitude": 0,
+    "type": {
+        "id": 555,
+        "name": "MEDICO"
+    }
+}

@@ -1,0 +1,51 @@
+{
+    "id": "8272892",
+    "name": "LUIS DANIEL BAEZ MONTEZUMA",
+    "schedule": "",
+    "location": "CENTRO MEDICO REGIONAL DR AGUASVIVAS S A",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Directo",
+            "value": " (809) 522-6486"
+        },
+        {
+            "label": "Clinica Central",
+            "value": " (809) 346-4400"
+        }
+    ],
+    "address": "PRESIDENTE BILLINI ",
+    "icon_reference": "https://ventas.orange.com.do/arspalic/app/webroot/img/pins/PROVIDER_TYPE_PLACE.PNG",
+    "planType": [
+        {
+            "id": "1",
+            "name": "PLAN BASICO DE SALUD (PDSS)"
+        },
+        {
+            "id": "2",
+            "name": "PLAN EJECUTIVO"
+        },
+        {
+            "id": "3",
+            "name": "PLAN CORPORATIVO"
+        },
+        {
+            "id": "5",
+            "name": "PREFERENCIAL"
+        }
+    ],
+    "specialty": [
+        {
+            "id": "170",
+            "name": "OFTALMOLOGIA"
+        }
+    ],
+    "city": "PERAVIA",
+    "sector": "ZONA SUR",
+    "latitude": 0,
+    "longitude": 0,
+    "type": {
+        "id": 555,
+        "name": "MEDICO"
+    }
+}

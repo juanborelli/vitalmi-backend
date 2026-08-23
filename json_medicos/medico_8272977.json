@@ -1,0 +1,47 @@
+{
+    "id": "8272977",
+    "name": "YUDERKA MARIA JOSE MOTA",
+    "schedule": "",
+    "location": "ARACHE POUERIET SRL",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Clinica Central",
+            "value": " (809) 553-3638"
+        }
+    ],
+    "address": "AV. MELCHOR CONTÍN ALFAU ESQUINA SANTIAGO SILVESTRE ",
+    "icon_reference": "https://ventas.orange.com.do/arspalic/app/webroot/img/pins/PROVIDER_TYPE_PLACE.PNG",
+    "planType": [
+        {
+            "id": "1",
+            "name": "PLAN BASICO DE SALUD (PDSS)"
+        },
+        {
+            "id": "2",
+            "name": "PLAN EJECUTIVO"
+        },
+        {
+            "id": "3",
+            "name": "PLAN CORPORATIVO"
+        },
+        {
+            "id": "5",
+            "name": "PREFERENCIAL"
+        }
+    ],
+    "specialty": [
+        {
+            "id": "220",
+            "name": "PEDIATRIA"
+        }
+    ],
+    "city": "HATO MAYOR",
+    "sector": "ZONA ESTE",
+    "latitude": 0,
+    "longitude": 0,
+    "type": {
+        "id": 555,
+        "name": "MEDICO"
+    }
+}

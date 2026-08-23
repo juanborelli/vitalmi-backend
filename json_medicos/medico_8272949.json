@@ -1,0 +1,47 @@
+{
+    "id": "8272949",
+    "name": "ARISEL  DOMINGUEZ ROSARIO",
+    "schedule": "",
+    "location": "MELOSA CLINICA BRUGAL SRL",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Clinica Central",
+            "value": " (809) 586-2519"
+        }
+    ],
+    "address": "CALLE JOSÉ DEL CARMEN ARIZA ",
+    "icon_reference": "https://ventas.orange.com.do/arspalic/app/webroot/img/pins/PROVIDER_TYPE_PLACE.PNG",
+    "planType": [
+        {
+            "id": "1",
+            "name": "PLAN BASICO DE SALUD (PDSS)"
+        },
+        {
+            "id": "2",
+            "name": "PLAN EJECUTIVO"
+        },
+        {
+            "id": "3",
+            "name": "PLAN CORPORATIVO"
+        },
+        {
+            "id": "5",
+            "name": "PREFERENCIAL"
+        }
+    ],
+    "specialty": [
+        {
+            "id": "698",
+            "name": "CIRUGIA GENERAL Y COLOPROCTOLOGÍA"
+        }
+    ],
+    "city": "PUERTO PLATA",
+    "sector": "ZONA NORTE",
+    "latitude": 0,
+    "longitude": 0,
+    "type": {
+        "id": 555,
+        "name": "MEDICO"
+    }
+}

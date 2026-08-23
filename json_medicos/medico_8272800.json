@@ -1,0 +1,35 @@
+{
+    "id": "8272800",
+    "name": "LIMBER IVAN ROJAS PEREZ",
+    "schedule": "",
+    "location": "CLINICA CORAZONES UNIDOS S A",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Clinica Central",
+            "value": " (809) 567-4421"
+        }
+    ],
+    "address": "FANTINO FALCO ",
+    "icon_reference": "https://ventas.orange.com.do/arspalic/app/webroot/img/pins/PROVIDER_TYPE_PLACE.PNG",
+    "planType": [
+        {
+            "id": "4",
+            "name": "PLAN PRESTIGE"
+        }
+    ],
+    "specialty": [
+        {
+            "id": "130",
+            "name": "NEFROLOGIA"
+        }
+    ],
+    "city": "DISTRITO NACIONAL",
+    "sector": "SANTO DOMINGO",
+    "latitude": 0,
+    "longitude": 0,
+    "type": {
+        "id": 555,
+        "name": "MEDICO"
+    }
+}

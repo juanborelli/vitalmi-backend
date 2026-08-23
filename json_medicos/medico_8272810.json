@@ -1,0 +1,47 @@
+{
+    "id": "8272810",
+    "name": "NELSON EMILIO ALCANTARA RAMIREZ",
+    "schedule": "",
+    "location": "CENTRO MEDICO ANACAONA SRL",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Clinica Central",
+            "value": " (809) 557-2322"
+        }
+    ],
+    "address": "JOSE ALFREDO ACHECAR ESQ. COLON ",
+    "icon_reference": "https://ventas.orange.com.do/arspalic/app/webroot/img/pins/PROVIDER_TYPE_PLACE.PNG",
+    "planType": [
+        {
+            "id": "1",
+            "name": "PLAN BASICO DE SALUD (PDSS)"
+        },
+        {
+            "id": "2",
+            "name": "PLAN EJECUTIVO"
+        },
+        {
+            "id": "3",
+            "name": "PLAN CORPORATIVO"
+        },
+        {
+            "id": "5",
+            "name": "PREFERENCIAL"
+        }
+    ],
+    "specialty": [
+        {
+            "id": "190",
+            "name": "ORTOPEDIA Y TRAUMATOLOGIA"
+        }
+    ],
+    "city": "SAN JUAN DE LA MAGUANA",
+    "sector": "ZONA SUR",
+    "latitude": 0,
+    "longitude": 0,
+    "type": {
+        "id": 555,
+        "name": "MEDICO"
+    }
+}

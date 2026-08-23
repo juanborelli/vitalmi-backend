@@ -1,0 +1,47 @@
+{
+    "id": "8272980",
+    "name": "HAROLYN RAMONA EUSEBIO CARDENAS",
+    "schedule": "",
+    "location": "CENTRO MEDICO COROMINAS PEPIN S A",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Clinica Central",
+            "value": " (809) 541-1400"
+        }
+    ],
+    "address": "C/ ARILO PAULINO ",
+    "icon_reference": "https://ventas.orange.com.do/arspalic/app/webroot/img/pins/PROVIDER_TYPE_PLACE.PNG",
+    "planType": [
+        {
+            "id": "1",
+            "name": "PLAN BASICO DE SALUD (PDSS)"
+        },
+        {
+            "id": "2",
+            "name": "PLAN EJECUTIVO"
+        },
+        {
+            "id": "3",
+            "name": "PLAN CORPORATIVO"
+        },
+        {
+            "id": "5",
+            "name": "PREFERENCIAL"
+        }
+    ],
+    "specialty": [
+        {
+            "id": "390",
+            "name": "CIRUGIA GENERAL"
+        }
+    ],
+    "city": "DISTRITO NACIONAL",
+    "sector": "SANTO DOMINGO",
+    "latitude": 0,
+    "longitude": 0,
+    "type": {
+        "id": 555,
+        "name": "MEDICO"
+    }
+}

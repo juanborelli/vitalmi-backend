@@ -1,0 +1,47 @@
+{
+    "id": "8272811",
+    "name": "JOSE ENRIQUE COROMINAS BASCUÑAN",
+    "schedule": "",
+    "location": "CLINICA COROMINAS S A",
+    "distance": 0,
+    "phoneNumbers": [
+        {
+            "label": "Consultorio",
+            "value": " (809) 580-1171"
+        }
+    ],
+    "address": "AV. RESTAURACION ",
+    "icon_reference": "https://ventas.orange.com.do/arspalic/app/webroot/img/pins/PROVIDER_TYPE_PLACE.PNG",
+    "planType": [
+        {
+            "id": "1",
+            "name": "PLAN BASICO DE SALUD (PDSS)"
+        },
+        {
+            "id": "2",
+            "name": "PLAN EJECUTIVO"
+        },
+        {
+            "id": "3",
+            "name": "PLAN CORPORATIVO"
+        },
+        {
+            "id": "5",
+            "name": "PREFERENCIAL"
+        }
+    ],
+    "specialty": [
+        {
+            "id": "250",
+            "name": "UROLOGIA"
+        }
+    ],
+    "city": "SANTIAGO",
+    "sector": "ZONA NORTE",
+    "latitude": 0,
+    "longitude": 0,
+    "type": {
+        "id": 555,
+        "name": "MEDICO"
+    }
+}
