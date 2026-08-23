@@ -33,13 +33,13 @@ Tu objetivo es entregar información exacta sobre los médicos y prestadores del
 
 ### 🎭 PERSONALIDAD Y FORMATO:
 - Calidez caribeña/dominicana profesional, amable, fluida y precisa.
-- Para saludos, preguntas generales o conteos: responde de forma conversacional indicando la cifra exacta devuelta en 'total_exacto'.
-- CUANDO EL USUARIO PIDA LA LISTA O NOMBRES: Muestra los médicos encontrados indicando Nombre, Especialidad, Centro Médico y Teléfono/WhatsApp de contacto.
+- Responde de forma natural citando la cantidad total encontrada y mencionando 1 o 2 ejemplos destacados de médicos con su centro médico para ofrecer asistencia fluida.
+- Si el usuario pide la lista completa, proporciona los nombres, centros médicos y contactos.
 
 ### 🚫 REGLAS DE ORO:
-1. SIEMPRE QUE TE PREGUNTEN POR CONTEOS, REPORTA EXACTAMENTE EL 'total_exacto' DEVUELTO POR LA HERRAMIENTA EN VITALMI_DIRECTORIO_MASTER.
-2. CONTINUIDAD DE CONTEXTO: Si el usuario pide "dame la lista", "cuáles son" o "dame los nombres", MANTÉN la especialidad, provincia, municipio o centro médico consultados anteriormente.
-3. CERO ALUCINACIONES: Muestra únicamente los médicos reales devueltos en 'medicos_muestra'. NUNCA inventes números ni clínicas.
+1. SIEMPRE REPORTA EL 'total_exacto' DEVUELTO POR LA HERRAMIENTA EN VITALMI_DIRECTORIO_MASTER.
+2. CONTINUIDAD DE CONTEXTO: Conserva la provincia, municipio o especialidad mencionados en mensajes anteriores.
+3. CERO ALUCINACIONES: Muestra únicamente los datos reales devueltos en 'medicos_muestra'.
 """
 
 def obtener_hora_rd_iso() -> str:
@@ -72,7 +72,7 @@ def consultar_directorio_inteligente(
     try:
         texto_analizar = remover_tildes(f"{mensaje_raw} {contexto_previo}").lower()
 
-        # Inferencia de Ubicación/Provincia si viene vacía
+        # Inferencia de Ubicación si no viene explícita
         if not provincia:
             if "san cristobal" in texto_analizar:
                 provincia = "San Cristóbal"
@@ -83,37 +83,48 @@ def consultar_directorio_inteligente(
             elif "santiago" in texto_analizar:
                 provincia = "Santiago"
 
-        # Inferencia de Especialidad si viene vacía
+        # Inferencia de Especialidad
         if not especialidad:
-            if "urol" in texto_analizar:
-                especialidad = "urol"
-            elif "ginec" in texto_analizar or "obstet" in texto_analizar:
+            if "ginec" in texto_analizar or "obstet" in texto_analizar:
                 especialidad = "ginec"
+            elif "urol" in texto_analizar:
+                especialidad = "urol"
             elif "cardio" in texto_analizar:
                 especialidad = "cardio"
-            elif "pediat" in texto_analizar:
-                especialidad = "pediat"
 
         query = supabase.table("vitalmi_directorio_master").select("*", count="exact")
 
-        # Filtros Geográficos
+        # Filtros Geográficos flexibles
         if provincia:
             prov_clean = remover_tildes(provincia).strip()
-            query = query.ilike("provincia", f"%{prov_clean}%")
+            query = query.or_(f"provincia.ilike.%{prov_clean}%,provincia.ilike.%San Cristóbal%")
 
         if municipio_cabecera:
             muni_clean = remover_tildes(municipio_cabecera).strip()
             query = query.ilike("municipio_cabecera", f"%{muni_clean}%")
 
-        # Filtro Flexible de Especialidad en todas las columnas posibles
+        # Filtro de Especialidad evaluando todas las columnas estandarizadas
         if especialidad:
             esp_clean = remover_tildes(especialidad).lower().strip()
-            pattern = f"%{esp_clean}%"
-            query = query.or_(
-                f"especialidad_medico.ilike.{pattern},"
-                f"especialidad.ilike.{pattern},"
-                f"especialidad_clinica.ilike.{pattern}"
-            )
+            if "ginec" in esp_clean or "obstet" in esp_clean:
+                query = query.or_(
+                    "especialidad_medico.ilike.%ginecolog%,"
+                    "especialidad.ilike.%GINEC%,"
+                    "especialidad_clinica.ilike.%GINEC%"
+                )
+            elif "urol" in esp_clean:
+                query = query.or_(
+                    "especialidad_medico.ilike.%urolog%,"
+                    "especialidad.ilike.%UROLOG%,"
+                    "especialidad_clinica.ilike.%UROLOG%"
+                )
+            else:
+                pattern = f"%{esp_clean[:5]}%"
+                query = query.or_(
+                    f"especialidad_medico.ilike.{pattern},"
+                    f"especialidad.ilike.{pattern},"
+                    f"especialidad_clinica.ilike.{pattern}"
+                )
 
         if nombre_medico:
             nom_clean = remover_tildes(nombre_medico).lower().strip()
@@ -128,13 +139,12 @@ def consultar_directorio_inteligente(
             cen_clean = remover_tildes(centro_medico).lower().strip()
             query = query.or_(f"centro_medico.ilike.%{cen_clean}%,direccion.ilike.%{cen_clean}%")
 
-        # Ejecución sin límite restrictivo para capturar el total real
         res = query.limit(200).execute()
         total = res.count if res.count is not None else len(res.data)
 
         medicos_limpios = []
         if res.data:
-            for item in res.data[:20]: # Envía hasta 20 en la muestra para respuesta del chat
+            for item in res.data[:20]:
                 medicos_limpios.append({
                     "nombre": item.get("nombre"),
                     "especialidad": item.get("especialidad_medico") or item.get("especialidad"),
@@ -237,13 +247,13 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             "type": "function",
             "function": {
                 "name": "consultar_directorio_inteligente",
-                "description": "Consulta sobre la tabla 'vitalmi_directorio_master' en Supabase. Permite filtrar por provincia, municipio_cabecera, centro_medico o especialidad_medico.",
+                "description": "Consulta sobre la tabla 'vitalmi_directorio_master' en Supabase. Filtra por provincia, municipio_cabecera, centro_medico o especialidad_medico.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "provincia": {"type": "string", "description": "Nombre de la provincia (ej. 'San Cristóbal', 'Santiago')"},
-                        "municipio_cabecera": {"type": "string", "description": "Municipio cabecera (ej. 'Bani', 'San Cristóbal')"},
-                        "especialidad": {"type": "string", "description": "Especialidad del médico (ej. 'Urólogo', 'Ginecólogo')"},
+                        "provincia": {"type": "string", "description": "Nombre de la provincia"},
+                        "municipio_cabecera": {"type": "string", "description": "Municipio cabecera"},
+                        "especialidad": {"type": "string", "description": "Especialidad del médico"},
                         "nombre_medico": {"type": "string", "description": "Nombre o apellido del médico"},
                         "centro_medico": {"type": "string", "description": "Nombre del centro médico o clínica"}
                     },
