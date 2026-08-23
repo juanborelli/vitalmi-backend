@@ -37,7 +37,7 @@ Tu función es entregar información exacta sobre los médicos y prestadores del
 
 ### 🚫 REGLAS DE ORO:
 1. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
-2. PRECISIÓN EN CONTEOS: Si el usuario pregunta cuántos médicos hay, responde ÚNICAMENTE indicando el número de 'TOTAL EXACTO EN ESTA ZONA Y ESPECIALIDAD'.
+2. PRECISIÓN EN CONTEOS: Si el usuario pregunta cuántos médicos hay, responde ÚNICAMENTE indicando el número exacto de 'TOTAL EXACTO EN ESTA ZONA Y ESPECIALIDAD'.
 3. LECTURA DIRECTA: Muestra los datos de los médicos encontrados (nombre, especialidad, centro médico, dirección/contacto).
 4. CERO ALUCINACIONES: NUNCA inventes médicos ni números telefónicos.
 """
@@ -66,79 +66,36 @@ def buscar_medicos_master(sector_municipio: str = "", termino_busqueda: str = ""
         term_sin_tilde = remover_tildes(termino_busqueda).lower() if termino_busqueda else ""
         loc_sin_tilde = remover_tildes(sector_municipio).lower() if sector_municipio else ""
 
-        print(f"🔍 [EXACT ENGINE] Término/Nombre: '{term_sin_tilde}' | Ubicación: '{loc_sin_tilde}'")
+        print(f"🔍 [DIRECT EXCEL MATCHING] Término: '{term_sin_tilde}' | Provincia: '{loc_sin_tilde}'")
 
-        # Traer universo completo para cómputo de intersección exacta sin truncamiento SQL
+        # Traer universo completo para cómputo directo
         res = supabase.table("vitalmi_directorio_master").select("*").execute()
         todos = res.data if res.data else []
 
         if not todos:
             return [], 0
 
-        # Definición de raíces asociadas para cobertura 100%
-        raices = []
-        if "ginecolog" in term_sin_tilde or "obstetr" in term_sin_tilde:
-            raices = ["ginecolog", "obstetr", "ginecobstetr"]
-        elif "cardiol" in term_sin_tilde:
-            raices = ["cardiol"]
-        elif "pediatr" in term_sin_tilde:
-            raices = ["pediatr"]
-        elif "otorrin" in term_sin_tilde:
-            raices = ["otorrin"]
-        else:
-            raices = [term_sin_tilde] if term_sin_tilde else []
-
-        # Variantes geográficas de San Cristóbal
-        variantes_loc = []
-        if "san cristobal" in loc_sin_tilde:
-            variantes_loc = ["san cristobal", "madre vieja", "canastica", "lavalapies", "bajos de haina", "haina", "yaguate", "cambita"]
-        elif loc_sin_tilde:
-            variantes_loc = [loc_sin_tilde]
-
         coincidencias = []
         for m in todos:
-            # Concatenar todos los campos de especialidad
-            esp_full = remover_tildes(
-                str(m.get("especialidad") or "") + " " +
-                str(m.get("especialidad_medico") or "") + " " +
-                str(m.get("especialidad_clinica") or "") + " " +
-                str(m.get("subespecialidades_medico") or "") + " " +
-                str(m.get("nombre") or "")
-            ).lower()
+            provincia_val = remover_tildes(str(m.get("ciudad_provincia") or "")).lower()
+            especialidad_val = remover_tildes(str(m.get("especialidad_medico") or "")).lower()
+            nombre_val = remover_tildes(str(m.get("nombre") or "")).lower()
 
-            # Concatenar todos los campos de ubicación
-            loc_full = remover_tildes(
-                str(m.get("ciudad_provincia") or "") + " " +
-                str(m.get("sector") or "") + " " +
-                str(m.get("direccion") or "") + " " +
-                str(m.get("centro_medico") or "")
-            ).lower()
+            # Evaluar coincidencia en provincia
+            match_provincia = True
+            if loc_sin_tilde:
+                match_provincia = loc_sin_tilde in provincia_val
 
-            # Evaluar Match de Especialidad
-            match_esp = False
-            if not raices:
-                match_esp = True
-            else:
-                for r in raices:
-                    if r in esp_full:
-                        match_esp = True
-                        break
+            # Evaluar coincidencia en especialidad_medico (o nombre si se busca por médico específico)
+            match_especialidad = True
+            if term_sin_tilde:
+                match_especialidad = (term_sin_tilde in especialidad_val) or (term_sin_tilde in nombre_val)
 
-            # Evaluar Match de Ubicación
-            match_loc = False
-            if not variantes_loc:
-                match_loc = True
-            else:
-                for v in variantes_loc:
-                    if v in loc_full:
-                        match_loc = True
-                        break
-
-            if match_esp and match_loc:
+            if match_provincia and match_especialidad:
                 coincidencias.append(m)
 
         total_exacto = len(coincidencias)
-        print(f"📊 [MATCH COMPLETO EXCEL MATCHING] Total encontrado: {total_exacto}")
+        print(f"📊 [EXCEL EXACT RESULT] Total exacto: {total_exacto}")
 
         return coincidencias[:limite], total_exacto
 
@@ -229,7 +186,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     raices_especialidades = {
         "ginecolog": "ginecolog",
-        "obstetr": "ginecolog",
         "otorrin": "otorrin",
         "gastro": "gastro",
         "pediatr": "pediatr",
@@ -251,7 +207,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             termino_buscado = raiz
             break
 
-    # Extracción de nombres
+    # Extracción de nombres de médicos si no hay especialidad
     mensaje_limpio = remover_tildes(mensaje_usuario).lower().replace("?", "").replace("¿", "")
     mensaje_limpio = re.sub(r'\b(dr|dra|doctor|doctora|en|de|la|el|los|las|cual|clinica|atiene|que|es|buscar|al|y|cuantos|cuantas|tienes|hay)\b', '', mensaje_limpio).strip()
 
@@ -261,7 +217,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         if palabras_filtradas:
             termino_buscado = " ".join(palabras_filtradas)
 
-    # Ubicación
+    # Ubicación / Provincia
     ubicacion_detectada = ""
     if "san cristobal" in texto_contexto_limpio:
         ubicacion_detectada = "san cristobal"
@@ -279,7 +235,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     
     prompt_instruccion = (
         f"\nINSTRUCCIÓN DIRECTA: Si el usuario pregunta CUÁNTOS médicos hay, responde ÚNICAMENTE indicando el número exacto contenido en 'TOTAL EXACTO EN ESTA ZONA Y ESPECIALIDAD' ({total_exacto}). "
-        "No des explicaciones largas ni menciones totales de otras ciudades. Da la cifra precisa directamente."
+        "No des explicaciones ni aproximaciones. Entrega la cifra exacta directamente."
     )
 
     system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_usuario + contexto_medicos + prompt_instruccion
