@@ -29,7 +29,7 @@ def obtener_cliente_openai() -> AsyncOpenAI:
 
 SYSTEM_PROMPT_FASE_1 = """
 Eres Gema, la asistente virtual de VitalMi en República Dominicana.
-Tu función es entregar información exacta sobre los médicos y prestadores del directorio según los datos devueltos por la herramienta de consulta.
+Tu función es entregar información exacta sobre los médicos y prestadores del directorio según los datos devueltos por la herramienta de consulta sobre la base de datos oficial.
 
 ### 🎭 PERSONALIDAD Y TONO:
 - Calidez caribeña/dominicana profesional, amable, directa y natural.
@@ -37,8 +37,8 @@ Tu función es entregar información exacta sobre los médicos y prestadores del
 - NO utilices listas numeradas, viñetas (*, -) ni formatos rígidos.
 
 ### 🚫 REGLAS DE ORO:
-1. SIEMPRE QUE TE PREGUNTEN POR CONTEOS O CANTIDADES DE MÉDICOS, DEBES REPORTAR EXACTAMENTE EL 'total_exacto' QUE DEVUELVE LA HERRAMIENTA.
-2. PRECISIÓN ABSOLUTA EN CONTEOS: NUNCA menciones el total general de la base de datos si la pregunta especifica una provincia o especialidad.
+1. SIEMPRE QUE TE PREGUNTEN POR CONTEOS O CANTIDADES DE MÉDICOS, DEBES REPORTAR EXACTAMENTE EL 'total_exacto' DEVUELTO POR LA HERRAMIENTA.
+2. PRECISIÓN ABSOLUTA EN CONTEOS: Reporta la cifra exacta según la provincia, municipio o especialidad solicitada.
 3. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
 4. CERO ALUCINACIONES: NUNCA inventes médicos, clínicas ni números telefónicos.
 """
@@ -63,15 +63,17 @@ def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: s
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        # Recuperación de respaldo: extraer provincia y especialidad si la IA omitió argumentos
+        # Extraer respaldo si la IA no parseó correctamente las palabras clave
         raw_clean = remover_tildes(mensaje_raw).lower()
         if not ciudad_provincia:
             if "san cristobal" in raw_clean:
                 ciudad_provincia = "san cristobal"
             elif "peravia" in raw_clean or "bani" in raw_clean:
                 ciudad_provincia = "peravia"
-            elif "distrito nacional" in raw_clean or "santo domingo" in raw_clean:
-                ciudad_provincia = "distrito nacional"
+            elif "santiago" in raw_clean:
+                ciudad_provincia = "santiago"
+            elif "duarte" in raw_clean or "san francisco" in raw_clean:
+                ciudad_provincia = "duarte"
 
         if not especialidad:
             if "ginec" in raw_clean or "obstet" in raw_clean:
@@ -81,11 +83,12 @@ def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: s
             elif "pediat" in raw_clean:
                 especialidad = "pediatra"
 
-        query = supabase.table("vitalmi_directorio_master").select("*", count="exact")
+        # Consulta dirigida a la nueva tabla estandarizada vitalmi_directorio_v2
+        query = supabase.table("vitalmi_directorio_v2").select("*", count="exact")
 
         if ciudad_provincia:
             prov_clean = remover_tildes(ciudad_provincia).lower().strip()
-            query = query.or_(f"ciudad_provincia.ilike.%{prov_clean}%,direccion.ilike.%{prov_clean}%")
+            query = query.or_(f"provincia.ilike.%{prov_clean}%,municipio_cabecera.ilike.%{prov_clean}%,direccion.ilike.%{prov_clean}%")
 
         if especialidad:
             esp_clean = remover_tildes(especialidad).lower().strip()
@@ -203,7 +206,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             "type": "function",
             "function": {
                 "name": "consultar_directorio_inteligente",
-                "description": "Consulta sobre la tabla de medicos en Supabase. OBLIGATORIO extraer provincia y especialidad si estan en la pregunta.",
+                "description": "Consulta sobre vitalmi_directorio_v2 en Supabase. OBLIGATORIO extraer provincia y especialidad.",
                 "parameters": {
                     "type": "object",
                     "properties": {
