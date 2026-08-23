@@ -78,7 +78,7 @@ def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: s
             if "ginec" in raw_clean or "obstet" in raw_clean:
                 especialidad = "ginec"
             elif "urol" in raw_clean:
-                especialidad = "urol"
+                especialidad = "urolog"
             elif "cardio" in raw_clean:
                 especialidad = "cardio"
             elif "pediat" in raw_clean:
@@ -86,15 +86,21 @@ def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: s
 
         query = supabase.table("vitalmi_directorio_master").select("*", count="exact")
 
-        # Filtro geográfico usando la columna oficial estandarizada
+        # Filtro geográfico en columna estandarizada provincia
         if ciudad_provincia:
             prov_clean = remover_tildes(ciudad_provincia).strip()
             query = query.ilike("provincia", f"%{prov_clean}%")
 
-        # Filtro flexible de especialidad
+        # Filtro de especialidad multi-columna (especialidad, especialidad_medico, especialidad_clinica)
         if especialidad:
             esp_clean = remover_tildes(especialidad).lower().strip()
-            query = query.or_(f"especialidad.ilike.%{esp_clean}%,especialidad_medico.ilike.%{esp_clean}%")
+            raiz_esp = "urolog" if "urol" in esp_clean else ("ginec" if "ginec" in esp_clean else esp_clean[:5])
+            pattern = f"%{raiz_esp}%"
+            query = query.or_(
+                f"especialidad.ilike.{pattern},"
+                f"especialidad_medico.ilike.{pattern},"
+                f"especialidad_clinica.ilike.{pattern}"
+            )
 
         if nombre_medico:
             nom_clean = remover_tildes(nombre_medico).lower().strip()
@@ -114,7 +120,7 @@ def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: s
         
         return json.dumps({
             "total_exacto": total,
-            "medicos_muestra": res.data[:15]  # Mantiene hasta 15 médicos para responder listas completas
+            "medicos_muestra": res.data[:15]
         }, ensure_ascii=False)
 
     except Exception as e:
