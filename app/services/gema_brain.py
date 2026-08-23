@@ -29,7 +29,7 @@ def obtener_cliente_openai() -> AsyncOpenAI:
 
 SYSTEM_PROMPT_FASE_1 = """
 Eres Gema, la asistente virtual de VitalMi en República Dominicana.
-Tu función es entregar información exacta sobre los médicos y prestadores del directorio según los datos en 'MÉDICOS REALES ENCONTRADOS'.
+Tu función es entregar información exacta sobre los médicos y prestadores del directorio según los datos devueltos por la herramienta de consulta.
 
 ### 🎭 PERSONALIDAD Y TONO:
 - Calidez caribeña/dominicana profesional, amable, directa y natural.
@@ -38,9 +38,8 @@ Tu función es entregar información exacta sobre los médicos y prestadores del
 
 ### 🚫 REGLAS DE ORO:
 1. CERO PROMESAS DE BÚSQUEDA: JAMÁS digas "voy a buscar", "un momento por favor", "te daré los detalles" ni "voy a revisar".
-2. PRECISIÓN EN CONTEOS: Responde ÚNICAMENTE indicando la cifra exacta devuelta por la herramienta de consulta.
-3. LECTURA DIRECTA: Muestra los datos de los médicos encontrados (nombre, especialidad, centro médico, dirección/contacto).
-4. CERO ALUCINACIONES: NUNCA inventes médicos ni números telefónicos.
+2. PRECISIÓN ABSOLUTA: Reporta exactamente los nombres, especialidades, clínicas, ubicaciones y teléfonos retornados por la base de datos.
+3. CERO ALUCINACIONES: NUNCA inventes médicos, clínicas ni números telefónicos.
 """
 
 def obtener_hora_rd_iso() -> str:
@@ -63,23 +62,32 @@ def consultar_directorio_inteligente(ciudad_provincia: str = "", especialidad: s
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        # Consulta directa delegando el filtro a PostgREST / Supabase
         query = supabase.table("vitalmi_directorio_master").select("*", count="exact")
 
         if ciudad_provincia:
-            query = query.ilike("ciudad_provincia", f"%{remover_tildes(ciudad_provincia)}%")
-        
+            prov_clean = remover_tildes(ciudad_provincia).lower().strip()
+            query = query.or_(f"ciudad_provincia.ilike.%{prov_clean}%,direccion.ilike.%{prov_clean}%,sector.ilike.%{prov_clean}%")
+
         if especialidad:
-            query = query.ilike("especialidad_medico", f"%{remover_tildes(especialidad)}%")
+            esp_clean = remover_tildes(especialidad).lower().strip()
+            raiz_esp = "ginec" if ("ginec" in esp_clean or "obstet" in esp_clean) else esp_clean[:5]
+            query = query.or_(f"especialidad_medico.ilike.%{raiz_esp}%,especialidad.ilike.%{raiz_esp}%,subespecialidades_medico.ilike.%{raiz_esp}%")
 
         if nombre_medico:
-            query = query.ilike("nombre", f"%{remover_tildes(nombre_medico)}%")
+            nom_clean = remover_tildes(nombre_medico).lower().strip()
+            # Búsqueda por palabras claves del nombre
+            tokens = [t for t in nom_clean.split() if len(t) > 2]
+            if tokens:
+                for tok in tokens:
+                    query = query.ilike("nombre", f"%{tok}%")
+            else:
+                query = query.ilike("nombre", f"%{nom_clean}%")
 
         if centro_medico:
-            query = query.ilike("centro_medico", f"%{remover_tildes(centro_medico)}%")
+            cen_clean = remover_tildes(centro_medico).lower().strip()
+            query = query.or_(f"centro_medico.ilike.%{cen_clean}%,direccion.ilike.%{cen_clean}%")
 
         res = query.execute()
-        
         total = res.count if res.count is not None else len(res.data)
         
         return json.dumps({
@@ -167,8 +175,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     guardar_mensaje_supabase(numero_usuario, "user", mensaje_usuario)
 
-    # Forzar historial limpio en consultas de conteo directo para evitar arrastrar '23'
-    if "cuantos" in mensaje_usuario.lower() or "cuantas" in mensaje_usuario.lower():
+    if "cuantos" in mensaje_usuario.lower() or "cuantas" in mensaje_usuario.lower() or "total" in mensaje_usuario.lower():
         historial = []
     else:
         historial = obtener_historial_supabase(numero_usuario, limite=10)
@@ -182,8 +189,8 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "ciudad_provincia": {"type": "string", "description": "Nombre de la ciudad o provincia (ej. 'San Cristóbal', 'Santiago')"},
-                        "especialidad": {"type": "string", "description": "Especialidad médica (ej. 'Ginecol', 'Cardiol')"},
+                        "ciudad_provincia": {"type": "string", "description": "Nombre de la ciudad o provincia (ej. 'Peravia', 'San Cristóbal')"},
+                        "especialidad": {"type": "string", "description": "Especialidad médica (ej. 'Cardiólogo', 'Ginecólogo')"},
                         "nombre_medico": {"type": "string", "description": "Nombre o apellido del médico"},
                         "centro_medico": {"type": "string", "description": "Nombre del centro médico o clínica"},
                         "solo_conteo": {"type": "boolean", "description": "True si la pregunta es cuántos médicos hay"}
