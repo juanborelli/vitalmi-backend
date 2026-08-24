@@ -36,9 +36,9 @@ Cuando la herramienta 'agendar_cita_medica' devuelva un agendamiento exitoso, de
 "Tu cita ha sido agendada exitosamente para el/la señor/a **[Nombre del Paciente]** (Cédula: **[Cédula/ID o 'No registrada']**), con el doctor **[Nombre del Doctor]** en **[Centro Médico / Clínica]**, para el **[Fecha completa formateada]** en la **[Tanda de la Mañana / Tanda de la Tarde]**. [Despedida amigable]"
 
 ### 🎭 MANEJO ESTRICTO DE CANCELACIONES Y CAMBIOS:
-1. SI EL USUARIO DICE "CANCELAR", "CANCELALA", "SI, CANCELA" O SOLICITA CANCELAR UNA CITA ESPECÍFICA:
-   - Invoca de inmediato 'gestionar_estado_cita' o llama a 'agendar_cita_medica' con 'reemplazar_existente=True'.
-   - NO VUELVAS a mostrar el mensaje de "Parece que ya tienes una cita agendada". PROCESA LA CANCELACIÓN O EL REEMPLAZO DE INMEDIATO.
+1. SI EL USUARIO CONFIRMA CANCELAR O REEMPLAZAR UNA CITA REGISTRADA:
+   - Invoca de inmediato 'agendar_cita_medica' pasando 'reemplazar_existente=True' para realizar la cancelación y el nuevo agendamiento en un solo paso.
+   - NUNCA digas "Un momento, por favor" ni dejes la respuesta incompleta. Entrega la confirmación final de la nueva cita de inmediato.
 
 2. MANEJO DE CONFLICTOS:
    - Si 'agendar_cita_medica' devuelve 'conflicto_cita_existente', pregunta educadamente si desea cancelar la cita previa para agendar la nueva. Si responde afirmativamente, ejecuta la acción inmediatamente pasando 'reemplazar_existente=True'.
@@ -165,14 +165,18 @@ def agendar_cita_medica(
         nombre_mes = meses_es[fecha_dt.month - 1]
         fecha_formateada = f"{nombre_dia} {fecha_dt.day} de {nombre_mes} de {fecha_dt.year}"
 
-        # Obtener datos del paciente y su clínica asociada del directorio
         res_pac = supabase.table("pacientes").select("*").eq("telefono_jid", telefono_jid).execute()
         paciente = res_pac.data[0] if (res_pac.data and len(res_pac.data) > 0) else {}
         paciente_id = paciente.get("id")
         paciente_nombre = paciente.get("nombre", "Paciente")
+        
+        # Filtro de nombre válido para evitar nombres comerciales (ej. Trancrédito)
+        if paciente_nombre in ["Trancrédito", "Usuario WhatsApp", "Paciente", None]:
+            paciente_nombre = "Titular de la cuenta"
+
         paciente_cedula = paciente.get("cedula", "No registrada")
 
-        # Búsqueda de la clínica o centro médico en vitalmi_directorio_master
+        # Búsqueda de centro médico en directorio
         centro_medico = "Centro Médico Autorizado"
         res_doc = supabase.table("vitalmi_directorio_master").select("centro_medico").ilike("nombre", f"%{remover_tildes(nombre_medico_limpio)[:6]}%").limit(1).execute()
         if res_doc.data and res_doc.data[0].get("centro_medico"):
@@ -183,11 +187,11 @@ def agendar_cita_medica(
                 .select("*") \
                 .eq("paciente_id", paciente_id) \
                 .neq("estado", "cancelada") \
-                .ilike("motivo_consulta", f"%{fecha_real_iso}%") \
                 .execute()
 
             if res_citas_existentes.data and len(res_citas_existentes.data) > 0:
                 if reemplazar_existente:
+                    # Cancelación atómica inmediata de las citas previas activas
                     for c_ex in res_citas_existentes.data:
                         supabase.table("citas").update({"estado": "cancelada"}).eq("id", c_ex.get("id")).execute()
                 else:
@@ -195,7 +199,7 @@ def agendar_cita_medica(
                     motivo_previo = cita_previa.get("motivo_consulta", "")
                     return json.dumps({
                         "status": "conflicto_cita_existente",
-                        "mensaje": "El paciente ya tiene una cita registrada para esta fecha.",
+                        "mensaje": "El paciente ya tiene una cita registrada activa.",
                         "cita_existente": {
                             "detalles_completos": motivo_previo,
                             "fecha": fecha_formateada,
@@ -216,7 +220,7 @@ def agendar_cita_medica(
 
         return json.dumps({
             "status": "exitoso",
-            "mensaje": f"Cita registrada exitosamente con {nombre_medico_limpio} para el {fecha_formateada}.",
+            "mensaje": f"Cita anterior cancelada y nueva cita registrada con éxito con {nombre_medico_limpio} para el {fecha_formateada}.",
             "cita_id": cita_creada.get("id"),
             "detalles": {
                 "paciente_nombre": paciente_nombre,
@@ -286,7 +290,6 @@ def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") ->
         res = supabase.table("pacientes").select("*").eq("telefono_jid", telefono_jid).execute()
         if res.data and len(res.data) > 0:
             paciente_existente = res.data[0]
-            # Si el paciente tiene como nombre el identificador por defecto o corporativo de WhatsApp, actualizarlo si viene un nombre válido
             if paciente_existente.get("nombre") in ["Paciente", "Usuario WhatsApp", None, "Trancrédito"] and nombre_guardar not in ["Usuario WhatsApp", "Trancrédito"]:
                 supabase.table("pacientes").update({
                     "nombre": nombre_guardar,
@@ -344,8 +347,9 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     paciente = registrar_o_actualizar_paciente(numero_usuario, nombre_usuario)
     nombre_contacto = paciente.get("nombre", nombre_usuario) if paciente.get("nombre") else "Estimado/a"
+    if nombre_contacto in ["Trancrédito", "Usuario WhatsApp", "Paciente"]:
+        nombre_contacto = "Estimado/a"
 
-    # 1. Recuperar historial antes de guardar el mensaje actual para evaluar si ya hubo interacción HOY
     historial_raw = obtener_historial_supabase(numero_usuario, limite=6)
 
     ahora_rd = datetime.now(TZ_RD)
@@ -360,7 +364,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 ya_saludo_hoy = True
                 break
 
-    # Guardar mensaje actual en Supabase
     guardar_mensaje_supabase(numero_usuario, "user", mensaje_usuario)
 
     historial_limpio = [{"role": m["rol"] if "rol" in m else m["role"], "content": m["contenido"] if "contenido" in m else m["content"]} for m in historial_raw]
