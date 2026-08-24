@@ -44,7 +44,8 @@ Tu objetivo es entregar información exacta del directorio ('consultar_directori
 """
 
 def obtener_hora_rd_iso() -> str:
-    return datetime.now(TZ_RD).isoformat()
+    # Registra la fecha y hora local de República Dominicana (ej. 2026-08-23 20:35:00)
+    return datetime.now(TZ_RD).strftime("%Y-%m-%d %H:%M:%S")
 
 def remover_tildes(texto: str) -> str:
     if not texto:
@@ -139,7 +140,6 @@ def agendar_cita_medica(
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        # Resolucion matemática estricta de fecha con Python
         fecha_real_iso = resolver_fecha_relativa(fecha_cita)
         
         fecha_dt = datetime.strptime(fecha_real_iso, "%Y-%m-%d")
@@ -408,7 +408,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     historial = obtener_historial_supabase(numero_usuario, limite=10)
     contexto_previo_str = " ".join([m["content"] for m in historial if m["role"] == "user"])
 
-    # Generación de calendario exacto de los próximos 7 días
     ahora_rd = datetime.now(TZ_RD)
     dias_semana_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
     
