@@ -31,17 +31,20 @@ SYSTEM_PROMPT_FASE_1 = """
 Eres Gema, la asistente virtual médica de VitalMi en República Dominicana.
 Tu objetivo es entregar información exacta del directorio ('consultar_directorio_inteligente'), gestionar disponibilidades por TANDAS ('consultar_horario_y_bloqueos'), AGENDAR CITAS ('agendar_cita_medica') y PERMITIR CONSULTAR O CANCELAR CITAS REGISTRADAS ('consultar_mis_citas', 'gestionar_estado_cita').
 
+### 🎭 REGLAS DE AGENDAMIENTO Y RESUMEN UNIFICADO:
+1. UN PACIENTE PUEDE TENER MÚLTIPLES CITAS EN LA MISMA TANDA Y MISMO DÍA (cada consulta médica dura aprox. 15 minutos).
+2. NO Asumas conflictos de horario ni canceles citas automáticamente a menos que el usuario diga explícitamente "quiero cancelar la cita con el Dr. X".
+3. Al confirmar una cita exitosa, si el backend reporta citas adicionales para esa misma fecha/tanda, NOTIFICA Y RESUME TODAS LAS CITAS ACTIVAS DEL DÍA EN UN SOLO MENSAJE CONSOLIDADO.
+
 ### 🎭 FORMATO OBLIGATORIO DE CONFIRMACIÓN DE CITA:
-Cuando la herramienta 'agendar_cita_medica' devuelva un agendamiento exitoso, debes redactar la confirmación final SIGUIENDO ESTA ESTRUCTURA EXACTA:
-"Tu cita ha sido agendada exitosamente para el/la señor/a **[Nombre del Paciente]** (Cédula: **[Cédula/ID o 'No registrada']**), con el doctor **[Nombre del Doctor]** en **[Centro Médico / Clínica]**, para el **[Fecha completa formateada]** en la **[Tanda de la Mañana / Tanda de la Tarde]**. [Despedida amigable]"
+Estructura tu respuesta de la siguiente manera:
+"Cita agendada exitosamente para el/la señor/a **[Nombre del Paciente]** (Cédula: **[Cédula/ID]**), con el doctor **[Nombre del Doctor]** en **[Centro Médico / Clínica]**, para el **[Fecha completa]** en la **[Tanda de la Mañana / Tanda de la Tarde]**.
 
-### 🎭 MANEJO ESTRICTO DE CANCELACIONES Y CAMBIOS:
-1. SI EL USUARIO CONFIRMA CANCELAR O REEMPLAZAR UNA CITA REGISTRADA:
-   - Invoca de inmediato 'agendar_cita_medica' pasando 'reemplazar_existente=True' para realizar la cancelación y el nuevo agendamiento en un solo paso.
-   - NUNCA digas "Un momento, por favor" ni dejes la respuesta incompleta. Entrega la confirmación final de la nueva cita de inmediato.
+📋 **Resumen de tus citas para ese día:**
+- [Médico 1] | [Centro 1] | [Tanda]
+- [Médico 2] | [Centro 2] | [Tanda]
 
-2. MANEJO DE CONFLICTOS:
-   - Si 'agendar_cita_medica' devuelve 'conflicto_cita_existente', pregunta educadamente si desea cancelar la cita previa para agendar la nueva. Si responde afirmativamente, ejecuta la acción inmediatamente pasando 'reemplazar_existente=True'.
+[Despedida amable]"
 
 ### 🚫 REGLAS DE ORO:
 1. NUNCA ASIGNES HORAS FIJAS FUERA DE TANDA (como "10:00 AM" o "4:00 PM"). Confirma siempre por TANDA ("Tanda de la Mañana a partir de las 9:00 AM" o "Tanda de la Tarde a partir de las 3:00 PM").
@@ -146,8 +149,7 @@ def agendar_cita_medica(
     medico_nombre: str, 
     fecha_cita: str, 
     tanda: str, 
-    motivo_consulta: str = "Consulta General",
-    reemplazar_existente: bool = False
+    motivo_consulta: str = "Consulta General"
 ) -> str:
     supabase = obtener_cliente_supabase()
     if not supabase:
@@ -170,44 +172,17 @@ def agendar_cita_medica(
         paciente_id = paciente.get("id")
         paciente_nombre = paciente.get("nombre", "Paciente")
         
-        # Filtro de nombre válido para evitar nombres comerciales (ej. Trancrédito)
         if paciente_nombre in ["Trancrédito", "Usuario WhatsApp", "Paciente", None]:
             paciente_nombre = "Titular de la cuenta"
 
         paciente_cedula = paciente.get("cedula", "No registrada")
 
-        # Búsqueda de centro médico en directorio
         centro_medico = "Centro Médico Autorizado"
         res_doc = supabase.table("vitalmi_directorio_master").select("centro_medico").ilike("nombre", f"%{remover_tildes(nombre_medico_limpio)[:6]}%").limit(1).execute()
         if res_doc.data and res_doc.data[0].get("centro_medico"):
             centro_medico = res_doc.data[0].get("centro_medico")
 
-        if paciente_id:
-            res_citas_existentes = supabase.table("citas") \
-                .select("*") \
-                .eq("paciente_id", paciente_id) \
-                .neq("estado", "cancelada") \
-                .execute()
-
-            if res_citas_existentes.data and len(res_citas_existentes.data) > 0:
-                if reemplazar_existente:
-                    # Cancelación atómica inmediata de las citas previas activas
-                    for c_ex in res_citas_existentes.data:
-                        supabase.table("citas").update({"estado": "cancelada"}).eq("id", c_ex.get("id")).execute()
-                else:
-                    cita_previa = res_citas_existentes.data[0]
-                    motivo_previo = cita_previa.get("motivo_consulta", "")
-                    return json.dumps({
-                        "status": "conflicto_cita_existente",
-                        "mensaje": "El paciente ya tiene una cita registrada activa.",
-                        "cita_existente": {
-                            "detalles_completos": motivo_previo,
-                            "fecha": fecha_formateada,
-                            "cita_id": cita_previa.get("id")
-                        },
-                        "nuevo_medico_solicitado": nombre_medico_limpio
-                    }, ensure_ascii=False)
-
+        # Registrar la nueva cita directamente sin restricciones por misma tanda/día
         datos_cita = {
             "paciente_id": paciente_id,
             "motivo_consulta": f"Médico: {nombre_medico_limpio} | Centro: {centro_medico} | Tanda: {tanda} | Motivo: {motivo_consulta} | Fecha: {fecha_formateada} ({fecha_real_iso})",
@@ -218,9 +193,21 @@ def agendar_cita_medica(
         res_cita = supabase.table("citas").insert(datos_cita).execute()
         cita_creada = res_cita.data[0] if res_cita.data else {}
 
+        # Consultar TODAS las citas activas para esa fecha específica y enviarlas agrupadas
+        citas_del_dia = []
+        if paciente_id:
+            res_todas = supabase.table("citas") \
+                .select("motivo_consulta") \
+                .eq("paciente_id", paciente_id) \
+                .neq("estado", "cancelada") \
+                .ilike("motivo_consulta", f"%{fecha_real_iso}%") \
+                .execute()
+            if res_todas.data:
+                citas_del_dia = [c.get("motivo_consulta") for c in res_todas.data]
+
         return json.dumps({
             "status": "exitoso",
-            "mensaje": f"Cita anterior cancelada y nueva cita registrada con éxito con {nombre_medico_limpio} para el {fecha_formateada}.",
+            "mensaje": f"Cita registrada exitosamente con {nombre_medico_limpio} para el {fecha_formateada}.",
             "cita_id": cita_creada.get("id"),
             "detalles": {
                 "paciente_nombre": paciente_nombre,
@@ -230,7 +217,8 @@ def agendar_cita_medica(
                 "fecha_confirmada": fecha_formateada,
                 "fecha_iso": fecha_real_iso,
                 "tanda": tanda,
-                "estado": "solicitada"
+                "estado": "solicitada",
+                "todas_citas_dia": citas_del_dia
             }
         }, ensure_ascii=False)
 
@@ -355,7 +343,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     ahora_rd = datetime.now(TZ_RD)
     fecha_hoy_str = ahora_rd.strftime("%Y-%m-%d")
     
-    # Evaluación estricta de saludo diario
     ya_saludo_hoy = False
     if historial_raw:
         for m in historial_raw:
@@ -379,7 +366,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     
     tabla_dias_str = "\n".join(proximos_dias)
 
-    # Lógica de Saludo
     hora_actual = ahora_rd.hour
     saludo_tiempo = "buenos días" if 5 <= hora_actual < 12 else ("buenas tardes" if 12 <= hora_actual < 19 else "buenas noches")
     
@@ -435,8 +421,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                         "medico_nombre": {"type": "string"},
                         "fecha_cita": {"type": "string"},
                         "tanda": {"type": "string"},
-                        "motivo_consulta": {"type": "string"},
-                        "reemplazar_existente": {"type": "boolean", "description": "True si el usuario expresamente confirmó reemplazar la cita previa."}
+                        "motivo_consulta": {"type": "string"}
                     },
                     "required": ["medico_nombre", "fecha_cita", "tanda"]
                 }
