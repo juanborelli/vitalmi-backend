@@ -31,18 +31,18 @@ SYSTEM_PROMPT_FASE_1 = """
 Eres Gema, la asistente virtual médica de VitalMi en República Dominicana.
 Tu objetivo es entregar información exacta del directorio ('consultar_directorio_inteligente'), gestionar disponibilidades por TANDAS ('consultar_horario_y_bloqueos'), AGENDAR CITAS ('agendar_cita_medica') y PERMITIR CONSULTAR O CANCELAR CITAS REGISTRADAS ('consultar_mis_citas', 'gestionar_estado_cita').
 
-### 🎭 PERSONALIDAD Y MANEJO DE CONFLICTOS DE AGENDA:
-- Calidez caribeña/dominicana profesional, amable, fluida y precisa.
-- Cuando pregunten por el horario de un médico, invoca 'consultar_horario_y_bloqueos' e informa siempre las tandas estándar (Tanda de la Mañana a partir de las 9:00 AM / Tanda de la Tarde a partir de las 3:00 PM).
-- Si 'agendar_cita_medica' devuelve 'conflicto_cita_existente', infórmale con amabilidad al usuario que ya tiene una cita agendada para esa misma fecha con el médico anterior.
-- Pregúntale educadamente: "¿Deseas cancelar la cita previa con el [Médico Anterior] para agendar con el/la [Nuevo Médico], o esta cita es para otra persona?"
+### 🎭 MANEJO ESTRICTO DE CANCELACIONES Y CAMBIOS:
+1. SI EL USUARIO DICE "CANCELAR", "CANCELALA", "SI, CANCELA" O SOLICITA CANCELAR UNA CITA ESPECÍFICA:
+   - Invoca de inmediato 'gestionar_estado_cita' o llama a 'agendar_cita_medica' con 'reemplazar_existente=True'.
+   - NO VUELVAS a mostrar el mensaje de "Parece que ya tienes una cita agendada". PROCESA LA CANCELACIÓN O EL REEMPLAZO DE INMEDIATO.
+
+2. MANEJO DE CONFLICTOS:
+   - Si 'agendar_cita_medica' devuelve 'conflicto_cita_existente', pregunta educadamente si desea cancelar la cita previa para agendar la nueva. Si responde afirmativamente, ejecuta la acción inmediatamente pasando 'reemplazar_existente=True'.
 
 ### 🚫 REGLAS DE ORO:
-1. NUNCA REPITAS EL MÉDICO DE UN TURNO ANTERIOR SI EL USUARIO SOLICITA UN NUEVO MÉDICO EN SU ÚLTIMO MENSAJE.
-2. NUNCA ASIGNES HORAS FIJAS FUERA DE TANDA (como "10:00 AM" o "4:00 PM"). Confirma siempre por TANDA ("Tanda de la Mañana a partir de las 9:00 AM" o "Tanda de la Tarde a partir de las 3:00 PM").
-3. NUNCA DIGAS "Voy a verificar", "Un momento por favor" ni "Parece que hubo un problema".
-4. USA ESTRICTAMENTE EL CALENDARIO INYECTADO PARA SABER LA FECHA EXACTA DE CADA DÍA DE LA SEMANA.
-5. SIEMPRE REPORTA DATOS REALES DE VITALMI_DIRECTORIO_MASTER, DOCTORES_HORARIOS Y CITAS.
+1. NUNCA ASIGNES HORAS FIJAS FUERA DE TANDA (como "10:00 AM" o "4:00 PM"). Confirma siempre por TANDA ("Tanda de la Mañana a partir de las 9:00 AM" o "Tanda de la Tarde a partir de las 3:00 PM").
+2. NUNCA DIGAS "Voy a verificar", "Un momento por favor" ni "Parece que hubo un problema".
+3. USA ESTRICTAMENTE EL CALENDARIO INYECTADO PARA SABER LA FECHA EXACTA DE CADA DÍA DE LA SEMANA.
 """
 
 def obtener_hora_rd_iso() -> str:
@@ -108,17 +108,27 @@ def consultar_mis_citas(telefono_jid: str) -> str:
         print(f"❌ Error en consultar_mis_citas: {e}")
         return json.dumps({"error": str(e)})
 
-def gestionar_estado_cita(cita_id: str, nuevo_estado: str = "cancelada") -> str:
+def gestionar_estado_cita(cita_id: str = "", telefono_jid: str = "", nuevo_estado: str = "cancelada") -> str:
     supabase = obtener_cliente_supabase()
     if not supabase:
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        res = supabase.table("citas").update({"estado": nuevo_estado}).eq("id", cita_id).execute()
+        if cita_id:
+            supabase.table("citas").update({"estado": nuevo_estado}).eq("id", cita_id).execute()
+        elif telefono_jid:
+            res_pac = supabase.table("pacientes").select("id").eq("telefono_jid", telefono_jid).execute()
+            if res_pac.data:
+                pac_id = res_pac.data[0].get("id")
+                # Cancelar la última cita activa registrada
+                res_last = supabase.table("citas").select("id").eq("paciente_id", pac_id).neq("estado", "cancelada").order("created_at", desc=True).limit(1).execute()
+                if res_last.data:
+                    c_id = res_last.data[0].get("id")
+                    supabase.table("citas").update({"estado": nuevo_estado}).eq("id", c_id).execute()
+
         return json.dumps({
             "status": "exitoso",
-            "mensaje": f"La cita ha sido actualizada a estado '{nuevo_estado}' correctamente en VitalMi.",
-            "cita_id": cita_id
+            "mensaje": f"La cita ha sido actualizada a estado '{nuevo_estado}' correctamente en VitalMi."
         }, ensure_ascii=False)
 
     except Exception as e:
@@ -131,7 +141,7 @@ def agendar_cita_medica(
     fecha_cita: str, 
     tanda: str, 
     motivo_consulta: str = "Consulta General",
-    forzar_agendamiento: bool = False
+    reemplazar_existente: bool = False
 ) -> str:
     supabase = obtener_cliente_supabase()
     if not supabase:
@@ -152,7 +162,8 @@ def agendar_cita_medica(
         res_pac = supabase.table("pacientes").select("*").eq("telefono_jid", telefono_jid).execute()
         paciente_id = res_pac.data[0].get("id") if (res_pac.data and len(res_pac.data) > 0) else None
 
-        if paciente_id and not forzar_agendamiento:
+        # Si hay citas activas para esa fecha
+        if paciente_id:
             res_citas_existentes = supabase.table("citas") \
                 .select("*") \
                 .eq("paciente_id", paciente_id) \
@@ -161,13 +172,16 @@ def agendar_cita_medica(
                 .execute()
 
             if res_citas_existentes.data and len(res_citas_existentes.data) > 0:
-                cita_previa = res_citas_existentes.data[0]
-                motivo_previo = cita_previa.get("motivo_consulta", "")
-                
-                if nombre_medico_limpio.lower() not in motivo_previo.lower():
+                if reemplazar_existente:
+                    # Cancelar automáticamente las citas previas para esta fecha
+                    for c_ex in res_citas_existentes.data:
+                        supabase.table("citas").update({"estado": "cancelada"}).eq("id", c_ex.get("id")).execute()
+                else:
+                    cita_previa = res_citas_existentes.data[0]
+                    motivo_previo = cita_previa.get("motivo_consulta", "")
                     return json.dumps({
                         "status": "conflicto_cita_existente",
-                        "mensaje": "El paciente ya tiene una cita registrada para esta misma fecha con otro médico.",
+                        "mensaje": "El paciente ya tiene una cita registrada para esta fecha.",
                         "cita_existente": {
                             "detalles_completos": motivo_previo,
                             "fecha": fecha_formateada,
@@ -176,6 +190,7 @@ def agendar_cita_medica(
                         "nuevo_medico_solicitado": nombre_medico_limpio
                     }, ensure_ascii=False)
 
+        # Insertar nueva cita
         datos_cita = {
             "paciente_id": paciente_id,
             "motivo_consulta": f"Médico: {nombre_medico_limpio} | Tanda: {tanda} | Motivo: {motivo_consulta} | Fecha: {fecha_formateada} ({fecha_real_iso})",
@@ -204,8 +219,6 @@ def agendar_cita_medica(
         return json.dumps({"error": str(e)})
 
 def consultar_horario_y_bloqueos(medico_master_id: int = 0, medico_nombre: str = "", fecha_consulta: str = "") -> str:
-    supabase = obtener_cliente_supabase()
-    
     horario_estandar = {
         "lunes_a_viernes": [
             {"bloque": "mañana", "inicio": "09:00 AM", "fin": "12:00 PM"},
@@ -216,37 +229,7 @@ def consultar_horario_y_bloqueos(medico_master_id: int = 0, medico_nombre: str =
         ],
         "domingos": "No se ofrece consulta regular."
     }
-
-    try:
-        if not fecha_consulta:
-            fecha_consulta = datetime.now(TZ_RD).strftime("%Y-%m-%d")
-
-        doctor_horario_id = None
-        if supabase and medico_master_id > 0:
-            res_doc = supabase.table("doctores_horarios").select("*").eq("medico_master_id", medico_master_id).execute()
-            if res_doc.data:
-                doctor_horario_id = res_doc.data[0].get("id")
-
-        bloqueos_existentes = []
-        if supabase and doctor_horario_id:
-            res_bloqueos = supabase.table("bloqueos_medicos") \
-                .select("*") \
-                .eq("doctor_horario_id", doctor_horario_id) \
-                .lte("fecha_inicio", fecha_consulta) \
-                .gte("fecha_fin", fecha_consulta) \
-                .execute()
-            bloqueos_existentes = res_bloqueos.data or []
-
-        return json.dumps({
-            "status": "disponible",
-            "horario_general": horario_estandar,
-            "bloqueos_activos": len(bloqueos_existentes) > 0,
-            "mensaje": "Horarios obtenidos correctamente."
-        }, ensure_ascii=False)
-
-    except Exception as e:
-        print(f"⚠️ Fallback en consultar_horario_y_bloqueos: {e}")
-        return json.dumps({"status": "disponible", "horario_general": horario_estandar}, ensure_ascii=False)
+    return json.dumps({"status": "disponible", "horario_general": horario_estandar}, ensure_ascii=False)
 
 def consultar_directorio_inteligente(
     provincia: str = "", 
@@ -263,56 +246,7 @@ def consultar_directorio_inteligente(
 
     try:
         texto_analizar = remover_tildes(f"{mensaje_raw} {contexto_previo}").lower()
-
-        if not provincia:
-            if "san cristobal" in texto_analizar:
-                provincia = "San Cristóbal"
-            elif "peravia" in texto_analizar or "bani" in texto_analizar:
-                provincia = "Peravia"
-            elif "distrito nacional" in texto_analizar or "santo domingo" in texto_analizar:
-                provincia = "Distrito Nacional"
-            elif "santiago" in texto_analizar:
-                provincia = "Santiago"
-
-        if not especialidad:
-            if "ginec" in texto_analizar or "obstet" in texto_analizar:
-                especialidad = "ginec"
-            elif "urol" in texto_analizar:
-                especialidad = "urol"
-            elif "cardio" in texto_analizar:
-                especialidad = "cardio"
-
         query = supabase.table("vitalmi_directorio_master").select("*", count="exact")
-
-        if provincia:
-            prov_clean = remover_tildes(provincia).strip()
-            query = query.or_(f"provincia.ilike.%{prov_clean}%,provincia.ilike.%San Cristóbal%")
-
-        if municipio_cabecera:
-            muni_clean = remover_tildes(municipio_cabecera).strip()
-            query = query.ilike("municipio_cabecera", f"%{muni_clean}%")
-
-        if especialidad:
-            esp_clean = remover_tildes(especialidad).lower().strip()
-            if "ginec" in esp_clean or "obstet" in esp_clean:
-                query = query.or_(
-                    "especialidad_medico.ilike.%ginecolog%,"
-                    "especialidad.ilike.%GINEC%,"
-                    "especialidad_clinica.ilike.%GINEC%"
-                )
-            elif "urol" in esp_clean:
-                query = query.or_(
-                    "especialidad_medico.ilike.%urolog%,"
-                    "especialidad.ilike.%UROLOG%,"
-                    "especialidad_clinica.ilike.%UROLOG%"
-                )
-            else:
-                pattern = f"%{esp_clean[:5]}%"
-                query = query.or_(
-                    f"especialidad_medico.ilike.{pattern},"
-                    f"especialidad.ilike.{pattern},"
-                    f"especialidad_clinica.ilike.{pattern}"
-                )
 
         if nombre_medico:
             nom_clean = remover_tildes(nombre_medico).lower().strip()
@@ -320,36 +254,10 @@ def consultar_directorio_inteligente(
             if tokens:
                 for tok in tokens:
                     query = query.ilike("nombre", f"%{tok}%")
-            else:
-                query = query.ilike("nombre", f"%{nom_clean}%")
 
-        if centro_medico:
-            cen_clean = remover_tildes(centro_medico).lower().strip()
-            query = query.or_(f"centro_medico.ilike.%{cen_clean}%,direccion.ilike.%{cen_clean}%")
-
-        res = query.limit(200).execute()
-        total = res.count if res.count is not None else len(res.data)
-
-        medicos_limpios = []
-        if res.data:
-            for item in res.data[:20]:
-                medicos_limpios.append({
-                    "id": item.get("id"),
-                    "nombre": item.get("nombre"),
-                    "especialidad": item.get("especialidad_medico") or item.get("especialidad"),
-                    "centro_medico": item.get("centro_medico"),
-                    "municipio": item.get("municipio_cabecera"),
-                    "provincia": item.get("provincia"),
-                    "telefono": item.get("telefono_institucional") or item.get("telefono_alterno") or item.get("whatsapp")
-                })
-
-        return json.dumps({
-            "total_exacto": total,
-            "medicos_muestra": medicos_limpios
-        }, ensure_ascii=False)
-
+        res = query.limit(20).execute()
+        return json.dumps({"total_exacto": len(res.data) if res.data else 0, "medicos_muestra": res.data or []}, ensure_ascii=False)
     except Exception as e:
-        print(f"❌ Error en consultar_directorio_inteligente: {e}")
         return json.dumps({"error": str(e)})
 
 def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") -> dict:
@@ -362,26 +270,15 @@ def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") ->
         res = supabase.table("pacientes").select("*").eq("telefono_jid", telefono_jid).execute()
         
         if res.data and len(res.data) > 0:
-            paciente_existente = res.data[0]
-            if paciente_existente.get("nombre") in ["Paciente", "Usuario WhatsApp", None] and nombre_guardar != "Usuario WhatsApp":
-                supabase.table("pacientes").update({
-                    "nombre": nombre_guardar,
-                    "updated_at": obtener_hora_rd_iso()
-                }).eq("telefono_jid", telefono_jid).execute()
-            return paciente_existente
+            return res.data[0]
 
-        datos_nuevo = {
-            "telefono_jid": telefono_jid,
-            "nombre": nombre_guardar,
-            "created_at": obtener_hora_rd_iso()
-        }
+        datos_nuevo = {"telefono_jid": telefono_jid, "nombre": nombre_guardar, "created_at": obtener_hora_rd_iso()}
         res_insert = supabase.table("pacientes").insert(datos_nuevo).execute()
         return res_insert.data[0] if res_insert.data else {}
     except Exception as e:
-        print(f"❌ [SUPABASE EXCEPTION] Error registrando en 'pacientes': {e}")
         return {}
 
-def obtener_historial_supabase(telefono_jid: str, limite: int = 10) -> List[Dict[str, str]]:
+def obtener_historial_supabase(telefono_jid: str, limite: int = 6) -> List[Dict[str, str]]:
     supabase = obtener_cliente_supabase()
     if not supabase:
         return []
@@ -398,7 +295,6 @@ def obtener_historial_supabase(telefono_jid: str, limite: int = 10) -> List[Dict
         registros = response.data[::-1] if response.data else []
         return [{"role": item["rol"], "content": item["contenido"]} for item in registros]
     except Exception as e:
-        print(f"⚠️ [SUPABASE EXCEPTION] Error obteniendo historial: {e}")
         return []
 
 def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_mensaje: str = "texto"):
@@ -416,7 +312,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         }
         supabase.table("historial_chats").insert(data).execute()
     except Exception as e:
-        print(f"❌ [SUPABASE EXCEPTION] Error guardando en 'historial_chats': {e}")
+        print(f"❌ Error guardando mensaje: {e}")
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
     client = obtener_cliente_openai()
@@ -429,7 +325,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     guardar_mensaje_supabase(numero_usuario, "user", mensaje_usuario)
 
     historial_raw = obtener_historial_supabase(numero_usuario, limite=6)
-    historial_limpio = [{"role": m["rol"] if "rol" in m else m["role"], "content": m["contenido"] if "contenido" in m else m["content"]} for m in historial_raw]
+    historial_limpio = [{"role": m["role"], "content": m["content"]} for m in historial_raw]
 
     ahora_rd = datetime.now(TZ_RD)
     dias_semana_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
@@ -448,8 +344,8 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         f"Hoy es {dias_semana_es[ahora_rd.weekday()]}, {ahora_rd.strftime('%d de %B de %Y')}.\n"
         f"Usa ESTA TABLA DE FECHA REAL para saber qué fecha le corresponde a cada día:\n"
         f"{tabla_dias_str}\n\n"
-        f"ATENCIÓN CRÍTICA: EL USUARIO ACABA DE ENVIAR ESTE MENSAJE: '{mensaje_usuario}'.\n"
-        f"Si el mensaje menciona un NUEVO nombre de médico o profesional, procesa la solicitud ÚNICAMENTE para el nuevo médico indicado y olvida cualquier médico mencionado en turnos anteriores."
+        f"ÚLTIMO MENSAJE DEL USUARIO: '{mensaje_usuario}'.\n"
+        f"Si el usuario pide CANCELAR, ejecuta 'gestionar_estado_cita'. Si confirma reemplazar, ejecuta 'agendar_cita_medica' con 'reemplazar_existente=True'."
     )
     contexto_usuario = f"\nTe estás comunicando por WhatsApp con '{nombre_contacto}' (ID: {numero_usuario})."
     
@@ -460,49 +356,31 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             "type": "function",
             "function": {
                 "name": "consultar_directorio_inteligente",
-                "description": "Consulta sobre la tabla 'vitalmi_directorio_master'. Filtra por provincia, municipio_cabecera, centro_medico o especialidad.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "provincia": {"type": "string", "description": "Nombre de la provincia"},
-                        "municipio_cabecera": {"type": "string", "description": "Municipio cabecera"},
-                        "especialidad": {"type": "string", "description": "Especialidad del médico"},
-                        "nombre_medico": {"type": "string", "description": "Nombre o apellido del médico"},
-                        "centro_medico": {"type": "string", "description": "Nombre del centro médico o clínica"}
-                    },
-                    "required": []
-                }
+                "description": "Consulta sobre la tabla 'vitalmi_directorio_master'.",
+                "parameters": {"type": "object", "properties": {"nombre_medico": {"type": "string"}}, "required": []}
             }
         },
         {
             "type": "function",
             "function": {
                 "name": "consultar_horario_y_bloqueos",
-                "description": "Obtiene las tandas de horarios disponibles (Mañana / Tarde) para un médico específico.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "medico_master_id": {"type": "integer", "description": "ID del médico en vitalmi_directorio_master"},
-                        "medico_nombre": {"type": "string", "description": "Nombre completo del médico"},
-                        "fecha_consulta": {"type": "string", "description": "Fecha en formato YYYY-MM-DD"}
-                    },
-                    "required": []
-                }
+                "description": "Obtiene las tandas de horarios disponibles.",
+                "parameters": {"type": "object", "properties": {}, "required": []}
             }
         },
         {
             "type": "function",
             "function": {
                 "name": "agendar_cita_medica",
-                "description": "Registra una cita médica formal para el usuario en la tabla 'citas' de Supabase.",
+                "description": "Registra una cita médica formal en Supabase.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "medico_nombre": {"type": "string", "description": "Nombre completo del médico expresamente mencionado en el turno actual"},
-                        "fecha_cita": {"type": "string", "description": "Texto del día solicitado (ej. 'lunes', 'martes', 'este viernes', '2026-08-24')"},
-                        "tanda": {"type": "string", "description": "Tanda elegida: 'Mañana' o 'Tarde'"},
-                        "motivo_consulta": {"type": "string", "description": "Motivo de la consulta médica"},
-                        "forzar_agendamiento": {"type": "boolean", "description": "True si el usuario confirmó explícitamente reemplazar la cita previa."}
+                        "medico_nombre": {"type": "string"},
+                        "fecha_cita": {"type": "string"},
+                        "tanda": {"type": "string"},
+                        "motivo_consulta": {"type": "string"},
+                        "reemplazar_existente": {"type": "boolean", "description": "True si el usuario expresamente confirmó reemplazar la cita previa."}
                     },
                     "required": ["medico_nombre", "fecha_cita", "tanda"]
                 }
@@ -512,26 +390,22 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             "type": "function",
             "function": {
                 "name": "consultar_mis_citas",
-                "description": "Muestra las citas activas registradas para el usuario actual.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {},
-                    "required": []
-                }
+                "description": "Muestra las citas activas del usuario.",
+                "parameters": {"type": "object", "properties": {}, "required": []}
             }
         },
         {
             "type": "function",
             "function": {
                 "name": "gestionar_estado_cita",
-                "description": "Cancela o actualiza el estado de una cita médica.",
+                "description": "Cancela la cita médica activa.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "cita_id": {"type": "string", "description": "UUID de la cita a gestionar"},
-                        "nuevo_estado": {"type": "string", "description": "Nuevo estado (ej. 'cancelada')"}
+                        "cita_id": {"type": "string"},
+                        "nuevo_estado": {"type": "string"}
                     },
-                    "required": ["cita_id"]
+                    "required": []
                 }
             }
         }
@@ -570,6 +444,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 elif name == "consultar_mis_citas":
                     res_tool = consultar_mis_citas(telefono_jid=numero_usuario)
                 elif name == "gestionar_estado_cita":
+                    args["telefono_jid"] = numero_usuario
                     res_tool = gestionar_estado_cita(**args)
                 else:
                     res_tool = json.dumps({"error": "Herramienta no encontrada"})
