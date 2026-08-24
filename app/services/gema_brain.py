@@ -1,7 +1,7 @@
 import os
 import re
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import zoneinfo
 from pathlib import Path
 from typing import Dict, List
@@ -33,13 +33,14 @@ Tu objetivo es entregar información exacta del directorio ('consultar_directori
 
 ### 🎭 PERSONALIDAD Y FORMATO:
 - Calidez caribeña/dominicana profesional, amable, fluida y precisa.
-- Cuando pregunten por el horario de un médico, invoca 'consultar_horario_y_bloqueos' e informa siempre las tandas estándar (Mañana a las 9:00 AM y Tarde a las 3:00 PM / Sábados en la mañana).
-- Si el usuario desea agendar, registra la cita directamente sin enviar mensajes de espera intermedios.
+- Cuando pregunten por el horario de un médico, invoca 'consultar_horario_y_bloqueos' e informa siempre las tandas estándar (Tanda de la Mañana a partir de las 9:00 AM / Tanda de la Tarde a partir de las 3:00 PM).
+- Si el usuario desea agendar, confirma la fecha utilizando el calendario exacto inyectado y especifica la tanda correspondiente.
 
 ### 🚫 REGLAS DE ORO:
-1. NUNCA DIGAS "Voy a verificar", "Un momento por favor" ni "Parece que hubo un problema".
-2. SIEMPRE CALCULA FECHAS A PARTIR DE LA FECHA Y AÑO ACTUAL EN CURSO INYECTADO.
-3. SIEMPRE REPORTA DATOS REALES DE VITALMI_DIRECTORIO_MASTER, DOCTORES_HORARIOS Y CITAS.
+1. NUNCA ASIGNES HORAS FIJAS FUERA DE TANDA (como "10:00 AM" o "4:00 PM"). Confirma siempre por TANDA ("Tanda de la Mañana a partir de las 9:00 AM" o "Tanda de la Tarde a partir de las 3:00 PM").
+2. NUNCA DIGAS "Voy a verificar", "Un momento por favor" ni "Parece que hubo un problema".
+3. USA ESTRICTAMENTE EL CALENDARIO INYECTADO PARA SABER LA FECHA EXACTA DE CADA DÍA DE LA SEMANA.
+4. SIEMPRE REPORTA DATOS REALES DE VITALMI_DIRECTORIO_MASTER, DOCTORES_HORARIOS Y CITAS.
 """
 
 def obtener_hora_rd_iso() -> str:
@@ -55,6 +56,32 @@ def remover_tildes(texto: str) -> str:
     for a, b in replacements:
         texto = texto.replace(a, b)
     return texto.strip()
+
+def resolver_fecha_relativa(texto_fecha: str) -> str:
+    """
+    Convierte referencias como 'martes', 'este viernes' o '25 de agosto'
+    a formato YYYY-MM-DD usando la fecha real actual de RD.
+    """
+    ahora_rd = datetime.now(TZ_RD)
+    texto_clean = remover_tildes(texto_fecha).lower().strip()
+
+    dias_semana_map = {
+        "lunes": 0, "martes": 1, "miercoles": 2, "jueves": 3,
+        "viernes": 4, "sabado": 5, "domingo": 6
+    }
+
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", texto_clean):
+        return texto_clean
+
+    for nombre_dia, idx_target in dias_semana_map.items():
+        if nombre_dia in texto_clean:
+            dias_diferencia = (idx_target - ahora_rd.weekday()) % 7
+            if dias_diferencia == 0 and ("proximo" in texto_clean or "que viene" in texto_clean):
+                dias_diferencia = 7
+            fecha_calculada = ahora_rd + timedelta(days=dias_diferencia)
+            return fecha_calculada.strftime("%Y-%m-%d")
+
+    return ahora_rd.strftime("%Y-%m-%d")
 
 def consultar_mis_citas(telefono_jid: str) -> str:
     supabase = obtener_cliente_supabase()
@@ -112,12 +139,23 @@ def agendar_cita_medica(
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
+        # Resolucion matemática estricta de fecha con Python
+        fecha_real_iso = resolver_fecha_relativa(fecha_cita)
+        
+        fecha_dt = datetime.strptime(fecha_real_iso, "%Y-%m-%d")
+        dias_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+        meses_es = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+        
+        nombre_dia = dias_es[fecha_dt.weekday()]
+        nombre_mes = meses_es[fecha_dt.month - 1]
+        fecha_formateada = f"{nombre_dia} {fecha_dt.day} de {nombre_mes} de {fecha_dt.year}"
+
         res_pac = supabase.table("pacientes").select("*").eq("telefono_jid", telefono_jid).execute()
         paciente_id = res_pac.data[0].get("id") if (res_pac.data and len(res_pac.data) > 0) else None
 
         datos_cita = {
             "paciente_id": paciente_id,
-            "motivo_consulta": f"Médico: {medico_nombre} | Tanda: {tanda} | Motivo: {motivo_consulta} | Fecha: {fecha_cita}",
+            "motivo_consulta": f"Médico: {medico_nombre} | Tanda: {tanda} | Motivo: {motivo_consulta} | Fecha: {fecha_formateada} ({fecha_real_iso})",
             "estado": "solicitada",
             "created_at": obtener_hora_rd_iso()
         }
@@ -127,11 +165,12 @@ def agendar_cita_medica(
 
         return json.dumps({
             "status": "exitoso",
-            "mensaje": "Cita registrada correctamente en el sistema de VitalMi.",
+            "mensaje": f"Cita registrada exitosamente para el {fecha_formateada}.",
             "cita_id": cita_creada.get("id"),
             "detalles": {
                 "medico": medico_nombre,
-                "fecha": fecha_cita,
+                "fecha_confirmada": fecha_formateada,
+                "fecha_iso": fecha_real_iso,
                 "tanda": tanda,
                 "estado": "solicitada"
             }
@@ -142,12 +181,8 @@ def agendar_cita_medica(
         return json.dumps({"error": str(e)})
 
 def consultar_horario_y_bloqueos(medico_master_id: int = 0, medico_nombre: str = "", fecha_consulta: str = "") -> str:
-    """
-    Retorna siempre las tandas estándar con fallback garantizado para evitar errores.
-    """
     supabase = obtener_cliente_supabase()
     
-    # Horario Base por defecto de República Dominicana
     horario_estandar = {
         "lunes_a_viernes": [
             {"bloque": "mañana", "inicio": "09:00 AM", "fin": "12:00 PM"},
@@ -373,17 +408,25 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     historial = obtener_historial_supabase(numero_usuario, limite=10)
     contexto_previo_str = " ".join([m["content"] for m in historial if m["role"] == "user"])
 
+    # Generación de calendario exacto de los próximos 7 días
     ahora_rd = datetime.now(TZ_RD)
-    anio_actual = ahora_rd.year
-    dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-    nombre_dia_actual = dias_semana[ahora_rd.weekday()]
+    dias_semana_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
     
+    proximos_dias = []
+    for i in range(7):
+        dia_futuro = ahora_rd + timedelta(days=i)
+        nombre_d = dias_semana_es[dia_futuro.weekday()]
+        fecha_f = dia_futuro.strftime("%d de %B de %Y")
+        proximos_dias.append(f"- {nombre_d}: {fecha_f}")
+    
+    tabla_dias_str = "\n".join(proximos_dias)
+
     contexto_temporal = (
-        f"\n\n### ⏰ ANCLA TEMPORAL DINÁMICA:\n"
-        f"Hoy es {nombre_dia_actual}, {ahora_rd.strftime('%d de %B de %Y')}. "
-        f"El año actual en curso es {anio_actual}. "
-        f"Todas las citas deben calcularse a partir de esta fecha hacia el futuro. "
-        f"NUNCA agendes ni menciones años anteriores a {anio_actual}."
+        f"\n\n### ⏰ ANCLA TEMPORAL Y CALENDARIO EXACTO DE HOY:\n"
+        f"Hoy es {dias_semana_es[ahora_rd.weekday()]}, {ahora_rd.strftime('%d de %B de %Y')}.\n"
+        f"Usa ESTA TABLA DE FECHA REAL para saber exactamente qué fecha le corresponde a cada día cuando el usuario te diga 'este lunes', 'el martes', etc.:\n"
+        f"{tabla_dias_str}\n\n"
+        f"REGLA DE ORO DE HORARIOS: Las consultas se gestionan exclusivamente por TANDAS (Tanda de la Mañana: 9:00 AM / Tanda de la Tarde: 3:00 PM). NUNCA asignes horas exactas inventadas como 10:00 AM o 4:00 PM."
     )
     contexto_usuario = f"\nTe estás comunicando por WhatsApp con '{nombre_contacto}' (ID: {numero_usuario})."
     
@@ -433,7 +476,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                     "type": "object",
                     "properties": {
                         "medico_nombre": {"type": "string", "description": "Nombre completo del médico"},
-                        "fecha_cita": {"type": "string", "description": "Fecha solicitada para la cita"},
+                        "fecha_cita": {"type": "string", "description": "Texto del día solicitado (ej. 'martes', 'este viernes', '2026-08-25')"},
                         "tanda": {"type": "string", "description": "Tanda elegida: 'Mañana' o 'Tarde'"},
                         "motivo_consulta": {"type": "string", "description": "Motivo de la consulta médica"}
                     },
