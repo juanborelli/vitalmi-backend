@@ -31,10 +31,11 @@ SYSTEM_PROMPT_FASE_1 = """
 Eres Gema, la asistente virtual médica de VitalMi en República Dominicana.
 Tu objetivo es entregar información exacta del directorio ('consultar_directorio_inteligente'), gestionar disponibilidades por TANDAS ('consultar_horario_y_bloqueos'), AGENDAR CITAS ('agendar_cita_medica') y PERMITIR CONSULTAR O CANCELAR CITAS REGISTRADAS ('consultar_mis_citas', 'gestionar_estado_cita').
 
-### 🎭 PERSONALIDAD Y FORMATO:
+### 🎭 PERSONALIDAD Y MANEJO DE CONFLICTOS DE AGENDA:
 - Calidez caribeña/dominicana profesional, amable, fluida y precisa.
 - Cuando pregunten por el horario de un médico, invoca 'consultar_horario_y_bloqueos' e informa siempre las tandas estándar (Tanda de la Mañana a partir de las 9:00 AM / Tanda de la Tarde a partir de las 3:00 PM).
-- Si el usuario desea agendar, confirma la fecha utilizando el calendario exacto inyectado y especifica la tanda correspondiente.
+- Si 'agendar_cita_medica' devuelve 'conflicto_cita_existente', infórmale con amabilidad al usuario que ya tiene una cita agendada para esa misma fecha con el médico anterior.
+- Pregúntale educadamente: "¿Deseas cancelar la cita previa con el [Médico Anterior] para agendar con el/la [Nuevo Médico], o esta cita es para otra persona?"
 
 ### 🚫 REGLAS DE ORO:
 1. NUNCA ASIGNES HORAS FIJAS FUERA DE TANDA (como "10:00 AM" o "4:00 PM"). Confirma siempre por TANDA ("Tanda de la Mañana a partir de las 9:00 AM" o "Tanda de la Tarde a partir de las 3:00 PM").
@@ -133,13 +134,15 @@ def agendar_cita_medica(
     medico_nombre: str, 
     fecha_cita: str, 
     tanda: str, 
-    motivo_consulta: str = "Consulta General"
+    motivo_consulta: str = "Consulta General",
+    forzar_agendamiento: bool = False
 ) -> str:
     supabase = obtener_cliente_supabase()
     if not supabase:
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
+        nombre_medico_limpio = medico_nombre.strip() if medico_nombre else "Médico General"
         fecha_real_iso = resolver_fecha_relativa(fecha_cita)
         
         fecha_dt = datetime.strptime(fecha_real_iso, "%Y-%m-%d")
@@ -150,12 +153,40 @@ def agendar_cita_medica(
         nombre_mes = meses_es[fecha_dt.month - 1]
         fecha_formateada = f"{nombre_dia} {fecha_dt.day} de {nombre_mes} de {fecha_dt.year}"
 
+        # 1. Obtener ID del paciente
         res_pac = supabase.table("pacientes").select("*").eq("telefono_jid", telefono_jid).execute()
         paciente_id = res_pac.data[0].get("id") if (res_pac.data and len(res_pac.data) > 0) else None
 
+        # 2. Verificar si el paciente YA TIENE una cita activa para esa misma fecha
+        if paciente_id and not forzar_agendamiento:
+            res_citas_existentes = supabase.table("citas") \
+                .select("*") \
+                .eq("paciente_id", paciente_id) \
+                .neq("estado", "cancelada") \
+                .ilike("motivo_consulta", f"%{fecha_real_iso}%") \
+                .execute()
+
+            if res_citas_existentes.data and len(res_citas_existentes.data) > 0:
+                cita_previa = res_citas_existentes.data[0]
+                motivo_previo = cita_previa.get("motivo_consulta", "")
+                
+                # Si la cita previa es con un médico diferente, reportamos el conflicto
+                if nombre_medico_limpio.lower() not in motivo_previo.lower():
+                    return json.dumps({
+                        "status": "conflicto_cita_existente",
+                        "mensaje": "El paciente ya tiene una cita registrada para esta misma fecha con otro médico.",
+                        "cita_existente": {
+                            "detalles_completos": motivo_previo,
+                            "fecha": fecha_formateada,
+                            "cita_id": cita_previa.get("id")
+                        },
+                        "nuevo_medico_solicitado": nombre_medico_limpio
+                    }, ensure_ascii=False)
+
+        # 3. Registrar la nueva cita en Supabase
         datos_cita = {
             "paciente_id": paciente_id,
-            "motivo_consulta": f"Médico: {medico_nombre} | Tanda: {tanda} | Motivo: {motivo_consulta} | Fecha: {fecha_formateada} ({fecha_real_iso})",
+            "motivo_consulta": f"Médico: {nombre_medico_limpio} | Tanda: {tanda} | Motivo: {motivo_consulta} | Fecha: {fecha_formateada} ({fecha_real_iso})",
             "estado": "solicitada",
             "created_at": obtener_hora_rd_iso()
         }
@@ -165,10 +196,10 @@ def agendar_cita_medica(
 
         return json.dumps({
             "status": "exitoso",
-            "mensaje": f"Cita registrada exitosamente para el {fecha_formateada}.",
+            "mensaje": f"Cita registrada exitosamente con {nombre_medico_limpio} para el {fecha_formateada}.",
             "cita_id": cita_creada.get("id"),
             "detalles": {
-                "medico": medico_nombre,
+                "medico": nombre_medico_limpio,
                 "fecha_confirmada": fecha_formateada,
                 "fecha_iso": fecha_real_iso,
                 "tanda": tanda,
@@ -477,7 +508,8 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                         "medico_nombre": {"type": "string", "description": "Nombre completo del médico"},
                         "fecha_cita": {"type": "string", "description": "Texto del día solicitado (ej. 'martes', 'este viernes', '2026-08-25')"},
                         "tanda": {"type": "string", "description": "Tanda elegida: 'Mañana' o 'Tarde'"},
-                        "motivo_consulta": {"type": "string", "description": "Motivo de la consulta médica"}
+                        "motivo_consulta": {"type": "string", "description": "Motivo de la consulta médica"},
+                        "forzar_agendamiento": {"type": "boolean", "description": "True si el usuario expresamente confirmó reemplazar o agendar a pesar de existir una cita previa."}
                     },
                     "required": ["medico_nombre", "fecha_cita", "tanda"]
                 }
