@@ -32,33 +32,13 @@ Eres Gema, la asistente virtual médica de VitalMi en República Dominicana.
 Tu objetivo es entregar información exacta del directorio ('consultar_directorio_inteligente'), gestionar disponibilidades por TANDAS ('consultar_horario_y_bloqueos'), AGENDAR CITAS ('agendar_cita_medica') y PERMITIR CONSULTAR O CANCELAR CITAS REGISTRADAS ('consultar_mis_citas', 'gestionar_estado_cita').
 
 ### 🎭 RECOLECCIÓN DE DATOS DEL PACIENTE:
-1. PREGUNTA SI LA CITA ES PARA EL USUARIO QUE ESCRIBE O PARA OTRA PERSONA.
-   - Si es para un TERCERO: Solicita el Nombre Completo del paciente, su número de WhatsApp/Teléfono de contacto, Cédula y ARS.
-   - Si es para el MISMO USUARIO: Revisa si ya tienes registrada su Cédula y ARS; si no, solicítalas.
-2. La ARS puede indicarse como "Privado", "Sin Seguro" o el nombre de la aseguradora (ej. Humano, Senasa, Palic, etc.).
+1. Si el usuario desea agendar una cita:
+   - Determina si la cita es para él o para otra persona.
+   - Si falta la CÉDULA o la ARS (Seguro Médico), solicítalas antes de agendar. Si no tiene seguro, puede indicarse "Privado" o "Sin Seguro".
+   - Si es para otra persona, solicita Nombre Completo, Teléfono/WhatsApp de contacto, Cédula y ARS.
 
-### 🎭 FORMATO OBLIGATORIO AL CONFIRMAR SOLICITUD DE CITA:
-Estructura siempre la confirmación final con los datos del paciente y del doctor:
-
-"📋 **SOLICITUD DE CITA REGISTRADA**
-
-👤 **DATOS DEL PACIENTE:**
-• **Nombre Completo:** [Nombre Paciente]
-• **Cédula:** [Cédula]
-• **WhatsApp Paciente:** [Teléfono del Paciente]
-• **ARS:** [ARS / Seguro Médico]
-
-👨‍⚕️ **DATOS DEL DOCTOR:**
-• **Doctor:** [Nombre del Doctor]
-• **Centro Médico:** [Centro Médico]
-• **WhatsApp Doctor/Centro:** [Teléfono Doctor]
-
-📅 **DETALLES DE LA CITA:**
-• **Fecha:** [Fecha Formateada]
-• **Tanda:** [Tanda de la Mañana / Tanda de la Tarde]
-• **Estado:** ⏳ Pendiente de confirmación por el doctor.
-
-[Despedida cordial explicando que le llegará una notificación cuando el doctor confirme]"
+### 🎭 CONFIRMACIÓN DE CITA:
+Cuando llames a 'agendar_cita_medica', utiliza el campo 'mensaje_formateado_final' retornado por la herramienta para responder al usuario. NUNCA dejes corchetes ni placeholders como '[Nombre del Doctor]' sin sustituir.
 
 ### 🚫 REGLAS DE ORO:
 1. NUNCA ASIGNES HORAS FIJAS FUERA DE TANDA (como "10:00 AM" o "4:00 PM"). Confirma siempre por TANDA ("Tanda de la Mañana a partir de las 9:00 AM" o "Tanda de la Tarde a partir de las 3:00 PM").
@@ -189,23 +169,20 @@ def agendar_cita_medica(
         nombre_mes = meses_es[fecha_dt.month - 1]
         fecha_formateada = f"{nombre_dia} {fecha_dt.day} de {nombre_mes} de {fecha_dt.year}"
 
-        # Obtener solicitante
         res_pac = supabase.table("pacientes").select("*").eq("telefono_jid", telefono_jid).execute()
         solicitante = res_pac.data[0] if (res_pac.data and len(res_pac.data) > 0) else {}
         paciente_id = solicitante.get("id")
 
-        # Determinación de datos finales del Paciente (Titular o Tercero)
         if es_para_tercero and nombre_paciente_tercero.strip():
             paciente_nombre_final = nombre_paciente_tercero.strip()
-            paciente_whatsapp_final = telefono_paciente_tercero.strip() if telefono_paciente_tercero.strip() else telefono_jid.replace("@s.whatsapp.net", "")
+            paciente_whatsapp_final = telefono_paciente_tercero.strip() if telefono_paciente_tercero.strip() else telefono_jid.split("@")[0]
         else:
             paciente_nombre_final = solicitante.get("nombre") if solicitante.get("nombre") not in ["Trancrédito", "Usuario WhatsApp", "Paciente", None] else "Paciente Titular"
-            paciente_whatsapp_final = telefono_jid.replace("@s.whatsapp.net", "")
+            paciente_whatsapp_final = telefono_jid.split("@")[0]
 
         paciente_cedula_final = cedula_paciente.strip() if cedula_paciente.strip() else (solicitante.get("cedula") or "No registrada")
         paciente_ars_final = ars_paciente.strip() if ars_paciente.strip() else (solicitante.get("ars") or "Privado")
 
-        # Actualizar datos en Supabase si es el usuario principal
         if not es_para_tercero and paciente_id:
             actualizaciones = {}
             if cedula_paciente.strip():
@@ -215,7 +192,6 @@ def agendar_cita_medica(
             if actualizaciones:
                 supabase.table("pacientes").update(actualizaciones).eq("id", paciente_id).execute()
 
-        # Búsqueda de médico en directorio
         centro_medico = "Centro Médico Autorizado"
         telefono_doctor = "No disponible"
         res_doc = supabase.table("vitalmi_directorio_master").select("centro_medico, whatsapp, telefono_institucional").ilike("nombre", f"%{remover_tildes(nombre_medico_limpio)[:6]}%").limit(1).execute()
@@ -223,7 +199,6 @@ def agendar_cita_medica(
             centro_medico = res_doc.data[0].get("centro_medico") or centro_medico
             telefono_doctor = res_doc.data[0].get("whatsapp") or res_doc.data[0].get("telefono_institucional") or "No disponible"
 
-        # Registrar cita con estado 'pendiente_aprobacion'
         datos_cita = {
             "paciente_id": paciente_id,
             "motivo_consulta": f"Paciente: {paciente_nombre_final} | Tel: {paciente_whatsapp_final} | Cédula: {paciente_cedula_final} | Médico: {nombre_medico_limpio} | Centro: {centro_medico} | Tanda: {tanda} | ARS: {paciente_ars_final} | Fecha: {fecha_formateada} ({fecha_real_iso})",
@@ -234,30 +209,29 @@ def agendar_cita_medica(
         res_cita = supabase.table("citas").insert(datos_cita).execute()
         cita_creada = res_cita.data[0] if res_cita.data else {}
 
+        # Generar texto final listo sin placeholders
+        mensaje_final = (
+            "📋 *SOLICITUD DE CITA REGISTRADA*\n\n"
+            "👤 *DATOS DEL PACIENTE:*\n"
+            f"• *Nombre Completo:* {paciente_nombre_final}\n"
+            f"• *Cédula:* {paciente_cedula_final}\n"
+            f"• *WhatsApp Paciente:* {paciente_whatsapp_final}\n"
+            f"• *ARS:* {paciente_ars_final}\n\n"
+            "👨‍⚕️ *DATOS DEL DOCTOR:*\n"
+            f"• *Doctor:* {nombre_medico_limpio}\n"
+            f"• *Centro Médico:* {centro_medico}\n"
+            f"• *WhatsApp Doctor/Centro:* {telefono_doctor}\n\n"
+            "📅 *DETALLES DE LA CITA:*\n"
+            f"• *Fecha:* {fecha_formateada}\n"
+            f"• *Tanda:* {tanda}\n"
+            "• *Estado:* ⏳ Pendiente de confirmación por el doctor.\n\n"
+            "Recibirás una notificación cuando el doctor confirme la cita."
+        )
+
         return json.dumps({
             "status": "exitoso",
-            "mensaje": f"Solicitud de cita registrada con éxito con {nombre_medico_limpio} para el {fecha_formateada}.",
-            "cita_id": cita_creada.get("id"),
-            "detalles_notificacion": {
-                "paciente": {
-                    "nombre_completo": paciente_nombre_final,
-                    "cedula": paciente_cedula_final,
-                    "whatsapp": paciente_whatsapp_final,
-                    "ars": paciente_ars_final,
-                    "es_tercero": es_para_tercero
-                },
-                "doctor": {
-                    "nombre_completo": nombre_medico_limpio,
-                    "centro_medico": centro_medico,
-                    "whatsapp_doctor": telefono_doctor
-                },
-                "cita": {
-                    "cita_id": cita_creada.get("id"),
-                    "fecha_formateada": fecha_formateada,
-                    "tanda": tanda,
-                    "estado": "pendiente_aprobacion"
-                }
-            }
+            "mensaje_formateado_final": mensaje_final,
+            "cita_id": cita_creada.get("id")
         }, ensure_ascii=False)
 
     except Exception as e:
@@ -452,18 +426,18 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             "type": "function",
             "function": {
                 "name": "agendar_cita_medica",
-                "description": "Registra la solicitud de cita médica en Supabase capturando si es propia o de un tercero.",
+                "description": "Registra la solicitud de cita médica en Supabase capturando datos del paciente.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "medico_nombre": {"type": "string"},
                         "fecha_cita": {"type": "string"},
                         "tanda": {"type": "string"},
-                        "es_para_tercero": {"type": "boolean", "description": "True si el paciente es una persona distinta al usuario de WhatsApp"},
-                        "nombre_paciente_tercero": {"type": "string", "description": "Nombre completo del tercero si aplica"},
-                        "telefono_paciente_tercero": {"type": "string", "description": "Teléfono de contacto del tercero"},
-                        "cedula_paciente": {"type": "string", "description": "Número de cédula del paciente"},
-                        "ars_paciente": {"type": "string", "description": "Nombre de la ARS o Seguro Médica"},
+                        "es_para_tercero": {"type": "boolean"},
+                        "nombre_paciente_tercero": {"type": "string"},
+                        "telefono_paciente_tercero": {"type": "string"},
+                        "cedula_paciente": {"type": "string"},
+                        "ars_paciente": {"type": "string"},
                         "motivo_consulta": {"type": "string"}
                     },
                     "required": ["medico_nombre", "fecha_cita", "tanda"]
