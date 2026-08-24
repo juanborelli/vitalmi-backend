@@ -38,14 +38,14 @@ Tu objetivo es entregar información exacta del directorio ('consultar_directori
 - Pregúntale educadamente: "¿Deseas cancelar la cita previa con el [Médico Anterior] para agendar con el/la [Nuevo Médico], o esta cita es para otra persona?"
 
 ### 🚫 REGLAS DE ORO:
-1. NUNCA ASIGNES HORAS FIJAS FUERA DE TANDA (como "10:00 AM" o "4:00 PM"). Confirma siempre por TANDA ("Tanda de la Mañana a partir de las 9:00 AM" o "Tanda de la Tarde a partir de las 3:00 PM").
-2. NUNCA DIGAS "Voy a verificar", "Un momento por favor" ni "Parece que hubo un problema".
-3. USA ESTRICTAMENTE EL CALENDARIO INYECTADO PARA SABER LA FECHA EXACTA DE CADA DÍA DE LA SEMANA.
-4. SIEMPRE REPORTA DATOS REALES DE VITALMI_DIRECTORIO_MASTER, DOCTORES_HORARIOS Y CITAS.
+1. NUNCA REPITAS EL MÉDICO DE UN TURNO ANTERIOR SI EL USUARIO SOLICITA UN NUEVO MÉDICO EN SU ÚLTIMO MENSAJE.
+2. NUNCA ASIGNES HORAS FIJAS FUERA DE TANDA (como "10:00 AM" o "4:00 PM"). Confirma siempre por TANDA ("Tanda de la Mañana a partir de las 9:00 AM" o "Tanda de la Tarde a partir de las 3:00 PM").
+3. NUNCA DIGAS "Voy a verificar", "Un momento por favor" ni "Parece que hubo un problema".
+4. USA ESTRICTAMENTE EL CALENDARIO INYECTADO PARA SABER LA FECHA EXACTA DE CADA DÍA DE LA SEMANA.
+5. SIEMPRE REPORTA DATOS REALES DE VITALMI_DIRECTORIO_MASTER, DOCTORES_HORARIOS Y CITAS.
 """
 
 def obtener_hora_rd_iso() -> str:
-    # Registra la fecha y hora local de República Dominicana (ej. 2026-08-23 20:35:00)
     return datetime.now(TZ_RD).strftime("%Y-%m-%d %H:%M:%S")
 
 def remover_tildes(texto: str) -> str:
@@ -60,10 +60,6 @@ def remover_tildes(texto: str) -> str:
     return texto.strip()
 
 def resolver_fecha_relativa(texto_fecha: str) -> str:
-    """
-    Convierte referencias como 'martes', 'este viernes' o '25 de agosto'
-    a formato YYYY-MM-DD usando la fecha real actual de RD.
-    """
     ahora_rd = datetime.now(TZ_RD)
     texto_clean = remover_tildes(texto_fecha).lower().strip()
 
@@ -153,11 +149,9 @@ def agendar_cita_medica(
         nombre_mes = meses_es[fecha_dt.month - 1]
         fecha_formateada = f"{nombre_dia} {fecha_dt.day} de {nombre_mes} de {fecha_dt.year}"
 
-        # 1. Obtener ID del paciente
         res_pac = supabase.table("pacientes").select("*").eq("telefono_jid", telefono_jid).execute()
         paciente_id = res_pac.data[0].get("id") if (res_pac.data and len(res_pac.data) > 0) else None
 
-        # 2. Verificar si el paciente YA TIENE una cita activa para esa misma fecha
         if paciente_id and not forzar_agendamiento:
             res_citas_existentes = supabase.table("citas") \
                 .select("*") \
@@ -170,7 +164,6 @@ def agendar_cita_medica(
                 cita_previa = res_citas_existentes.data[0]
                 motivo_previo = cita_previa.get("motivo_consulta", "")
                 
-                # Si la cita previa es con un médico diferente, reportamos el conflicto
                 if nombre_medico_limpio.lower() not in motivo_previo.lower():
                     return json.dumps({
                         "status": "conflicto_cita_existente",
@@ -183,7 +176,6 @@ def agendar_cita_medica(
                         "nuevo_medico_solicitado": nombre_medico_limpio
                     }, ensure_ascii=False)
 
-        # 3. Registrar la nueva cita en Supabase
         datos_cita = {
             "paciente_id": paciente_id,
             "motivo_consulta": f"Médico: {nombre_medico_limpio} | Tanda: {tanda} | Motivo: {motivo_consulta} | Fecha: {fecha_formateada} ({fecha_real_iso})",
@@ -436,8 +428,8 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     guardar_mensaje_supabase(numero_usuario, "user", mensaje_usuario)
 
-    historial = obtener_historial_supabase(numero_usuario, limite=10)
-    contexto_previo_str = " ".join([m["content"] for m in historial if m["role"] == "user"])
+    historial_raw = obtener_historial_supabase(numero_usuario, limite=6)
+    historial_limpio = [{"role": m["rol"] if "rol" in m else m["role"], "content": m["contenido"] if "contenido" in m else m["content"]} for m in historial_raw]
 
     ahora_rd = datetime.now(TZ_RD)
     dias_semana_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
@@ -454,9 +446,10 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     contexto_temporal = (
         f"\n\n### ⏰ ANCLA TEMPORAL Y CALENDARIO EXACTO DE HOY:\n"
         f"Hoy es {dias_semana_es[ahora_rd.weekday()]}, {ahora_rd.strftime('%d de %B de %Y')}.\n"
-        f"Usa ESTA TABLA DE FECHA REAL para saber exactamente qué fecha le corresponde a cada día cuando el usuario te diga 'este lunes', 'el martes', etc.:\n"
+        f"Usa ESTA TABLA DE FECHA REAL para saber qué fecha le corresponde a cada día:\n"
         f"{tabla_dias_str}\n\n"
-        f"REGLA DE ORO DE HORARIOS: Las consultas se gestionan exclusivamente por TANDAS (Tanda de la Mañana: 9:00 AM / Tanda de la Tarde: 3:00 PM). NUNCA asignes horas exactas inventadas como 10:00 AM o 4:00 PM."
+        f"ATENCIÓN CRÍTICA: EL USUARIO ACABA DE ENVIAR ESTE MENSAJE: '{mensaje_usuario}'.\n"
+        f"Si el mensaje menciona un NUEVO nombre de médico o profesional, procesa la solicitud ÚNICAMENTE para el nuevo médico indicado y olvida cualquier médico mencionado en turnos anteriores."
     )
     contexto_usuario = f"\nTe estás comunicando por WhatsApp con '{nombre_contacto}' (ID: {numero_usuario})."
     
@@ -505,11 +498,11 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "medico_nombre": {"type": "string", "description": "Nombre completo del médico"},
-                        "fecha_cita": {"type": "string", "description": "Texto del día solicitado (ej. 'martes', 'este viernes', '2026-08-25')"},
+                        "medico_nombre": {"type": "string", "description": "Nombre completo del médico expresamente mencionado en el turno actual"},
+                        "fecha_cita": {"type": "string", "description": "Texto del día solicitado (ej. 'lunes', 'martes', 'este viernes', '2026-08-24')"},
                         "tanda": {"type": "string", "description": "Tanda elegida: 'Mañana' o 'Tarde'"},
                         "motivo_consulta": {"type": "string", "description": "Motivo de la consulta médica"},
-                        "forzar_agendamiento": {"type": "boolean", "description": "True si el usuario expresamente confirmó reemplazar o agendar a pesar de existir una cita previa."}
+                        "forzar_agendamiento": {"type": "boolean", "description": "True si el usuario confirmó explícitamente reemplazar la cita previa."}
                     },
                     "required": ["medico_nombre", "fecha_cita", "tanda"]
                 }
@@ -545,7 +538,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     ]
 
     messages = [{"role": "system", "content": system_prompt}]
-    messages.extend(historial)
+    messages.extend(historial_limpio)
 
     try:
         response = await client.chat.completions.create(
@@ -559,14 +552,15 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         response_message = response.choices[0].message
 
         if response_message.tool_calls:
-            messages.append(response_message)
+            messages_tool = list(messages)
+            messages_tool.append(response_message)
+
             for tool_call in response_message.tool_calls:
                 name = tool_call.function.name
                 args = json.loads(tool_call.function.arguments)
 
                 if name == "consultar_directorio_inteligente":
                     args["mensaje_raw"] = mensaje_usuario
-                    args["contexto_previo"] = contexto_previo_str
                     res_tool = consultar_directorio_inteligente(**args)
                 elif name == "consultar_horario_y_bloqueos":
                     res_tool = consultar_horario_y_bloqueos(**args)
@@ -580,7 +574,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 else:
                     res_tool = json.dumps({"error": "Herramienta no encontrada"})
 
-                messages.append({
+                messages_tool.append({
                     "tool_call_id": tool_call.id,
                     "role": "tool",
                     "name": name,
@@ -589,7 +583,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
             second_response = await client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=messages,
+                messages=messages_tool,
                 temperature=0.0,
                 max_tokens=700
             )
