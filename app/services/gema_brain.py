@@ -34,11 +34,11 @@ Tu objetivo es entregar información exacta del directorio ('consultar_directori
 ### 🎭 RECOLECCIÓN DE DATOS DEL PACIENTE:
 1. Si el usuario desea agendar una cita:
    - Determina si la cita es para él o para otra persona.
-   - Si falta la CÉDULA o la ARS (Seguro Médico), solicítalas antes de agendar. Si no tiene seguro, puede indicarse "Privado" o "Sin Seguro".
+   - Si falta la CÉDULA o la ARS (Seguro Médico), solicítalas de forma amable. Si no tiene seguro, indícalo como "Privado" o "Sin Seguro".
    - Si es para otra persona, solicita Nombre Completo, Teléfono/WhatsApp de contacto, Cédula y ARS.
 
 ### 🎭 CONFIRMACIÓN DE CITA:
-Cuando llames a 'agendar_cita_medica', utiliza el campo 'mensaje_formateado_final' retornado por la herramienta para responder al usuario. NUNCA dejes corchetes ni placeholders como '[Nombre del Doctor]' sin sustituir.
+Cuando la herramienta 'agendar_cita_medica' devuelva un agendamiento exitoso, RESPONDE UTILIZANDO DIRECTAMENTE EL TEXTO CONTENIDO EN 'mensaje_formateado_final'. Queda PROHIBIDO generar textos con corchetes como '[Nombre del Doctor]' o '[Centro Médico]'.
 
 ### 🚫 REGLAS DE ORO:
 1. NUNCA ASIGNES HORAS FIJAS FUERA DE TANDA (como "10:00 AM" o "4:00 PM"). Confirma siempre por TANDA ("Tanda de la Mañana a partir de las 9:00 AM" o "Tanda de la Tarde a partir de las 3:00 PM").
@@ -59,6 +59,12 @@ def remover_tildes(texto: str) -> str:
     for a, b in replacements:
         texto = texto.replace(a, b)
     return texto.strip()
+
+def extraer_cedula_regex(texto: str) -> str:
+    """ Extrae una cédula limpia de 11 dígitos si está presente en el mensaje. """
+    numeros = re.sub(r'\D', '', texto)
+    match = re.search(r'\b\d{11}\b', numeros)
+    return match.group(0) if match else ""
 
 def resolver_fecha_relativa(texto_fecha: str) -> str:
     ahora_rd = datetime.now(TZ_RD)
@@ -194,7 +200,14 @@ def agendar_cita_medica(
 
         centro_medico = "Centro Médico Autorizado"
         telefono_doctor = "No disponible"
-        res_doc = supabase.table("vitalmi_directorio_master").select("centro_medico, whatsapp, telefono_institucional").ilike("nombre", f"%{remover_tildes(nombre_medico_limpio)[:6]}%").limit(1).execute()
+        
+        # Búsqueda de médico mejorada en directorio master
+        tokens_medico = [t for t in remover_tildes(nombre_medico_limpio).split() if len(t) > 2]
+        query_doc = supabase.table("vitalmi_directorio_master").select("centro_medico, whatsapp, telefono_institucional")
+        for tok in tokens_medico[:2]:
+            query_doc = query_doc.ilike("nombre", f"%{tok}%")
+        
+        res_doc = query_doc.limit(1).execute()
         if res_doc.data:
             centro_medico = res_doc.data[0].get("centro_medico") or centro_medico
             telefono_doctor = res_doc.data[0].get("whatsapp") or res_doc.data[0].get("telefono_institucional") or "No disponible"
@@ -209,7 +222,6 @@ def agendar_cita_medica(
         res_cita = supabase.table("citas").insert(datos_cita).execute()
         cita_creada = res_cita.data[0] if res_cita.data else {}
 
-        # Generar texto final listo sin placeholders
         mensaje_final = (
             "📋 *SOLICITUD DE CITA REGISTRADA*\n\n"
             "👤 *DATOS DEL PACIENTE:*\n"
@@ -265,15 +277,16 @@ def consultar_directorio_inteligente(
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        texto_analizar = remover_tildes(f"{mensaje_raw} {contexto_previo}").lower()
+        texto_analizar = remover_tildes(f"{nombre_medico} {mensaje_raw}").lower()
         query = supabase.table("vitalmi_directorio_master").select("*", count="exact")
 
-        if nombre_medico:
-            nom_clean = remover_tildes(nombre_medico).lower().strip()
-            tokens = [t for t in nom_clean.split() if len(t) > 2]
-            if tokens:
-                for tok in tokens:
-                    query = query.ilike("nombre", f"%{tok}%")
+        stop_words = ["doctor", "doctora", "cita", "quiero", "necesito", "con", "del", "esta", "para", "una"]
+        tokens = [t for t in re.findall(r'\b\w{3,}\b', texto_analizar) if t not in stop_words]
+
+        if tokens:
+            # Buscar por los tokens más representativos del nombre
+            for tok in tokens[:3]:
+                query = query.ilike("nombre", f"%{tok}%")
 
         res = query.limit(20).execute()
         return json.dumps({"total_exacto": len(res.data) if res.data else 0, "medicos_muestra": res.data or []}, ensure_ascii=False)
@@ -350,6 +363,14 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     if nombre_contacto in ["Trancrédito", "Usuario WhatsApp", "Paciente"]:
         nombre_contacto = "Estimado/a"
 
+    # Extracción automática de Cédula si el usuario la envió en el mensaje actual
+    cedula_detectada = extraer_cedula_regex(mensaje_usuario)
+    if cedula_detectada and paciente.get("id"):
+        supabase = obtener_cliente_supabase()
+        if supabase:
+            supabase.table("pacientes").update({"cedula": cedula_detectada}).eq("id", paciente.get("id")).execute()
+            paciente["cedula"] = cedula_detectada
+
     historial_raw = obtener_historial_supabase(numero_usuario, limite=6)
 
     ahora_rd = datetime.now(TZ_RD)
@@ -398,6 +419,9 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         f"Hoy es {dias_semana_es[ahora_rd.weekday()]}, {ahora_rd.strftime('%d de %B de %Y')}.\n"
         f"Usa ESTA TABLA DE FECHA REAL para saber qué fecha le corresponde a cada día:\n"
         f"{tabla_dias_str}\n\n"
+        f"DATOS CONOCIDOS DEL PACIENTE:\n"
+        f"- Cédula en registro: {paciente.get('cedula', 'No registrada')}\n"
+        f"- ARS en registro: {paciente.get('ars', 'No registrada')}\n\n"
         f"ÚLTIMO MENSAJE DEL USUARIO: '{mensaje_usuario}'.\n"
         f"{instruccion_saludo}\n"
     )
@@ -498,6 +522,9 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                     res_tool = consultar_horario_y_bloqueos(**args)
                 elif name == "agendar_cita_medica":
                     args["telefono_jid"] = numero_usuario
+                    # Inyección forzada de Cédula si fue detectada por Regex
+                    if cedula_detectada and not args.get("cedula_paciente"):
+                        args["cedula_paciente"] = cedula_detectada
                     res_tool = agendar_cita_medica(**args)
                 elif name == "consultar_mis_citas":
                     res_tool = consultar_mis_citas(telefono_jid=numero_usuario)
@@ -522,7 +549,12 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 temperature=0.0,
                 max_tokens=700
             )
-            respuesta_texto = second_response.choices[0].message.content.strip()
+            
+            res_json = json.loads(res_tool) if (name == "agendar_cita_medica" and res_tool.startswith("{")) else {}
+            if res_json.get("mensaje_formateado_final"):
+                respuesta_texto = res_json.get("mensaje_formateado_final")
+            else:
+                respuesta_texto = second_response.choices[0].message.content.strip()
         else:
             respuesta_texto = response_message.content.strip()
 
