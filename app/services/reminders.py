@@ -2,37 +2,16 @@ import os
 import asyncio
 from datetime import datetime
 import zoneinfo
-import httpx
 from app.core.supabase import obtener_cliente_supabase
+from app.services.evolution_service import enviar_mensaje_whatsapp
 
 TZ_RD = zoneinfo.ZoneInfo("America/Santo_Domingo")
-
-async def enviar_mensaje_whatsapp_api(telefono_jid: str, mensaje: str) -> bool:
-    """
-    Envía una notificación directa al usuario a través del webhook/API de WhatsApp en Railway.
-    """
-    api_url = os.getenv("WHATSAPP_API_URL", "").strip()
-    api_token = os.getenv("WHATSAPP_API_TOKEN", "").strip()
-    
-    if not api_url:
-        print("⚠️ WHATSAPP_API_URL no configurada. Simulado envío de mensaje.")
-        print(f"📱 Destino: {telefono_jid}\n💬 Mensaje: {mensaje}")
-        return True
-
-    try:
-        async with httpx.AsyncClient() as client:
-            payload = {"jid": telefono_jid, "message": mensaje}
-            headers = {"Authorization": f"Bearer {api_token}"} if api_token else {}
-            res = await client.post(api_url, json=payload, headers=headers, timeout=10.0)
-            return res.status_code in [200, 201]
-    except Exception as e:
-        print(f"❌ Error enviando WhatsApp API a {telefono_jid}: {e}")
-        return False
 
 async def procesar_recordatorios_citas():
     """
     Revisa la tabla 'citas' en Supabase y envía un recordatorio automatizado 
-    1 hora antes del inicio de la tanda correspondiente (8:00 AM para la mañana / 2:00 PM para la tarde).
+    1 hora antes del inicio de la tanda correspondiente (8:00 AM para la mañana / 2:00 PM para la tarde)
+    utilizando Evolution API.
     """
     supabase = obtener_cliente_supabase()
     if not supabase:
@@ -44,7 +23,7 @@ async def procesar_recordatorios_citas():
     hora_actual = ahora.hour
 
     try:
-        # Consultar citas solicitadas o confirmadas de hoy sin recordatorio enviado
+        # Consultar citas pendientes o confirmadas sin recordatorio enviado
         res_citas = supabase.table("citas") \
             .select("id, paciente_id, motivo_consulta, estado, recordatorio_enviado, pacientes(telefono_jid, nombre)") \
             .neq("estado", "cancelada") \
@@ -62,7 +41,7 @@ async def procesar_recordatorios_citas():
             telefono_jid = paciente_info.get("telefono_jid")
             nombre_paciente = paciente_info.get("nombre") or "Estimado/a paciente"
 
-            # Evaluar si la cita es para el día de hoy
+            # Evaluar si la cita corresponde al día de hoy
             if fecha_hoy_str not in motivo and "Fecha:" in motivo:
                 continue
 
@@ -84,14 +63,14 @@ async def procesar_recordatorios_citas():
                     f"📌 *RECORDATORIO DE CITA MÉDICA*\n"
                     f"Te recordamos que hoy tienes una consulta agendada:\n"
                     f"📝 *Detalles:* {motivo}\n\n"
-                    f"Por favor, asegúrate de asistir a tiempo. Si necesitas reprogramar o cancelar, "
-                    f"solo respóndenos a este mensaje. ¡Estamos para ayudarte!"
+                    f"Por favor, asegúrate de asistir a tiempo al consultorio dentro de la tanda asignada. "
+                    f"Si necesitas reprogramar o cancelar, solo respóndenos a este mensaje. ¡Estamos para ayudarte!"
                 )
 
-                exito = await enviar_mensaje_whatsapp_api(telefono_jid, mensaje_recordatorio)
+                resultado = await enviar_mensaje_whatsapp(destinatario=telefono_jid, texto=mensaje_recordatorio)
 
-                if exito:
-                    # Marcar cita como recordatorio enviado en Supabase
+                if resultado:
+                    # Marcar recordatorio como enviado en Supabase
                     supabase.table("citas").update({"recordatorio_enviado": True}).eq("id", cita_id).execute()
                     print(f"✅ Recordatorio enviado exitosamente a {telefono_jid} (Cita ID: {cita_id})")
 

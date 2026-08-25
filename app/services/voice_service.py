@@ -1,16 +1,15 @@
 import os
 import io
+import re
 import base64
 import httpx
 from openai import AsyncOpenAI
 
-# Inicialización de OpenAI para Whisper (Transcripción)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 client = AsyncOpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-# Variables para ElevenLabs
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
-ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")  # Voz de Rachel por defecto
+ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")  # Voz de Rachel
 
 
 async def transcribir_audio_base64(audio_base64: str) -> str:
@@ -42,6 +41,21 @@ async def transcribir_audio_base64(audio_base64: str) -> str:
         return ""
 
 
+def limpiar_texto_para_audio(texto: str) -> str:
+    """
+    Remueve formato Markdown y sustituye enlaces HTTP por frases legibles para la síntesis de voz.
+    """
+    if not texto:
+        return ""
+    
+    # Reemplazar URLs por texto hablado fluido
+    texto_limpio = re.sub(r'https?://\S+', 'en el formulario interactivo', texto)
+    
+    # Quitar viñetas, emojis y negritas
+    texto_limpio = texto_limpio.replace("*", "").replace("#", "").replace("- ", "").strip()
+    return texto_limpio
+
+
 async def generar_audio_elevenlabs(texto: str) -> str:
     """
     Genera voz ultrarrealista usando la API de ElevenLabs y devuelve la cadena Base64.
@@ -50,8 +64,7 @@ async def generar_audio_elevenlabs(texto: str) -> str:
         print("⚠️ ELEVENLABS_API_KEY no configurada. Usando fallback de OpenAI TTS...")
         return await generar_audio_openai(texto)
 
-    # Limpiar el texto de caracteres especiales de Markdown que alteren la lectura hablada
-    texto_hablado = texto.replace("*", "").replace("#", "").replace("- ", "").strip()
+    texto_hablado = limpiar_texto_para_audio(texto)
 
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}"
     headers = {
@@ -61,11 +74,11 @@ async def generar_audio_elevenlabs(texto: str) -> str:
     }
     payload = {
         "text": texto_hablado,
-        "model_id": "eleven_multilingual_v2",  # Modelo optimizado para español fluido
+        "model_id": "eleven_multilingual_v2",
         "voice_settings": {
-            "stability": 0.45,         # Menor estabilidad = más emoción y variación natural
-            "similarity_boost": 0.75,   # Fidelidad de la voz
-            "style": 0.20,              # Expresividad natural
+            "stability": 0.45,
+            "similarity_boost": 0.75,
+            "style": 0.20,
             "use_speaker_boost": True
         }
     }
@@ -98,7 +111,7 @@ async def generar_audio_openai(texto: str) -> str:
         return ""
 
     try:
-        texto_hablado = texto.replace("*", "").replace("#", "").replace("- ", "").strip()
+        texto_hablado = limpiar_texto_para_audio(texto)
         print(f"🔊 Generando audio de respaldo con OpenAI TTS...")
         response = await client.audio.speech.create(
             model="tts-1",
