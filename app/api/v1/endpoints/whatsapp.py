@@ -1,4 +1,5 @@
 import base64
+import json
 from fastapi import APIRouter, Request, BackgroundTasks, HTTPException
 from app.services.evolution_service import (
     enviar_mensaje_whatsapp, 
@@ -10,14 +11,15 @@ from app.services.voice_service import (
     transcribir_audio_base64, 
     generar_audio_elevenlabs
 )
-from app.services.gema_brain import obtener_respuesta_gema
+from app.services.gema_brain import obtener_respuesta_gema, agendar_cita_medica
 
 router = APIRouter()
 
 
 async def procesar_webhook_background(payload: dict):
     """
-    Procesa el mensaje de WhatsApp recibido vía Evolution API de forma estable.
+    Procesa el mensaje de WhatsApp recibido vía Evolution API.
+    Soporta Texto, Audio (Whisper) y Respuestas de Formularios Nativo (WhatsApp Flows).
     """
     try:
         data = payload.get("data", {})
@@ -35,6 +37,44 @@ async def procesar_webhook_background(payload: dict):
         message = data.get("message", {})
         message_type = str(data.get("messageType") or "").lower()
         
+        # -------------------------------------------------------------
+        # CASO 1: EL USUARIO RESPONDIÓ UN FORMULARIO NATIVO (FLOWS)
+        # -------------------------------------------------------------
+        if "interactiveresponsemessage" in message_type or "interactiveResponseMessage" in message:
+            interactive_data = message.get("interactiveResponseMessage", {})
+            native_flow_response = interactive_data.get("nativeFlowResponseMessage", {})
+            
+            response_json_str = native_flow_response.get("paramsJson", "{}")
+            datos_formulario = json.loads(response_json_str)
+
+            print(f"📋 Formulario de WhatsApp Flow recibido de '{push_name}': {datos_formulario}")
+
+            es_tercero = (datos_formulario.get("tipo_paciente") == "tercero")
+            
+            # Ejecución limpia de agendamiento directo en backend
+            res_agendamiento = agendar_cita_medica(
+                telefono_jid=remote_jid,
+                medico_nombre=datos_formulario.get("medico_nombre", "Médico General"),
+                fecha_cita=datos_formulario.get("fecha_cita", "proxima_disponible"),
+                tanda=datos_formulario.get("tanda", "Tanda de la Mañana"),
+                es_para_tercero=es_tercero,
+                nombre_paciente_tercero=datos_formulario.get("nombre_completo") if es_tercero else "",
+                telefono_paciente_tercero=datos_formulario.get("telefono") if es_tercero else "",
+                cedula_paciente=datos_formulario.get("cedula", ""),
+                ars_paciente=datos_formulario.get("ars", "Privado"),
+                numero_afiliado_ars=datos_formulario.get("numero_afiliado", "No especificado"),
+                motivo_consulta=datos_formulario.get("motivo_consulta", "Consulta General / Primera Visita")
+            )
+
+            res_data = json.loads(res_agendamiento)
+            mensaje_confirmacion = res_data.get("mensaje_formateado_final")
+
+            await enviar_mensaje_whatsapp(destinatario=remote_jid, texto=mensaje_confirmacion)
+            return
+
+        # -------------------------------------------------------------
+        # CASO 2: MENSAJE CONVENCIONAL DE TEXTO O NOTA DE VOZ
+        # -------------------------------------------------------------
         texto_usuario = ""
         es_audio = False
         
@@ -56,8 +96,8 @@ async def procesar_webhook_background(payload: dict):
             else:
                 print("❌ No se pudo extraer el audio.")
                 await enviar_mensaje_whatsapp(
-                    remote_jid, 
-                    "Lo siento, no pude escuchar tu nota de voz. ¿Podrías enviarla nuevamente o escribir tu mensaje?"
+                    destinatario=remote_jid, 
+                    texto="Lo siento, no pude escuchar tu nota de voz. ¿Podrías enviarla nuevamente o escribir tu mensaje?"
                 )
                 return
 
@@ -71,7 +111,7 @@ async def procesar_webhook_background(payload: dict):
 
         print(f"🧠 Enviando a Gema Brain para {remote_jid} ({push_name}): '{texto_usuario}'")
         
-        # Procesar con la inteligencia de Gema
+        # Procesar con la inteligencia de Gema (conversación)
         respuesta_ia = await obtener_respuesta_gema(
             mensaje_usuario=texto_usuario,
             numero_usuario=remote_jid,
