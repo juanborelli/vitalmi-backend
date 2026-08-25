@@ -58,12 +58,86 @@ async def enviar_mensaje_whatsapp(destinatario: str, texto: str):
 enviar_texto_whatsapp = enviar_mensaje_whatsapp
 
 
+async def enviar_flow_whatsapp(
+    destinatario: str, 
+    nombre_usuario: str = "Juan", 
+    medico_nombre: str = "", 
+    fecha_cita: str = "", 
+    tanda: str = ""
+):
+    """
+    Envía el mensaje de bienvenida de Gema con el botón interactivo de WhatsApp Flow (Formulario Nativo)
+    vía Evolution API v2.
+    """
+    api_url = os.getenv("EVOLUTION_API_URL", "https://evolution-api-production-56fa.up.railway.app")
+    api_key = os.getenv("EVOLUTION_API_KEY", "F55845E23C3B-45B8-B5B6-0A6A01ABF008")
+    instance_name = os.getenv("EVOLUTION_INSTANCE_NAME", "vitalmi")
+
+    target = obtener_destino_evolution(destinatario)
+    url = f"{api_url}/message/sendInteractive/{instance_name}"
+    headers = {"apikey": api_key, "Content-Type": "application/json"}
+
+    nombre_saludo = nombre_usuario if nombre_usuario not in ["Usuario", "Trancrédito", "Paciente", ""] else "Juan"
+
+    texto_bienvenida = (
+        f"Hola {nombre_saludo}, ¿cómo te sientes hoy? Espero que te encuentres bien de salud.\n\n"
+        "Para agendar una cita favor de llenar este breve formulario.\n\n"
+        "Y recuerda, soy Gema de VitalMi. Tu asistente para citas médicas en toda República Dominicana."
+    )
+
+    payload = {
+        "number": str(target),
+        "options": {
+            "delay": 1200,
+            "presence": "composing"
+        },
+        "interactiveMessage": {
+            "type": "native_flow",
+            "body": {
+                "text": texto_bienvenida
+            },
+            "action": {
+                "name": "flow",
+                "parameters": {
+                    "flow_message_version": "3",
+                    "flow_token": f"flow_cita_{target}",
+                    "flow_id": "FICHA_PACIENTE_VITALMI",
+                    "flow_cta": "📋 Completar Ficha de Cita",
+                    "flow_action": "navigate",
+                    "flow_action_payload": {
+                        "screen": "AGENDAMIENTO_CITA_PRIVADA",
+                        "data": {
+                            "medico_nombre": medico_nombre,
+                            "fecha_cita": fecha_cita,
+                            "tanda": tanda
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as http_client:
+        try:
+            print(f"📤 Enviando WhatsApp Flow a Evolution API ({target})...")
+            response = await http_client.post(url, json=payload, headers=headers)
+            try:
+                res_data = response.json()
+            except Exception:
+                res_data = response.text
+
+            print(f"📡 Resultado Envío Flow Evolution ({target}): HTTP {response.status_code} -> {res_data}")
+            return res_data
+        except Exception as e:
+            print(f"❌ Error enviando WhatsApp Flow a Evolution API: {e}")
+            return None
+
+
 async def enviar_audio_whatsapp(destinatario: str, audio_base64: str):
     """
     Envía una nota de voz nativa (PTT) a WhatsApp vía Evolution API v2.
     Protegido contra valores NoneType y formateado para Base64 puro.
     """
-    # 🛑 Protección Anti-Crash contra None/Vacío
     if not audio_base64 or not isinstance(audio_base64, str):
         print("❌ Error: audio_base64 es invalido o None. Se omite el envío de audio.")
         return None
@@ -77,7 +151,6 @@ async def enviar_audio_whatsapp(destinatario: str, audio_base64: str):
     url = f"{api_url}/message/sendWhatsAppAudio/{instance_name}"
     headers = {"apikey": api_key, "Content-Type": "application/json"}
     
-    # Extraer únicamente la cadena Base64 limpia
     clean_audio_b64 = str(audio_base64).split(",")[-1].strip().replace("\n", "").replace("\r", "")
 
     payload = {
