@@ -58,78 +58,53 @@ async def enviar_mensaje_whatsapp(destinatario: str, texto: str):
 enviar_texto_whatsapp = enviar_mensaje_whatsapp
 
 
-async def enviar_flow_whatsapp(
+async def enviar_formulario_google_whatsapp(
     destinatario: str, 
-    nombre_usuario: str = "Juan", 
-    medico_nombre: str = "", 
-    fecha_cita: str = "", 
-    tanda: str = ""
+    nombre_usuario: str = "Juan"
 ):
     """
-    Envía el mensaje de bienvenida de Gema con el botón interactivo de WhatsApp Flow (Formulario Nativo)
-    vía Evolution API v2.
+    Envía el mensaje de bienvenida oficial de Gema con el enlace al Google Form vía Evolution API.
     """
     api_url = os.getenv("EVOLUTION_API_URL", "https://evolution-api-production-56fa.up.railway.app")
     api_key = os.getenv("EVOLUTION_API_KEY", "F55845E23C3B-45B8-B5B6-0A6A01ABF008")
     instance_name = os.getenv("EVOLUTION_INSTANCE_NAME", "vitalmi")
 
     target = obtener_destino_evolution(destinatario)
-    url = f"{api_url}/message/sendInteractive/{instance_name}"
+    url = f"{api_url}/message/sendText/{instance_name}"
     headers = {"apikey": api_key, "Content-Type": "application/json"}
 
     nombre_saludo = nombre_usuario if nombre_usuario not in ["Usuario", "Trancrédito", "Paciente", ""] else "Juan"
+    url_form = "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
 
-    texto_bienvenida = (
+    texto_mensaje = (
         f"Hola {nombre_saludo}, ¿cómo te sientes hoy? Espero que te encuentres bien de salud.\n\n"
-        "Para agendar una cita favor de llenar este breve formulario.\n\n"
+        f"Para agendar tu cita médica favor de llenar este breve formulario:\n"
+        f"📋 {url_form}\n\n"
         "Y recuerda, soy Gema de VitalMi. Tu asistente para citas médicas en toda República Dominicana."
     )
 
     payload = {
         "number": str(target),
+        "text": texto_mensaje,
         "options": {
-            "delay": 1200,
-            "presence": "composing"
-        },
-        "interactiveMessage": {
-            "type": "native_flow",
-            "body": {
-                "text": texto_bienvenida
-            },
-            "action": {
-                "name": "flow",
-                "parameters": {
-                    "flow_message_version": "3",
-                    "flow_token": f"flow_cita_{target}",
-                    "flow_id": "FICHA_PACIENTE_VITALMI",
-                    "flow_cta": "📋 Completar Ficha de Cita",
-                    "flow_action": "navigate",
-                    "flow_action_payload": {
-                        "screen": "AGENDAMIENTO_CITA_PRIVADA",
-                        "data": {
-                            "medico_nombre": medico_nombre,
-                            "fecha_cita": fecha_cita,
-                            "tanda": tanda
-                        }
-                    }
-                }
-            }
+            "delay": 1000,
+            "presence": "composing",
+            "linkPreview": True
         }
     }
 
     async with httpx.AsyncClient(timeout=30.0) as http_client:
         try:
-            print(f"📤 Enviando WhatsApp Flow a Evolution API ({target})...")
+            print(f"📤 Enviando enlace de Google Form a Evolution API ({target})...")
             response = await http_client.post(url, json=payload, headers=headers)
             try:
                 res_data = response.json()
             except Exception:
                 res_data = response.text
-
-            print(f"📡 Resultado Envío Flow Evolution ({target}): HTTP {response.status_code} -> {res_data}")
+            print(f"📡 Resultado Envío Google Form Evolution ({target}): HTTP {response.status_code} -> {res_data}")
             return res_data
         except Exception as e:
-            print(f"❌ Error enviando WhatsApp Flow a Evolution API: {e}")
+            print(f"❌ Error enviando mensaje de formulario: {e}")
             return None
 
 

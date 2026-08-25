@@ -29,21 +29,22 @@ def obtener_cliente_openai() -> AsyncOpenAI:
 
 SYSTEM_PROMPT_FASE_1 = """
 Eres Gema, la asistente virtual médica de VitalMi en República Dominicana.
-Tu objetivo es entregar información exacta del directorio ('consultar_directorio_inteligente'), gestionar disponibilidades por TANDAS ('consultar_horario_y_bloqueos'), AGENDAR CITAS ('agendar_cita_medica') y PERMITIR CONSULTAR O CANCELAR CITAS REGISTRADAS ('consultar_mis_citas', 'gestionar_estado_cita').
+Tu objetivo es entregar información exacta del directorio ('consultar_directorio_inteligente'), gestionar disponibilidades por TANDAS, SUGERIR ESPECIALISTAS y entregar la Ficha de Agendamiento Oficial.
 
-### 🎭 ESQUEMA DE RECOLECCIÓN DE DATOS OBLIGATORIOS (SECTOR PRIVADO RD):
-Si el usuario desea agendar una cita, verifica y solicita amablemente los datos faltantes:
-1. **Datos del Seguro (ARS):** Nombre de la ARS, Número de Afiliado (carnet) y Tipo de Plan (Básico, Ejecutivo, etc., o 'Privado').
-2. **Datos Personales:** Nombre Completo del paciente, Cédula y Teléfono/WhatsApp.
-3. **Datos de Consulta:** Médico, Fecha, Tanda y Motivo (Primera visita, Chequeo de rutina, Lectura de resultados).
+### 🎭 BÚSQUEDA Y REGISTRO DE CITAS:
+1. Si el usuario solicita una especialidad (ej: "cardiólogo", "ginecólogo"):
+   - Ejecuta 'consultar_directorio_inteligente' para listar hasta 3 especialistas disponibles.
+   - Invita al usuario a agendar indicándole que debe completar el formulario oficial.
 
-### 🎭 CONFIRMACIÓN DE CITA:
-Cuando llames a 'agendar_cita_medica', UTILIZA DIRECTAMENTE EL TEXTO EN 'mensaje_formateado_final' para responder. Queda PROHIBIDO generar textos con corchetes como '[Nombre del Doctor]'.
+2. Si el usuario menciona que desea agendar una cita o indica un médico específico:
+   - NO generes listas numeradas ni pidas datos uno por uno (Cédula, ARS, etc.).
+   - Responde ÚNICAMENTE entregando el enlace al formulario oficial:
+     "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
 
 ### 🚫 REGLAS DE ORO:
-1. NUNCA ASIGNES HORAS FIJAS FUERA DE TANDA. Confirma siempre por TANDA ("Tanda de la Mañana" o "Tanda de la Tarde").
-2. NO VUELVAS A PREGUNTAR por datos que el usuario ya proporcionó en mensajes anteriores.
-3. EXPLICAR SIEMPRE QUE EL INGRESO A CONSULTORIO ES POR ORDEN DE LLEGADA DENTRO DE LA TANDA ASIGNADA.
+1. NUNCA cambies de médico en medio de la conversación a menos que el usuario lo solicite explícitamente.
+2. NUNCA generes textos pidiendo datos en texto plano.
+3. MANTIENE SIEMPRE LA COINCIDENCIA EXACTA DEL MÉDICO SOLICITADO.
 """
 
 def obtener_hora_rd_iso() -> str:
@@ -59,33 +60,6 @@ def remover_tildes(texto: str) -> str:
     for a, b in replacements:
         texto = texto.replace(a, b)
     return texto.strip()
-
-def extraer_datos_mensaje(texto: str) -> dict:
-    texto_clean = remover_tildes(texto).lower()
-    
-    # Cédula (11 dígitos)
-    numeros = re.sub(r'\D', '', texto)
-    match_cedula = re.search(r'\b\d{11}\b', numeros)
-    cedula = match_cedula.group(0) if match_cedula else ""
-
-    # ARS y Afiliado
-    ars = ""
-    aseguradoras = ["mapfre", "humano", "senasa", "palic", "universal", "monumental", "sigma", "renacer", "simag"]
-    for a in aseguradoras:
-        if a in texto_clean:
-            ars = a.capitalize() if a != "senasa" else "SeNaSa"
-            break
-    if not ars and ("sin seguro" in texto_clean or "privado" in texto_clean or "no tengo" in texto_clean):
-        ars = "Privado"
-
-    # Tanda
-    tanda = ""
-    if "manana" in texto_clean or "matutina" in texto_clean:
-        tanda = "Tanda de la Mañana"
-    elif "tarde" in texto_clean or "vespertina" in texto_clean:
-        tanda = "Tanda de la Tarde"
-
-    return {"cedula": cedula, "ars": ars, "tanda": tanda}
 
 def resolver_fecha_relativa(texto_fecha: str) -> str:
     ahora_rd = datetime.now(TZ_RD)
@@ -111,6 +85,62 @@ def resolver_fecha_relativa(texto_fecha: str) -> str:
             return fecha_calculada.strftime("%Y-%m-%d")
 
     return ahora_rd.strftime("%Y-%m-%d")
+
+def consultar_mis_citas(telefono_jid: str) -> str:
+    supabase = obtener_cliente_supabase()
+    if not supabase:
+        return json.dumps({"error": "Sin conexión a base de datos"})
+
+    try:
+        res_pac = supabase.table("pacientes").select("id, nombre, cedula, ars").eq("telefono_jid", telefono_jid).execute()
+        if not res_pac.data:
+            return json.dumps({"citas": [], "mensaje": "No se encontró registro de paciente."})
+
+        paciente_data = res_pac.data[0]
+        paciente_id = paciente_data.get("id")
+        
+        res_citas = supabase.table("citas") \
+            .select("*") \
+            .eq("paciente_id", paciente_id) \
+            .neq("estado", "cancelada") \
+            .order("created_at", desc=True) \
+            .execute()
+
+        return json.dumps({
+            "paciente": paciente_data,
+            "total_citas": len(res_citas.data) if res_citas.data else 0,
+            "citas": res_citas.data or []
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        print(f"❌ Error en consultar_mis_citas: {e}")
+        return json.dumps({"error": str(e)})
+
+def gestionar_estado_cita(cita_id: str = "", telefono_jid: str = "", nuevo_estado: str = "cancelada") -> str:
+    supabase = obtener_cliente_supabase()
+    if not supabase:
+        return json.dumps({"error": "Sin conexión a base de datos"})
+
+    try:
+        if cita_id:
+            supabase.table("citas").update({"estado": nuevo_estado}).eq("id", cita_id).execute()
+        elif telefono_jid:
+            res_pac = supabase.table("pacientes").select("id").eq("telefono_jid", telefono_jid).execute()
+            if res_pac.data:
+                pac_id = res_pac.data[0].get("id")
+                res_last = supabase.table("citas").select("id").eq("paciente_id", pac_id).neq("estado", "cancelada").order("created_at", desc=True).limit(1).execute()
+                if res_last.data:
+                    c_id = res_last.data[0].get("id")
+                    supabase.table("citas").update({"estado": nuevo_estado}).eq("id", c_id).execute()
+
+        return json.dumps({
+            "status": "exitoso",
+            "mensaje": f"La cita ha sido actualizada a estado '{nuevo_estado}' correctamente en VitalMi."
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        print(f"❌ Error en gestionar_estado_cita: {e}")
+        return json.dumps({"error": str(e)})
 
 def agendar_cita_medica(
     telefono_jid: str, 
@@ -328,24 +358,9 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         return "Hola, en este momento estamos actualizando el sistema. Escríbeme en un minuto y con gusto te ayudo."
 
     paciente = registrar_o_actualizar_paciente(numero_usuario, nombre_usuario)
-    nombre_contacto = paciente.get("nombre", nombre_usuario) if paciente.get("nombre") else "Estimado/a"
-    if nombre_contacto in ["Trancrédito", "Usuario WhatsApp", "Paciente"]:
-        nombre_contacto = "Estimado/a"
-
-    datos_extraidos = extraer_datos_mensaje(mensaje_usuario)
-    
-    supabase = obtener_cliente_supabase()
-    actualizaciones_pac = {}
-    
-    if datos_extraidos["cedula"]:
-        actualizaciones_pac["cedula"] = datos_extraidos["cedula"]
-        paciente["cedula"] = datos_extraidos["cedula"]
-    if datos_extraidos["ars"]:
-        actualizaciones_pac["ars"] = datos_extraidos["ars"]
-        paciente["ars"] = datos_extraidos["ars"]
-
-    if actualizaciones_pac and supabase and paciente.get("id"):
-        supabase.table("pacientes").update(actualizaciones_pac).eq("id", paciente.get("id")).execute()
+    nombre_contacto = paciente.get("nombre", nombre_usuario) if paciente.get("nombre") else "Juan"
+    if nombre_contacto in ["Trancrédito", "Usuario WhatsApp", "Paciente", ""]:
+        nombre_contacto = "Juan"
 
     historial_raw = obtener_historial_supabase(numero_usuario, limite=6)
 
@@ -378,16 +393,19 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     hora_actual = ahora_rd.hour
     saludo_tiempo = "buenos días" if 5 <= hora_actual < 12 else ("buenas tardes" if 12 <= hora_actual < 19 else "buenas noches")
     
+    url_form_oficial = "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
+
     if not ya_saludo_hoy:
         instruccion_saludo = (
             f"ES EL PRIMER CONTACTO DEL DÍA ({fecha_hoy_str}). Inicia tu respuesta OBLIGATORIAMENTE con el saludo oficial:\n"
-            f"'¡Hola {nombre_contacto}, {saludo_tiempo}! ¿Cómo te sientes? ¿En qué puedo ayudarte hoy? "
-            f"Soy Gema de VitalMi, tu asistente para citas médicas en toda República Dominicana.'\n"
+            f"'Hola {nombre_contacto}, ¿cómo te sientes hoy? Espero que te encuentres bien de salud. "
+            f"Para agendar una cita favor de llenar este breve formulario:\n📋 {url_form_oficial}\n\n"
+            f"Y recuerda, soy Gema de VitalMi. Tu asistente para citas médicas en toda República Dominicana.'\n"
         )
     else:
         instruccion_saludo = (
             f"EL USUARIO YA RECIBIÓ EL SALUDO HOY ({fecha_hoy_str}). "
-            f"ESTÁ PROHIBIDO VOLVER A SALUDAR O DECIR '¡Hola!' / 'Buenas tardes'. RESPONDE DIRECTAMENTE A LA CONSULTA."
+            f"Si solicita agendar una cita o indica un médico, entrega directamente el enlace al formulario:\n📋 {url_form_oficial}"
         )
 
     contexto_temporal = (
@@ -395,10 +413,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         f"Hoy es {dias_semana_es[ahora_rd.weekday()]}, {ahora_rd.strftime('%d de %B de %Y')} (Hora actual: {ahora_rd.strftime('%I:%M %p')}).\n"
         f"Usa ESTA TABLA DE FECHA REAL para saber qué fecha le corresponde a cada día:\n"
         f"{tabla_dias_str}\n\n"
-        f"DATOS CONFIRMADOS DEL PACIENTE EN SISTEMA:\n"
-        f"- Cédula registrada: {paciente.get('cedula', 'No registrada')}\n"
-        f"- ARS registrada: {paciente.get('ars', 'No registrada')}\n"
-        f"- Tanda detectada en último mensaje: {datos_extraidos['tanda'] or 'No especificada'}\n\n"
         f"ÚLTIMO MENSAJE DEL USUARIO: '{mensaje_usuario}'.\n"
         f"{instruccion_saludo}\n"
     )
@@ -421,30 +435,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 "name": "consultar_horario_y_bloqueos",
                 "description": "Obtiene las tandas de horarios disponibles.",
                 "parameters": {"type": "object", "properties": {}, "required": []}
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "agendar_cita_medica",
-                "description": "Registra la solicitud de cita médica privada en Supabase capturando ficha del seguro y del paciente.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "medico_nombre": {"type": "string"},
-                        "fecha_cita": {"type": "string"},
-                        "tanda": {"type": "string"},
-                        "es_para_tercero": {"type": "boolean"},
-                        "nombre_paciente_tercero": {"type": "string"},
-                        "telefono_paciente_tercero": {"type": "string"},
-                        "cedula_paciente": {"type": "string"},
-                        "ars_paciente": {"type": "string"},
-                        "numero_afiliado_ars": {"type": "string", "description": "Número de carnet de afiliado a la ARS"},
-                        "tipo_plan_ars": {"type": "string", "description": "Plan del seguro: Básico, Ejecutivo, Premium, Privado"},
-                        "motivo_consulta": {"type": "string", "description": "Primera visita, chequeo de rutina, entrega de resultados"}
-                    },
-                    "required": ["medico_nombre", "fecha_cita", "tanda"]
-                }
             }
         },
         {
@@ -499,15 +489,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                     res_tool = consultar_directorio_inteligente(**args)
                 elif name == "consultar_horario_y_bloqueos":
                     res_tool = consultar_horario_y_bloqueos(**args)
-                elif name == "agendar_cita_medica":
-                    args["telefono_jid"] = numero_usuario
-                    if paciente.get("cedula") and not args.get("cedula_paciente"):
-                        args["cedula_paciente"] = paciente.get("cedula")
-                    if paciente.get("ars") and not args.get("ars_paciente"):
-                        args["ars_paciente"] = paciente.get("ars")
-                    if datos_extraidos["tanda"] and not args.get("tanda"):
-                        args["tanda"] = datos_extraidos["tanda"]
-                    res_tool = agendar_cita_medica(**args)
                 elif name == "consultar_mis_citas":
                     res_tool = consultar_mis_citas(telefono_jid=numero_usuario)
                 elif name == "gestionar_estado_cita":
@@ -532,11 +513,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 max_tokens=700
             )
             
-            res_json = json.loads(res_tool) if (name == "agendar_cita_medica" and res_tool.startswith("{")) else {}
-            if res_json.get("mensaje_formateado_final"):
-                respuesta_texto = res_json.get("mensaje_formateado_final")
-            else:
-                respuesta_texto = second_response.choices[0].message.content.strip()
+            respuesta_texto = second_response.choices[0].message.content.strip()
         else:
             respuesta_texto = response_message.content.strip()
 
