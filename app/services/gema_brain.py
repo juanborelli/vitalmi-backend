@@ -27,26 +27,6 @@ def obtener_cliente_openai() -> AsyncOpenAI:
         return AsyncOpenAI(api_key=api_key)
     return None
 
-SYSTEM_PROMPT_FASE_1 = """
-Eres Gema, la asistente virtual médica de VitalMi en República Dominicana.
-Tu objetivo es entregar información exacta del directorio ('consultar_directorio_inteligente'), gestionar disponibilidades por TANDAS, SUGERIR ESPECIALISTAS y entregar la Ficha de Agendamiento Oficial.
-
-### 🎭 BÚSQUEDA Y REGISTRO DE CITAS:
-1. Si el usuario solicita una especialidad (ej: "cardiólogo", "ginecólogo"):
-   - Ejecuta 'consultar_directorio_inteligente' para listar hasta 3 especialistas disponibles.
-   - Invita al usuario a agendar indicándole que debe completar el formulario oficial.
-
-2. Si el usuario menciona que desea agendar una cita o indica un médico específico:
-   - NO generes listas numeradas ni pidas datos uno por uno (Cédula, ARS, etc.).
-   - Responde ÚNICAMENTE entregando el enlace al formulario oficial:
-     "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
-
-### 🚫 REGLAS DE ORO:
-1. NUNCA cambies de médico en medio de la conversación a menos que el usuario lo solicite explícitamente.
-2. NUNCA generes textos pidiendo datos en texto plano.
-3. MANTIENE SIEMPRE LA COINCIDENCIA EXACTA DEL MÉDICO SOLICITADO.
-"""
-
 def obtener_hora_rd_iso() -> str:
     return datetime.now(TZ_RD).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -86,6 +66,72 @@ def resolver_fecha_relativa(texto_fecha: str) -> str:
 
     return ahora_rd.strftime("%Y-%m-%d")
 
+def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") -> dict:
+    supabase = obtener_cliente_supabase()
+    if not supabase:
+        return {}
+
+    try:
+        nombre_guardar = nombre_push.strip() if (nombre_push and nombre_push.strip()) else "Usuario WhatsApp"
+        res = supabase.table("pacientes").select("*").eq("telefono_jid", telefono_jid).execute()
+        if res.data and len(res.data) > 0:
+            paciente_existente = res.data[0]
+            if paciente_existente.get("nombre") in ["Paciente", "Usuario WhatsApp", None, "Trancrédito"] and nombre_guardar not in ["Usuario WhatsApp", "Trancrédito"]:
+                supabase.table("pacientes").update({
+                    "nombre": nombre_guardar,
+                    "updated_at": obtener_hora_rd_iso()
+                }).eq("telefono_jid", telefono_jid).execute()
+                paciente_existente["nombre"] = nombre_guardar
+            return paciente_existente
+
+        datos_nuevo = {
+            "telefono_jid": telefono_jid, 
+            "nombre": nombre_guardar, 
+            "perfil_completo": False,
+            "created_at": obtener_hora_rd_iso()
+        }
+        res_insert = supabase.table("pacientes").insert(datos_nuevo).execute()
+        return res_insert.data[0] if res_insert.data else {}
+    except Exception as e:
+        print(f"❌ Error registrando paciente: {e}")
+        return {}
+
+def obtener_historial_supabase(telefono_jid: str, limite: int = 6) -> List[Dict[str, str]]:
+    supabase = obtener_cliente_supabase()
+    if not supabase:
+        return []
+
+    try:
+        response = (
+            supabase.table("historial_chats")
+            .select("rol, contenido, created_at")
+            .eq("telefono_jid", telefono_jid)
+            .order("created_at", desc=True)
+            .limit(limite)
+            .execute()
+        )
+        registros = response.data[::-1] if response.data else []
+        return registros
+    except Exception as e:
+        return []
+
+def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_mensaje: str = "texto"):
+    supabase = obtener_cliente_supabase()
+    if not supabase:
+        return
+
+    try:
+        data = {
+            "telefono_jid": telefono_jid,
+            "rol": rol,
+            "contenido": contenido,
+            "tipo_mensaje": tipo_mensaje,
+            "created_at": obtener_hora_rd_iso()
+        }
+        supabase.table("historial_chats").insert(data).execute()
+    except Exception as e:
+        print(f"❌ Error guardando mensaje: {e}")
+
 def consultar_mis_citas(telefono_jid: str) -> str:
     supabase = obtener_cliente_supabase()
     if not supabase:
@@ -113,7 +159,6 @@ def consultar_mis_citas(telefono_jid: str) -> str:
         }, ensure_ascii=False)
 
     except Exception as e:
-        print(f"❌ Error en consultar_mis_citas: {e}")
         return json.dumps({"error": str(e)})
 
 def gestionar_estado_cita(cita_id: str = "", telefono_jid: str = "", nuevo_estado: str = "cancelada") -> str:
@@ -135,11 +180,10 @@ def gestionar_estado_cita(cita_id: str = "", telefono_jid: str = "", nuevo_estad
 
         return json.dumps({
             "status": "exitoso",
-            "mensaje": f"La cita ha sido actualizada a estado '{nuevo_estado}' correctamente en VitalMi."
+            "mensaje": f"La cita ha sido actualizada a estado '{nuevo_estado}' correctamente."
         }, ensure_ascii=False)
 
     except Exception as e:
-        print(f"❌ Error en gestionar_estado_cita: {e}")
         return json.dumps({"error": str(e)})
 
 def agendar_cita_medica(
@@ -185,15 +229,6 @@ def agendar_cita_medica(
 
         paciente_cedula_final = cedula_paciente.strip() if cedula_paciente.strip() else (solicitante.get("cedula") or "No registrada")
         paciente_ars_final = ars_paciente.strip() if ars_paciente.strip() else (solicitante.get("ars") or "Privado")
-
-        if not es_para_tercero and paciente_id:
-            actualizaciones = {}
-            if cedula_paciente.strip():
-                actualizaciones["cedula"] = cedula_paciente.strip()
-            if ars_paciente.strip():
-                actualizaciones["ars"] = ars_paciente.strip()
-            if actualizaciones:
-                supabase.table("pacientes").update(actualizaciones).eq("id", paciente_id).execute()
 
         centro_medico = "Centro Médico Autorizado"
         telefono_doctor = "No disponible"
@@ -247,7 +282,6 @@ def agendar_cita_medica(
         }, ensure_ascii=False)
 
     except Exception as e:
-        print(f"❌ Error en agendar_cita_medica: {e}")
         return json.dumps({"error": str(e)})
 
 def consultar_horario_y_bloqueos(medico_master_id: int = 0, medico_nombre: str = "", fecha_consulta: str = "") -> str:
@@ -292,140 +326,65 @@ def consultar_directorio_inteligente(
     except Exception as e:
         return json.dumps({"error": str(e)})
 
-def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") -> dict:
-    supabase = obtener_cliente_supabase()
-    if not supabase:
-        return {}
+SYSTEM_PROMPT_PACIENTE_REGISTRADO = """
+Eres Gema, la asistente virtual médica de VitalMi en República Dominicana.
+El usuario con el que hablas YA ESTÁ REGISTRADO en la plataforma (tiene su perfil completo en Supabase).
 
-    try:
-        nombre_guardar = nombre_push.strip() if (nombre_push and nombre_push.strip()) else "Usuario WhatsApp"
-        res = supabase.table("pacientes").select("*").eq("telefono_jid", telefono_jid).execute()
-        if res.data and len(res.data) > 0:
-            paciente_existente = res.data[0]
-            if paciente_existente.get("nombre") in ["Paciente", "Usuario WhatsApp", None, "Trancrédito"] and nombre_guardar not in ["Usuario WhatsApp", "Trancrédito"]:
-                supabase.table("pacientes").update({
-                    "nombre": nombre_guardar,
-                    "updated_at": obtener_hora_rd_iso()
-                }).eq("telefono_jid", telefono_jid).execute()
-                paciente_existente["nombre"] = nombre_guardar
-            return paciente_existente
+### 🎯 TU OBJETIVO:
+Atender de forma ultra-rápida, concisa y ejecutiva la solicitud de agendamiento de cita del paciente.
 
-        datos_nuevo = {"telefono_jid": telefono_jid, "nombre": nombre_guardar, "created_at": obtener_hora_rd_iso()}
-        res_insert = supabase.table("pacientes").insert(datos_nuevo).execute()
-        return res_insert.data[0] if res_insert.data else {}
-    except Exception as e:
-        return {}
-
-def obtener_historial_supabase(telefono_jid: str, limite: int = 6) -> List[Dict[str, str]]:
-    supabase = obtener_cliente_supabase()
-    if not supabase:
-        return []
-
-    try:
-        response = (
-            supabase.table("historial_chats")
-            .select("rol, contenido, created_at")
-            .eq("telefono_jid", telefono_jid)
-            .order("created_at", desc=True)
-            .limit(limite)
-            .execute()
-        )
-        registros = response.data[::-1] if response.data else []
-        return registros
-    except Exception as e:
-        return []
-
-def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_mensaje: str = "texto"):
-    supabase = obtener_cliente_supabase()
-    if not supabase:
-        return
-
-    try:
-        data = {
-            "telefono_jid": telefono_jid,
-            "rol": rol,
-            "contenido": contenido,
-            "tipo_mensaje": tipo_mensaje,
-            "created_at": obtener_hora_rd_iso()
-        }
-        supabase.table("historial_chats").insert(data).execute()
-    except Exception as e:
-        print(f"❌ Error guardando mensaje: {e}")
+### 🚫 REGLAS DE ORO:
+1. JAMÁS vuelvas a enviar enlaces a Google Forms ni pidas cédula, ARS ni provincia; esos datos ya están guardados en su perfil.
+2. Si el usuario pide agendar con un médico o especialidad:
+   - Consulta el directorio con 'consultar_directorio_inteligente'.
+   - Solicita ÚNICAMENTE la Fecha deseada y la Tanda (Mañana o Tarde).
+3. Sé breve, profesional y directo al punto. Cero rellenos o frases genéricas como "Estoy aquí para ayudarte".
+"""
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
     client = obtener_cliente_openai()
     if not client:
         return "Hola, en este momento estamos actualizando el sistema. Escríbeme en un minuto y con gusto te ayudo."
 
+    # 1. Registrar o recuperar el paciente en Supabase
     paciente = registrar_o_actualizar_paciente(numero_usuario, nombre_usuario)
-    nombre_contacto = paciente.get("nombre", nombre_usuario) if paciente.get("nombre") else "Juan"
-    if nombre_contacto in ["Trancrédito", "Usuario WhatsApp", "Paciente", ""]:
-        nombre_contacto = "Juan"
-
-    historial_raw = obtener_historial_supabase(numero_usuario, limite=6)
-
-    ahora_rd = datetime.now(TZ_RD)
-    fecha_hoy_str = ahora_rd.strftime("%Y-%m-%d")
     
-    ya_saludo_hoy = False
-    if historial_raw:
-        for m in historial_raw:
-            created_at_str = str(m.get("created_at", ""))
-            if created_at_str.startswith(fecha_hoy_str):
-                ya_saludo_hoy = True
-                break
+    nombre_contacto = paciente.get("nombre", nombre_usuario) if paciente.get("nombre") else nombre_usuario
+    if not nombre_contacto or nombre_contacto in ["Trancrédito", "Usuario WhatsApp", "Paciente", ""]:
+        nombre_contacto = "JUAN REYES"
 
-    guardar_mensaje_supabase(numero_usuario, "user", mensaje_usuario)
-
-    historial_limpio = [{"role": m["rol"] if "rol" in m else m["role"], "content": m["contenido"] if "contenido" in m else m["content"]} for m in historial_raw]
-
-    dias_semana_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-    
-    proximos_dias = []
-    for i in range(7):
-        dia_futuro = ahora_rd + timedelta(days=i)
-        nombre_d = dias_semana_es[dia_futuro.weekday()]
-        fecha_f = dia_futuro.strftime("%d de %B de %Y")
-        proximos_dias.append(f"- {nombre_d}: {fecha_f}")
-    
-    tabla_dias_str = "\n".join(proximos_dias)
-
-    hora_actual = ahora_rd.hour
-    saludo_tiempo = "buenos días" if 5 <= hora_actual < 12 else ("buenas tardes" if 12 <= hora_actual < 19 else "buenas noches")
-    
+    perfil_completo = paciente.get("perfil_completo", False)
     url_form_oficial = "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
 
-    if not ya_saludo_hoy:
-        instruccion_saludo = (
-            f"ES EL PRIMER CONTACTO DEL DÍA ({fecha_hoy_str}). Inicia tu respuesta OBLIGATORIAMENTE con el saludo oficial:\n"
-            f"'Hola {nombre_contacto}, ¿cómo te sientes hoy? Espero que te encuentres bien de salud. "
-            f"Para agendar una cita favor de llenar este breve formulario:\n📋 {url_form_oficial}\n\n"
-            f"Y recuerda, soy Gema de VitalMi. Tu asistente para citas médicas en toda República Dominicana.'\n"
+    # 2. INTERCEPCIÓN DETERMINISTA DE REGISTRO (SI NO TIENE PERFIL COMPLETO)
+    if not perfil_completo:
+        respuesta_onboarding = (
+            f"Hola {nombre_contacto}, ¿cómo te sientes hoy? Espero que te encuentres bien de salud. "
+            f"Para agendar tu cita con mayor rapidez y precisión, esta vez y siempre, necesito que llenes este breve formulario. "
+            f"Favor de hacer click en el siguiente enlace:\n\n"
+            f"📋 {url_form_oficial}"
         )
-    else:
-        instruccion_saludo = (
-            f"EL USUARIO YA RECIBIÓ EL SALUDO HOY ({fecha_hoy_str}). "
-            f"Si solicita agendar una cita o indica un médico, entrega directamente el enlace al formulario:\n📋 {url_form_oficial}"
-        )
+        guardar_mensaje_supabase(numero_usuario, "user", mensaje_usuario)
+        guardar_mensaje_supabase(numero_usuario, "assistant", respuesta_onboarding)
+        return respuesta_onboarding
 
-    contexto_temporal = (
-        f"\n\n### ⏰ ANCLA TEMPORAL Y CALENDARIO EXACTO DE HOY:\n"
-        f"Hoy es {dias_semana_es[ahora_rd.weekday()]}, {ahora_rd.strftime('%d de %B de %Y')} (Hora actual: {ahora_rd.strftime('%I:%M %p')}).\n"
-        f"Usa ESTA TABLA DE FECHA REAL para saber qué fecha le corresponde a cada día:\n"
-        f"{tabla_dias_str}\n\n"
-        f"ÚLTIMO MENSAJE DEL USUARIO: '{mensaje_usuario}'.\n"
-        f"{instruccion_saludo}\n"
-    )
-    contexto_usuario = f"\nTe estás comunicando por WhatsApp con '{nombre_contacto}' (ID: {numero_usuario})."
+    # 3. SI EL PACIENTE YA TIENE PERFIL COMPLETO, SE PROCESA CON EL LLM CONVERSACIONAL Y RÁPIDO
+    guardar_mensaje_supabase(numero_usuario, "user", mensaje_usuario)
+    historial_raw = obtener_historial_supabase(numero_usuario, limite=6)
+    historial_limpio = [{"role": m["rol"] if "rol" in m else m["role"], "content": m["contenido"] if "contenido" in m else m["content"]} for m in historial_raw]
+
+    ahora_rd = datetime.now(TZ_RD)
+    contexto_temporal = f"\nHoy es {ahora_rd.strftime('%Y-%m-%d %H:%M:%S')} AST en República Dominicana."
+    contexto_usuario = f"\nHablas con el paciente registrado '{nombre_contacto}' (WhatsApp ID: {numero_usuario})."
     
-    system_prompt = SYSTEM_PROMPT_FASE_1 + contexto_temporal + contexto_usuario
+    system_prompt = SYSTEM_PROMPT_PACIENTE_REGISTRADO + contexto_temporal + contexto_usuario
 
     tools = [
         {
             "type": "function",
             "function": {
                 "name": "consultar_directorio_inteligente",
-                "description": "Consulta sobre la tabla 'vitalmi_directorio_master'.",
+                "description": "Consulta en el directorio médico.",
                 "parameters": {"type": "object", "properties": {"nombre_medico": {"type": "string"}}, "required": []}
             }
         },
@@ -440,23 +399,17 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         {
             "type": "function",
             "function": {
-                "name": "consultar_mis_citas",
-                "description": "Muestra las citas activas del usuario.",
-                "parameters": {"type": "object", "properties": {}, "required": []}
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "gestionar_estado_cita",
-                "description": "Cancela la cita médica activa.",
+                "name": "agendar_cita_medica",
+                "description": "Registra la cita médica utilizando los datos de perfil ya guardados.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "cita_id": {"type": "string"},
-                        "nuevo_estado": {"type": "string"}
+                        "medico_nombre": {"type": "string"},
+                        "fecha_cita": {"type": "string"},
+                        "tanda": {"type": "string"},
+                        "motivo_consulta": {"type": "string"}
                     },
-                    "required": []
+                    "required": ["medico_nombre", "fecha_cita", "tanda"]
                 }
             }
         }
@@ -489,13 +442,9 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                     res_tool = consultar_directorio_inteligente(**args)
                 elif name == "consultar_horario_y_bloqueos":
                     res_tool = consultar_horario_y_bloqueos(**args)
-                elif name == "consultar_mis_citas":
-                    res_tool = consultar_mis_citas(telefono_jid=numero_usuario)
-                elif name == "gestionar_estado_cita":
+                elif name == "agendar_cita_medica":
                     args["telefono_jid"] = numero_usuario
-                    if "nuevo_estado" not in args:
-                        args["nuevo_estado"] = "cancelada"
-                    res_tool = gestionar_estado_cita(**args)
+                    res_tool = agendar_cita_medica(**args)
                 else:
                     res_tool = json.dumps({"error": "Herramienta no encontrada"})
 
@@ -510,7 +459,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 model="gpt-4o-mini",
                 messages=messages_tool,
                 temperature=0.0,
-                max_tokens=700
+                max_tokens=500
             )
             
             respuesta_texto = second_response.choices[0].message.content.strip()
