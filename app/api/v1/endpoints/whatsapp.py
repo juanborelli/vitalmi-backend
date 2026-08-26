@@ -11,21 +11,93 @@ from app.services.voice_service import (
     transcribir_audio_base64, 
     generar_audio_elevenlabs
 )
-from app.services.gema_brain import obtener_respuesta_gema, agendar_cita_medica
+from app.services.gema_brain import obtener_respuesta_gema, agendar_cita_medica, obtener_hora_rd_iso
+from app.core.supabase import obtener_cliente_supabase
 
 router = APIRouter()
+
+
+@router.post("/webhook-google-forms")
+async def recibir_google_forms(request: Request):
+    """
+    Recibe los 10 puntos de la Ficha de Registro de Paciente desde Google Forms (vía Apps Script),
+    almacena el perfil del paciente en la tabla 'pacientes' de Supabase
+    y confirma la bienvenida vía Evolution API.
+    """
+    try:
+        data = await request.json()
+        print(f"📋 Ficha de Registro de Paciente recibida: {data}")
+
+        telefono_raw = data.get("d. Número de WhatsApp", "") or data.get("Número de WhatsApp", "")
+        usuario_jid = f"{telefono_raw}@s.whatsapp.net" if telefono_raw else ""
+
+        nombre_completo = data.get("b. Nombre Completo del Paciente", "") or data.get("Nombre Completo", "")
+        cedula = data.get("c. Número de Cédula o Pasaporte", "") or data.get("Cédula", "")
+        
+        # Mapeo simplificado al campo único 'edad'
+        edad = data.get("Edad", "") or data.get("Fecha de Nacimiento o Edad", "")
+        
+        ars = data.get("e. Nombre de tu ARS / Seguro Médico", "Privado")
+        afiliado = data.get("f. Número de Afiliado", "No especificado")
+        plan = data.get("g. Tipo de Plan", "Básico (PDSS)")
+        provincia = data.get("Provincia", "")
+        municipio_sector = data.get("Municipio y Sector", "")
+
+        # 1. Almacenar o actualizar el Perfil del Paciente en Supabase
+        supabase = obtener_cliente_supabase()
+        if supabase and telefono_raw:
+            datos_paciente = {
+                "telefono_jid": usuario_jid,
+                "nombre": nombre_completo,
+                "cedula": cedula,
+                "edad": edad,
+                "ars": ars,
+                "numero_afiliado": afiliado,
+                "tipo_plan": plan,
+                "provincia": provincia,
+                "municipio_sector": municipio_sector,
+                "perfil_completo": True,
+                "updated_at": obtener_hora_rd_iso()
+            }
+            
+            # Buscar si ya existe para actualizar o realizar el insert
+            res_exist = supabase.table("pacientes").select("id").eq("telefono_jid", usuario_jid).execute()
+            if res_exist.data:
+                supabase.table("pacientes").update(datos_paciente).eq("telefono_jid", usuario_jid).execute()
+            else:
+                supabase.table("pacientes").insert(datos_paciente).execute()
+
+        # 2. Enviar Confirmación de Bienvenida al Paciente por WhatsApp
+        if telefono_raw:
+            mensaje_bienvenida = (
+                f"🎉 ¡Hola {nombre_completo}! Tu ficha de registro en VitalMi ha sido completada con éxito.\n\n"
+                f"👤 *PERFIL DE PACIENTE REGISTRADO:*\n"
+                f"• *Cédula:* {cedula}\n"
+                f"• *Edad:* {edad} años\n"
+                f"• *Seguro Médico:* {ars} ({plan})\n"
+                f"• *Ubicación:* {municipio_sector}, {provincia}\n\n"
+                f"Ya no tendrás que volver a llenar este formulario. A partir de ahora, cuando desees agendar una cita médica, "
+                f"solo escríbeme directamente por aquí indicándome el médico o la especialidad que necesitas. ¡Estoy lista para ayudarte!"
+            )
+            await enviar_mensaje_whatsapp(destinatario=telefono_raw, texto=mensaje_bienvenida)
+
+        return {"status": "success", "message": "Perfil de paciente registrado correctamente"}
+
+    except Exception as e:
+        print(f"❌ Error procesando registro de paciente: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 async def procesar_webhook_background(payload: dict):
     """
     Procesa el mensaje de WhatsApp recibido vía Evolution API.
-    Soporta Texto, Audio (Whisper) y Respuestas de Formularios Nativo (WhatsApp Flows).
+    Soporta Texto, Audio (Whisper) y Respuestas Conversacionales.
     """
     try:
         data = payload.get("data", {})
         key = data.get("key", {})
         
-        # Ignorar mensajes propios enviados por el bot
+        # Omitir mensajes enviados por la propia instancia del bot
         if key.get("fromMe", False):
             return
 
@@ -37,44 +109,6 @@ async def procesar_webhook_background(payload: dict):
         message = data.get("message", {})
         message_type = str(data.get("messageType") or "").lower()
         
-        # -------------------------------------------------------------
-        # CASO 1: EL USUARIO RESPONDIÓ UN FORMULARIO NATIVO (FLOWS)
-        # -------------------------------------------------------------
-        if "interactiveresponsemessage" in message_type or "interactiveResponseMessage" in message:
-            interactive_data = message.get("interactiveResponseMessage", {})
-            native_flow_response = interactive_data.get("nativeFlowResponseMessage", {})
-            
-            response_json_str = native_flow_response.get("paramsJson", "{}")
-            datos_formulario = json.loads(response_json_str)
-
-            print(f"📋 Formulario de WhatsApp Flow recibido de '{push_name}': {datos_formulario}")
-
-            es_tercero = (datos_formulario.get("tipo_paciente") == "tercero")
-            
-            # Ejecución limpia de agendamiento directo en backend
-            res_agendamiento = agendar_cita_medica(
-                telefono_jid=remote_jid,
-                medico_nombre=datos_formulario.get("medico_nombre", "Médico General"),
-                fecha_cita=datos_formulario.get("fecha_cita", "proxima_disponible"),
-                tanda=datos_formulario.get("tanda", "Tanda de la Mañana"),
-                es_para_tercero=es_tercero,
-                nombre_paciente_tercero=datos_formulario.get("nombre_completo") if es_tercero else "",
-                telefono_paciente_tercero=datos_formulario.get("telefono") if es_tercero else "",
-                cedula_paciente=datos_formulario.get("cedula", ""),
-                ars_paciente=datos_formulario.get("ars", "Privado"),
-                numero_afiliado_ars=datos_formulario.get("numero_afiliado", "No especificado"),
-                motivo_consulta=datos_formulario.get("motivo_consulta", "Consulta General / Primera Visita")
-            )
-
-            res_data = json.loads(res_agendamiento)
-            mensaje_confirmacion = res_data.get("mensaje_formateado_final")
-
-            await enviar_mensaje_whatsapp(destinatario=remote_jid, texto=mensaje_confirmacion)
-            return
-
-        # -------------------------------------------------------------
-        # CASO 2: MENSAJE CONVENCIONAL DE TEXTO O NOTA DE VOZ
-        # -------------------------------------------------------------
         texto_usuario = ""
         es_audio = False
         
@@ -111,7 +145,7 @@ async def procesar_webhook_background(payload: dict):
 
         print(f"🧠 Enviando a Gema Brain para {remote_jid} ({push_name}): '{texto_usuario}'")
         
-        # Procesar con la inteligencia de Gema (conversación)
+        # Procesamiento en la lógica central de Gema
         respuesta_ia = await obtener_respuesta_gema(
             mensaje_usuario=texto_usuario,
             numero_usuario=remote_jid,
