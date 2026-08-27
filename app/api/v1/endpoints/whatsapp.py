@@ -1,3 +1,4 @@
+import re
 import base64
 import json
 from fastapi import APIRouter, Request, BackgroundTasks, HTTPException
@@ -17,41 +18,64 @@ from app.core.supabase import obtener_cliente_supabase
 router = APIRouter()
 
 
+def extraer_campo(respuestas: dict, palabras_clave: list, defecto: str = "") -> str:
+    """
+    Busca de manera flexible una respuesta en el diccionario del Google Form 
+    coincidiendo con una lista de palabras clave.
+    """
+    for clave, valor in respuestas.items():
+        for kw in palabras_clave:
+            if kw.lower() in clave.lower() and valor:
+                return str(valor).strip()
+    return defecto
+
+
 @router.post("/webhook-google-forms")
 async def recibir_google_forms(request: Request):
     """
     Recibe la Ficha de Registro de Paciente desde Google Forms (vía Apps Script),
-    almacena el perfil completo en la tabla 'pacientes' de Supabase (incluyendo Email y Edad)
-    y confirma la bienvenida vía Evolution API.
+    mapea los campos flexibles (incluyendo Email), limpia el número de teléfono internacional 
+    y envía el mensaje de bienvenida por WhatsApp.
     """
     try:
         data = await request.json()
-        print(f"📋 Ficha de Registro de Paciente recibida: {data}")
+        print(f"📋 Ficha de Registro recibida de Google Forms: {data}")
 
-        telefono_raw = data.get("d. Número de WhatsApp", "") or data.get("Número de WhatsApp", "")
-        usuario_jid = f"{telefono_raw}@s.whatsapp.net" if telefono_raw else ""
+        # Extraer mapa de respuestas (si viene anidado en respuestas o directamente)
+        respuestas = data.get("respuestas", {}) if "respuestas" in data else data
 
-        nombre_completo = data.get("b. Nombre Completo del Paciente", "") or data.get("Nombre Completo", "")
-        cedula = data.get("c. Número de Cédula o Pasaporte", "") or data.get("Cédula", "")
-        edad = data.get("Edad", "") or data.get("Fecha de Nacimiento o Edad", "")
-        
-        # Captura del Correo Electrónico Recopilado Automáticamente
+        # 1. Extracción Flexible de Datos del Formulario
+        nombre_completo = extraer_campo(respuestas, ["nombre completo", "nombre"], "Paciente")
+        telefono_raw = extraer_campo(respuestas, ["whatsapp", "numero", "telefono"], "")
+        cedula = extraer_campo(respuestas, ["cedula", "pasaporte"], "No especificada")
+        edad = extraer_campo(respuestas, ["edad"], "No especificada")
+        ars = extraer_campo(respuestas, ["ars", "seguro"], "Privado")
+        afiliado = extraer_campo(respuestas, ["afiliado", "carnet"], "No especificado")
+        plan = extraer_campo(respuestas, ["plan"], "Básico (PDSS)")
+        provincia = extraer_campo(respuestas, ["provincia"], "San Cristóbal")
+        municipio_sector = extraer_campo(respuestas, ["municipio", "sector"], "")
+
+        # 2. Extracción del Email recopilado automáticamente o por campo
         email_paciente = (
-            data.get("Dirección de correo electrónico", "") 
-            or data.get("email", "") 
-            or data.get("Email", "") 
-            or data.get("Email Address", "")
-        )
-        
-        ars = data.get("e. Nombre de tu ARS / Seguro Médico", "Privado")
-        afiliado = data.get("f. Número de Afiliado", "No especificado")
-        plan = data.get("g. Tipo de Plan", "Básico (PDSS)")
-        provincia = data.get("Provincia", "")
-        municipio_sector = data.get("Municipio y Sector", "")
+            data.get("email", "") 
+            or respuestas.get("Dirección de correo electrónico", "") 
+            or respuestas.get("Email Address", "") 
+            or extraer_campo(respuestas, ["correo", "email"], "")
+        ).strip()
 
-        # 1. Almacenar o actualizar el Perfil del Paciente en Supabase
+        # 3. Limpieza Estricta del Número de Teléfono (Formato Internacional WhatsApp)
+        telefono_clean = re.sub(r"\D", "", telefono_raw)
+        if len(telefono_clean) == 10 and not telefono_clean.startswith("1"):
+            telefono_clean = f"1{telefono_clean}"
+        
+        usuario_jid = f"{telefono_clean}@s.whatsapp.net" if telefono_clean else ""
+
+        if not usuario_jid:
+            raise HTTPException(status_code=400, detail="No se proporcionó un número de WhatsApp válido.")
+
+        # 4. Guardado / Actualización del Perfil en Supabase
         supabase = obtener_cliente_supabase()
-        if supabase and telefono_raw:
+        if supabase:
             datos_paciente = {
                 "telefono_jid": usuario_jid,
                 "nombre": nombre_completo,
@@ -66,45 +90,45 @@ async def recibir_google_forms(request: Request):
                 "perfil_completo": True,
                 "updated_at": obtener_hora_rd_iso()
             }
-            
-            # Buscar si ya existe para actualizar o insertar
+
             res_exist = supabase.table("pacientes").select("id").eq("telefono_jid", usuario_jid).execute()
             if res_exist.data:
                 supabase.table("pacientes").update(datos_paciente).eq("telefono_jid", usuario_jid).execute()
             else:
                 supabase.table("pacientes").insert(datos_paciente).execute()
 
-        # 2. Enviar Confirmación de Bienvenida al Paciente por WhatsApp
-        if telefono_raw:
+        # 5. Enviar Confirmación de Registro por WhatsApp vía Evolution API
+        if telefono_clean:
             mensaje_bienvenida = (
                 f"🎉 ¡Hola {nombre_completo}! Tu ficha de registro en VitalMi ha sido completada con éxito.\n\n"
                 f"👤 *PERFIL DE PACIENTE REGISTRADO:*\n"
                 f"• *Cédula:* {cedula}\n"
                 f"• *Edad:* {edad} años\n"
-                f"• *Correo:* {email_paciente if email_paciente else 'No especificado'}\n"
+                f"• *Correo:* {email_paciente if email_paciente else 'No registrado'}\n"
                 f"• *Seguro Médico:* {ars} ({plan})\n"
                 f"• *Ubicación:* {municipio_sector}, {provincia}\n\n"
                 f"Ya no tendrás que volver a llenar este formulario. A partir de ahora, cuando desees agendar una cita médica, "
-                f"solo escríbeme directamente por aquí indicándome el médico o la especialidad que necesitas. ¡Estoy lista para ayudarte!"
+                f"solo escríbeme directamente por aquí indicándome el médico o la especialidad que necesitas."
             )
-            await enviar_mensaje_whatsapp(destinatario=telefono_raw, texto=mensaje_bienvenida)
+            await enviar_mensaje_whatsapp(destinatario=f"{telefono_clean}@s.whatsapp.net", texto=mensaje_bienvenida)
 
-        return {"status": "success", "message": "Perfil de paciente registrado correctamente"}
+        return {"status": "success", "message": "Perfil de paciente y email registrados correctamente."}
 
     except Exception as e:
-        print(f"❌ Error procesando registro de paciente: {e}")
+        print(f"❌ Error procesando webhook de Google Forms: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 async def procesar_webhook_background(payload: dict):
     """
     Procesa el mensaje de WhatsApp recibido vía Evolution API.
-    Soporta Texto, Audio (Whisper) y Respuestas Conversacionales.
+    Soporta Texto, Audio (Whisper) y Respuestas Conversacionales con Gema.
     """
     try:
         data = payload.get("data", {})
         key = data.get("key", {})
         
+        # Ignorar mensajes salientes enviados por el propio bot
         if key.get("fromMe", False):
             return
 
