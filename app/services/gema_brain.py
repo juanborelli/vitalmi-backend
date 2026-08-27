@@ -98,7 +98,7 @@ def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") ->
 
 def verificar_registro_tercero(telefono_tercero: str) -> str:
     """
-    Verifica si el número de WhatsApp de un tercero está registrado en Supabase con perfil completo.
+    Verifica si el número de WhatsApp de un tercero/familiar está registrado en Supabase con perfil completo.
     """
     supabase = obtener_cliente_supabase()
     if not supabase or not telefono_tercero:
@@ -170,8 +170,8 @@ def consultar_directorio_inteligente(
     mensaje_raw: str = ""
 ) -> str:
     """
-    Busca médicos exclusivamente en la tabla 'vitalmi_directorio_master' filtrando strictly
-    por provincia, centro médico deseado y especialidad, omitiendo palabras de tiempo.
+    Busca médicos exclusivamente en la tabla 'vitalmi_directorio_master' filtrando
+    por provincia, centro médico deseado y especialidad, omitiendo palabras reservadas de tiempo.
     """
     supabase = obtener_cliente_supabase()
     if not supabase:
@@ -235,7 +235,7 @@ def agendar_cita_medica(
         if not medico_nombre or "ninguno" in medico_nombre.lower():
             return json.dumps({"error": "Debes especificar un médico válido antes de agendar."})
 
-        # Determinar de quién se tomarán los datos del perfil guardado
+        # Determinar el perfil objetivo (Titular vs Tercero)
         jid_objetivo = telefono_jid
         if es_para_tercero and telefono_tercero:
             tel_clean = re.sub(r"\D", "", telefono_tercero)
@@ -259,15 +259,19 @@ def agendar_cita_medica(
         meses_es = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
         fecha_formateada = f"{dias_es[fecha_dt.weekday()]} {fecha_dt.day} de {meses_es[fecha_dt.month - 1]} de {fecha_dt.year}"
 
+        # Búsqueda de datos del especialista en el directorio
         centro_medico = "Consultorio Privado Autorizado"
+        especialidad_medico = "Medicina General"
+        
         res_doc = supabase.table("vitalmi_directorio_master").select("*").ilike("nombre", f"%{remover_tildes(medico_nombre)[:6]}%").limit(1).execute()
         if res_doc.data:
             centro_medico = res_doc.data[0].get("centro_medico") or centro_medico
-            medico_nombre = res_doc.data[0].get("nombre")
+            medico_nombre = res_doc.data[0].get("nombre") or medico_nombre
+            especialidad_medico = res_doc.data[0].get("especialidad") or especialidad_medico
 
         datos_cita = {
             "paciente_id": paciente_id,
-            "motivo_consulta": f"Paciente: {nombre_paciente} | Cédula: {cedula_paciente} | ARS: {ars_paciente} ({plan_ars}, Afiliado: {afiliado_ars}) | Médico: {medico_nombre} | Centro: {centro_medico} | Tanda: {tanda} | Fecha: {fecha_formateada} | Motivo: {motivo_consulta}",
+            "motivo_consulta": f"Paciente: {nombre_paciente} | Cédula: {cedula_paciente} | ARS: {ars_paciente} ({plan_ars}, Afiliado: {afiliado_ars}) | Médico: {medico_nombre} ({especialidad_medico}) | Centro: {centro_medico} | Tanda: {tanda} | Fecha: {fecha_formateada} | Motivo: {motivo_consulta}",
             "estado": "pendiente_aprobacion",
             "created_at": obtener_hora_rd_iso()
         }
@@ -275,19 +279,23 @@ def agendar_cita_medica(
         res_cita = supabase.table("citas").insert(datos_cita).execute()
         cita_creada = res_cita.data[0] if res_cita.data else {}
 
+        # PLANTILLA ACTUALIZADA
         mensaje_final = (
             "📋 *SOLICITUD DE CITA REGISTRADA*\n\n"
             "👤 *DATOS DEL PACIENTE:*\n"
             f"• *Nombre:* {nombre_paciente}\n"
             f"• *Cédula:* {cedula_paciente}\n"
-            f"• *ARS:* {ars_paciente} ({plan_ars})\n\n"
+            f"• *ARS:* {ars_paciente} ({plan_ars})\n"
+            f"• *No. Afiliado:* {afiliado_ars}\n\n"
             "👨‍⚕️ *DATOS DEL ESPECIALISTA:*\n"
             f"• *Doctor:* {medico_nombre}\n"
+            f"• *Especialidad:* {especialidad_medico}\n"
             f"• *Centro:* {centro_medico}\n\n"
-            "📅 *HORARIO:*\n"
+            "📅 *HORARIO Y DETALLES:*\n"
             f"• *Fecha:* {fecha_formateada}\n"
             f"• *Tanda:* {tanda}\n"
-            "• *Estado:* ⏳ Pendiente de confirmación por la secretaria.\n"
+            f"• *Motivo:* {motivo_consulta}\n"
+            "• *Estado:* ⏳ Cita pendiente de confirmación por el doctor.\n"
         )
 
         return json.dumps({
