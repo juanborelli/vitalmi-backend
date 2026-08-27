@@ -20,8 +20,8 @@ router = APIRouter()
 @router.post("/webhook-google-forms")
 async def recibir_google_forms(request: Request):
     """
-    Recibe los 10 puntos de la Ficha de Registro de Paciente desde Google Forms (vía Apps Script),
-    almacena el perfil del paciente en la tabla 'pacientes' de Supabase
+    Recibe la Ficha de Registro de Paciente desde Google Forms (vía Apps Script),
+    almacena el perfil completo en la tabla 'pacientes' de Supabase (incluyendo Email y Edad)
     y confirma la bienvenida vía Evolution API.
     """
     try:
@@ -33,9 +33,15 @@ async def recibir_google_forms(request: Request):
 
         nombre_completo = data.get("b. Nombre Completo del Paciente", "") or data.get("Nombre Completo", "")
         cedula = data.get("c. Número de Cédula o Pasaporte", "") or data.get("Cédula", "")
-        
-        # Mapeo simplificado al campo único 'edad'
         edad = data.get("Edad", "") or data.get("Fecha de Nacimiento o Edad", "")
+        
+        # Captura del Correo Electrónico Recopilado Automáticamente
+        email_paciente = (
+            data.get("Dirección de correo electrónico", "") 
+            or data.get("email", "") 
+            or data.get("Email", "") 
+            or data.get("Email Address", "")
+        )
         
         ars = data.get("e. Nombre de tu ARS / Seguro Médico", "Privado")
         afiliado = data.get("f. Número de Afiliado", "No especificado")
@@ -51,6 +57,7 @@ async def recibir_google_forms(request: Request):
                 "nombre": nombre_completo,
                 "cedula": cedula,
                 "edad": edad,
+                "email": email_paciente,
                 "ars": ars,
                 "numero_afiliado": afiliado,
                 "tipo_plan": plan,
@@ -60,7 +67,7 @@ async def recibir_google_forms(request: Request):
                 "updated_at": obtener_hora_rd_iso()
             }
             
-            # Buscar si ya existe para actualizar o realizar el insert
+            # Buscar si ya existe para actualizar o insertar
             res_exist = supabase.table("pacientes").select("id").eq("telefono_jid", usuario_jid).execute()
             if res_exist.data:
                 supabase.table("pacientes").update(datos_paciente).eq("telefono_jid", usuario_jid).execute()
@@ -74,6 +81,7 @@ async def recibir_google_forms(request: Request):
                 f"👤 *PERFIL DE PACIENTE REGISTRADO:*\n"
                 f"• *Cédula:* {cedula}\n"
                 f"• *Edad:* {edad} años\n"
+                f"• *Correo:* {email_paciente if email_paciente else 'No especificado'}\n"
                 f"• *Seguro Médico:* {ars} ({plan})\n"
                 f"• *Ubicación:* {municipio_sector}, {provincia}\n\n"
                 f"Ya no tendrás que volver a llenar este formulario. A partir de ahora, cuando desees agendar una cita médica, "
@@ -97,7 +105,6 @@ async def procesar_webhook_background(payload: dict):
         data = payload.get("data", {})
         key = data.get("key", {})
         
-        # Omitir mensajes enviados por la propia instancia del bot
         if key.get("fromMe", False):
             return
 
@@ -145,7 +152,6 @@ async def procesar_webhook_background(payload: dict):
 
         print(f"🧠 Enviando a Gema Brain para {remote_jid} ({push_name}): '{texto_usuario}'")
         
-        # Procesamiento en la lógica central de Gema
         respuesta_ia = await obtener_respuesta_gema(
             mensaje_usuario=texto_usuario,
             numero_usuario=remote_jid,
