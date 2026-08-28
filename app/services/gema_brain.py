@@ -14,6 +14,7 @@ env_path = BASE_DIR / ".env"
 load_dotenv(dotenv_path=env_path, override=True)
 
 TZ_RD = zoneinfo.ZoneInfo("America/Santo_Domingo")
+URL_FORM_OFICIAL = "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
 
 def obtener_cliente_openai() -> AsyncOpenAI:
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
@@ -124,6 +125,9 @@ def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") ->
         return {}
 
 def verificar_registro_tercero(telefono_tercero: str) -> str:
+    """
+    Verifica si el tercero está registrado. Si NO lo está, devuelve explícitamente el GForm para el LLM.
+    """
     supabase = obtener_cliente_supabase()
     if not supabase or not telefono_tercero:
         return json.dumps({"registrado": False, "mensaje": "Teléfono inválido o sin datos."})
@@ -141,9 +145,12 @@ def verificar_registro_tercero(telefono_tercero: str) -> str:
                     "mensaje": f"El paciente {pac.get('nombre')} está registrado y con perfil completo."
                 }, ensure_ascii=False)
         
+        # SI NO ESTÁ REGISTRADO: SE RETORNA LA INSTRUCCIÓN DE ENVIAR EL FORMULARIO
         return json.dumps({
             "registrado": False, 
-            "mensaje": f"El número {telefono_tercero} no tiene un perfil completo guardado en Supabase."
+            "requiere_form": True,
+            "url_form": URL_FORM_OFICIAL,
+            "mensaje": f"El familiar con el número {telefono_tercero} NO está registrado. Debes indicarle al usuario que para agendar a esta persona debe llenar primero su ficha en este enlace: {URL_FORM_OFICIAL}"
         }, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -224,7 +231,7 @@ def consultar_directorio_inteligente(
         prov_clean = remover_tildes(provincia).strip()
         centro_clean = remover_tildes(centro_medico_preferido).strip()
 
-        # NIVEL 1
+        # NIVEL 1: Búsqueda exacta
         q1 = supabase.table("vitalmi_directorio_master").select("*")
         if prov_clean:
             q1 = q1.ilike("provincia", f"%{prov_clean}%")
@@ -236,14 +243,14 @@ def consultar_directorio_inteligente(
         res1 = q1.limit(10).execute()
         medicos = res1.data or []
 
-        # NIVEL 2
+        # NIVEL 2: Búsqueda en la Provincia
         if not medicos and prov_clean and token_especialidad:
             q2 = supabase.table("vitalmi_directorio_master").select("*").ilike("provincia", f"%{prov_clean}%")
             q2 = q2.or_(f"nombre.ilike.%{token_especialidad}%,especialidad.ilike.%{token_especialidad}%")
             res2 = q2.limit(10).execute()
             medicos = res2.data or []
 
-        # NIVEL 3
+        # NIVEL 3: Búsqueda general
         if not medicos and token_especialidad:
             q3 = supabase.table("vitalmi_directorio_master").select("*")
             q3 = q3.or_(f"nombre.ilike.%{token_especialidad}%,especialidad.ilike.%{token_especialidad}%")
@@ -285,8 +292,12 @@ def agendar_cita_medica(
             jid_objetivo = normalizar_jid(telefono_tercero)
 
         res_pac = supabase.table("pacientes").select("*").eq("telefono_jid", jid_objetivo).execute()
-        if not res_pac.data:
-            return json.dumps({"error": f"No se encontró el perfil guardado para {jid_objetivo}."})
+        if not res_pac.data or not res_pac.data[0].get("perfil_completo", False):
+            # BLOQUEO SI INTENTA AGENDAR SIN TENER PERFIL COMPLETO
+            return json.dumps({
+                "error": "perfil_incompleto",
+                "mensaje": f"Para confirmar esta cita, la persona requiere estar registrada. Favor de completar el formulario en este enlace: {URL_FORM_OFICIAL}"
+            }, ensure_ascii=False)
 
         paciente = res_pac.data[0]
         paciente_id = paciente.get("id")
@@ -296,7 +307,6 @@ def agendar_cita_medica(
         plan_ars = paciente.get("tipo_plan", "Básico")
         afiliado_ars = paciente.get("numero_afiliado", "No especificado")
 
-        # Resolución de fecha
         fecha_real_iso = resolver_fecha_relativa(fecha_cita)
         try:
             fecha_dt = datetime.strptime(fecha_real_iso, "%Y-%m-%d")
@@ -306,7 +316,6 @@ def agendar_cita_medica(
         except Exception:
             fecha_formateada = fecha_cita
 
-        # MAPEO DE HORARIOS SEGÚN LA TANDA
         tanda_clean = remover_tildes(tanda).lower()
         if "sabado" in tanda_clean or "sábado" in tanda_clean:
             tanda_texto = "Sábados (9:00 AM – 2:00 PM)"
@@ -362,24 +371,28 @@ def agendar_cita_medica(
         print(f"❌ Error en agendar_cita_medica: {e}")
         return json.dumps({"error": str(e)})
 
-SYSTEM_PROMPT_PACIENTE_REGISTRADO = """
+SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente médica virtual de VitalMi en República Dominicana.
-Hablas con un PACIENTE REGISTRADO. Sus datos fijos de perfil están guardados en Supabase.
+Tienes acceso a un directorio de casi 10,000 médicos especialistas en todo el país.
 
-### ⛔ REGLA FUNDAMENTAL DE INTERACCIÓN (UNA SOLA PREGUNTA POR MENSAJE):
-Está ESTRICTAMENTE PROHIBIDO hacer más de una pregunta en el mismo mensaje o agrupar preguntas. Debes avanzar PASO A PASO esperando la respuesta del usuario en cada turno:
+### 🌟 REGLA DE "LA PROBADITA" (BÚSQUEDA LIBRE DE MÉDICOS):
+- Cualquier usuario puede buscar especialidades y médicos libremente llamando a 'consultar_directorio_inteligente'. Muestra los doctores encontrados con gusto para demostrar la capacidad de VitalMi.
+- NO exijas el formulario de registro para simples consultas de directorio o información de médicos.
+
+### ⛔ REGLA DE AGENDAMIENTO Y REGISTRO (UNA SOLA PREGUNTA POR MENSAJE):
+Cuando el usuario desee AGENDAR una cita médica, debes seguir esta secuencia estricta PASO A PASO:
 
 - PASO 1 (BENEFICIARIO): Pregunta únicamente si la cita es para él/ella o para un tercero. Espera respuesta.
-  * Si es para un tercero, solicita su número de WhatsApp y ejecuta 'verificar_registro_tercero'.
+  * Si es para un TERCERO: Pide el número de WhatsApp del tercero y ejecuta 'verificar_registro_tercero'.
+  * SI EL TERCERO NO ESTÁ REGISTRADO: NUNCA pidas sus datos por chat. Entrega inmediatamente el enlace del formulario: {URL_FORM_OFICIAL} y dile que debe llenarlo para continuar.
 - PASO 2 (ESPECIALIDAD/MÉDICO): Pregunta únicamente qué especialidad o doctor necesita. Espera respuesta.
 - PASO 3 (CENTRO MÉDICO Y SELECCIÓN): Pregunta si prefiere alguna clínica o centro médico en particular. 
   * Con esta respuesta, invocas 'consultar_directorio_inteligente', presentas la lista de doctores devuelta y pides que ELIJA UNO. Espera selección.
 - PASO 4 (FECHA PREFERIDA): Pregunta únicamente por la fecha deseada. Espera respuesta.
-- PASO 5 (TANDA): Pregunta únicamente por la tanda deseada: 'Mañana', 'Tarde' o 'Sábados'. (NO menciones los horarios numéricos aquí). Espera respuesta.
+- PASO 5 (TANDA): Pregunta únicamente por la tanda deseada: 'Mañana', 'Tarde' o 'Sábados'. Espera respuesta.
 - PASO 6 (MOTIVO DE CONSULTA): Pregunta el motivo principal de la consulta. Espera respuesta.
-- PASO 7 (CONFIRMACIÓN FINAL): Invoca 'agendar_cita_medica' enviando la fecha y tanda seleccionadas, y entrega el comprobante formateado.
-
-Si el usuario responde a un paso, NO te adelantes al siguiente paso sin antes validar la respuesta del turno actual.
+- PASO 7 (CONFIRMACIÓN FINAL): Invoca 'agendar_cita_medica'.
+  * SI EL PACIENTE (TITULAR O TERCERO) NO TIENE PERFIL COMPLETO: La herramienta devolverá 'perfil_incompleto'. En ese momento, invítale amablemente a completar la ficha por única vez en el enlace: {URL_FORM_OFICIAL}
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
@@ -394,26 +407,10 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     if not nombre_contacto or nombre_contacto in ["Trancrédito", "Usuario WhatsApp", "Paciente", ""]:
         nombre_contacto = "JUAN REYES"
 
-    perfil_completo = paciente.get("perfil_completo", False)
     provincia_paciente = paciente.get("provincia", "San Cristóbal")
     municipio_paciente = paciente.get("municipio", "")
     sector_paciente = paciente.get("sector", "")
-    
-    url_form_oficial = "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
 
-    # ONBOARDING TITULAR (SOLO SI NO TIENE PERFIL COMPLETO)
-    if not perfil_completo:
-        respuesta_onboarding = (
-            f"Hola {nombre_contacto}, ¿cómo te sientes hoy? Espero que te encuentres bien de salud. "
-            f"Para agendar tu cita con mayor rapidez y precisión, esta vez y siempre, necesito que llenes este breve formulario. "
-            f"Favor de hacer click en el siguiente enlace:\n\n"
-            f"📋 {url_form_oficial}"
-        )
-        guardar_mensaje_supabase(jid_normalizado, "user", mensaje_usuario)
-        guardar_mensaje_supabase(jid_normalizado, "assistant", respuesta_onboarding)
-        return respuesta_onboarding
-
-    # PROCESAMIENTO CONVERSACIONAL DE CITA
     guardar_mensaje_supabase(jid_normalizado, "user", mensaje_usuario)
     historial_raw = obtener_historial_supabase(jid_normalizado, limite=6)
     historial_limpio = [{"role": m["rol"] if "rol" in m else m["role"], "content": m["contenido"] if "contenido" in m else m["content"]} for m in historial_raw]
@@ -421,11 +418,11 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     ahora_rd = datetime.now(TZ_RD)
     contexto_temporal = f"\nHoy es {ahora_rd.strftime('%Y-%m-%d %H:%M:%S')} AST en República Dominicana."
     contexto_paciente = (
-        f"\nUSUARIO TITULAR: '{nombre_contacto}' | WhatsApp: {jid_normalizado}\n"
+        f"\nUSUARIO EN CHAT: '{nombre_contacto}' | WhatsApp: {jid_normalizado}\n"
         f"UBICACIÓN REGISTRADA: Provincia: '{provincia_paciente}', Municipio: '{municipio_paciente}', Sector: '{sector_paciente}'."
     )
     
-    system_prompt = SYSTEM_PROMPT_PACIENTE_REGISTRADO + contexto_temporal + contexto_paciente
+    system_prompt = SYSTEM_PROMPT_GEMA + contexto_temporal + contexto_paciente
 
     tools = [
         {
