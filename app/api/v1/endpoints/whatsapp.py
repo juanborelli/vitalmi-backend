@@ -12,7 +12,7 @@ from app.services.voice_service import (
     transcribir_audio_base64, 
     generar_audio_elevenlabs
 )
-from app.services.gema_brain import obtener_respuesta_gema, agendar_cita_medica, obtener_hora_rd_iso
+from app.services.gema_brain import obtener_respuesta_gema, agendar_cita_medica, obtener_hora_rd_iso, normalizar_jid
 from app.core.supabase import obtener_cliente_supabase
 
 router = APIRouter()
@@ -22,8 +22,8 @@ router = APIRouter()
 async def recibir_google_forms(request: Request):
     """
     Recibe la Ficha de Registro desde Google Forms (vía Apps Script),
-    extrae campos flexibles (municipio, sector, email), actualiza Supabase 
-    y envía confirmación de bienvenida vía WhatsApp.
+    normaliza el identificador de WhatsApp para evitar duplicados, 
+    actualiza Supabase con perfil_completo = True y envía la bienvenida.
     """
     try:
         data = await request.json()
@@ -54,11 +54,9 @@ async def recibir_google_forms(request: Request):
         plan = buscar_valor(["plan"], 6, "Básico (PDSS)")
         provincia = buscar_valor(["provincia"], 7, "San Cristóbal")
         
-        # Campos separados de ubicación
         municipio = buscar_valor(["municipio"], 8, "")
         sector = buscar_valor(["sector"], 9, "")
 
-        # Email recopilado
         email_paciente = (
             data.get("email", "") 
             or respuestas.get("Dirección de correo electrónico", "") 
@@ -66,17 +64,13 @@ async def recibir_google_forms(request: Request):
             or buscar_valor(["correo", "email"], 10, "")
         ).strip()
 
-        # 2. Limpieza de Teléfono
-        telefono_clean = re.sub(r"\D", "", telefono_raw)
-        if len(telefono_clean) == 10 and not telefono_clean.startswith("1"):
-            telefono_clean = f"1{telefono_clean}"
-        
-        usuario_jid = f"{telefono_clean}@s.whatsapp.net" if telefono_clean else ""
+        # 2. Normalización Estricta de WhatsApp
+        usuario_jid = normalizar_jid(telefono_raw)
 
-        if not usuario_jid:
+        if not usuario_jid or len(usuario_jid) < 15:
             raise HTTPException(status_code=400, detail="Número de WhatsApp no válido.")
 
-        # 3. Guardado en Supabase
+        # 3. Guardado/Actualización Unificada en Supabase
         supabase = obtener_cliente_supabase()
         if supabase:
             datos_paciente = {
@@ -101,21 +95,20 @@ async def recibir_google_forms(request: Request):
             else:
                 supabase.table("pacientes").insert(datos_paciente).execute()
 
-        # 4. Mensaje de Bienvenida
-        if telefono_clean:
-            ubicacion_texto = f"{sector}, {municipio}, {provincia}" if sector else f"{municipio}, {provincia}"
-            mensaje_bienvenida = (
-                f"🎉 ¡Hola {nombre_completo}! Tu ficha de registro en VitalMi ha sido completada con éxito.\n\n"
-                f"👤 *PERFIL DE PACIENTE REGISTRADO:*\n"
-                f"• *Cédula:* {cedula}\n"
-                f"• *Edad:* {edad} años\n"
-                f"• *Correo:* {email_paciente if email_paciente else 'No registrado'}\n"
-                f"• *Seguro Médico:* {ars} ({plan})\n"
-                f"• *Ubicación:* {ubicacion_texto}\n\n"
-                f"Ya no tendrás que volver a llenar este formulario. A partir de ahora, cuando desees agendar una cita médica, "
-                f"solo escríbeme directamente por aquí indicándome el médico o la especialidad que necesitas."
-            )
-            await enviar_mensaje_whatsapp(destinatario=f"{telefono_clean}@s.whatsapp.net", texto=mensaje_bienvenida)
+        # 4. Mensaje de Bienvenida por WhatsApp
+        ubicacion_texto = f"{sector}, {municipio}, {provincia}" if sector else f"{municipio}, {provincia}"
+        mensaje_bienvenida = (
+            f"🎉 ¡Hola {nombre_completo}! Tu ficha de registro en VitalMi ha sido completada con éxito.\n\n"
+            f"👤 *PERFIL DE PACIENTE REGISTRADO:*\n"
+            f"• *Cédula:* {cedula}\n"
+            f"• *Edad:* {edad} años\n"
+            f"• *Correo:* {email_paciente if email_paciente else 'No registrado'}\n"
+            f"• *Seguro Médico:* {ars} ({plan})\n"
+            f"• *Ubicación:* {ubicacion_texto}\n\n"
+            f"Ya no tendrás que volver a llenar este formulario. A partir de ahora, cuando desees agendar una cita médica, "
+            f"solo escríbeme directamente por aquí indicándome el médico o la especialidad que necesitas."
+        )
+        await enviar_mensaje_whatsapp(destinatario=usuario_jid, texto=mensaje_bienvenida)
 
         return {"status": "success", "message": "Perfil registrado correctamente."}
 

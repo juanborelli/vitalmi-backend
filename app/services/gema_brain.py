@@ -41,6 +41,20 @@ def remover_tildes(texto: str) -> str:
         texto = texto.replace(a, b)
     return texto.strip()
 
+def normalizar_jid(telefono_raw: str) -> str:
+    """
+    Extrae únicamente los dígitos de cualquier número de teléfono o JID de WhatsApp 
+    y asegura un formato estándar de 11 dígitos para República Dominicana/EEUU (ej. 18295156422@s.whatsapp.net).
+    """
+    if not telefono_raw:
+        return ""
+    solo_numeros = re.sub(r"\D", "", telefono_raw)
+    if len(solo_numeros) == 10:
+        solo_numeros = f"1{solo_numeros}"
+    elif len(solo_numeros) > 11 and solo_numeros.startswith("1"):
+        solo_numeros = solo_numeros[:11]
+    return f"{solo_numeros}@s.whatsapp.net"
+
 def resolver_fecha_relativa(texto_fecha: str) -> str:
     ahora_rd = datetime.now(TZ_RD)
     texto_clean = remover_tildes(texto_fecha).lower().strip()
@@ -72,20 +86,26 @@ def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") ->
         return {}
 
     try:
+        jid_normalizado = normalizar_jid(telefono_jid)
         nombre_guardar = nombre_push.strip() if (nombre_push and nombre_push.strip()) else "Usuario WhatsApp"
-        res = supabase.table("pacientes").select("*").eq("telefono_jid", telefono_jid).execute()
+        
+        # Búsqueda por JID normalizado
+        res = supabase.table("pacientes").select("*").eq("telefono_jid", jid_normalizado).execute()
+        
         if res.data and len(res.data) > 0:
             paciente_existente = res.data[0]
+            # Si el paciente existe pero no tiene nombre válido, se actualiza
             if paciente_existente.get("nombre") in ["Paciente", "Usuario WhatsApp", None, "Trancrédito"] and nombre_guardar not in ["Usuario WhatsApp", "Trancrédito"]:
                 supabase.table("pacientes").update({
                     "nombre": nombre_guardar,
                     "updated_at": obtener_hora_rd_iso()
-                }).eq("telefono_jid", telefono_jid).execute()
+                }).eq("telefono_jid", jid_normalizado).execute()
                 paciente_existente["nombre"] = nombre_guardar
             return paciente_existente
 
+        # Si realmente no existe en Supabase, se crea el perfil pendiente de onboarding
         datos_nuevo = {
-            "telefono_jid": telefono_jid, 
+            "telefono_jid": jid_normalizado, 
             "nombre": nombre_guardar, 
             "perfil_completo": False,
             "created_at": obtener_hora_rd_iso()
@@ -93,7 +113,7 @@ def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") ->
         res_insert = supabase.table("pacientes").insert(datos_nuevo).execute()
         return res_insert.data[0] if res_insert.data else {}
     except Exception as e:
-        print(f"❌ Error registrando paciente: {e}")
+        print(f"❌ Error registrando/buscando paciente: {e}")
         return {}
 
 def verificar_registro_tercero(telefono_tercero: str) -> str:
@@ -101,11 +121,10 @@ def verificar_registro_tercero(telefono_tercero: str) -> str:
     if not supabase or not telefono_tercero:
         return json.dumps({"registrado": False, "mensaje": "Teléfono inválido o sin datos."})
 
-    telefono_clean = re.sub(r"\D", "", telefono_tercero)
-    usuario_jid = f"{telefono_clean}@s.whatsapp.net"
+    jid_tercero = normalizar_jid(telefono_tercero)
 
     try:
-        res = supabase.table("pacientes").select("id, nombre, perfil_completo, provincia, ars").eq("telefono_jid", usuario_jid).execute()
+        res = supabase.table("pacientes").select("id, nombre, perfil_completo, provincia, ars").eq("telefono_jid", jid_tercero).execute()
         if res.data and len(res.data) > 0:
             pac = res.data[0]
             if pac.get("perfil_completo", False):
@@ -117,7 +136,7 @@ def verificar_registro_tercero(telefono_tercero: str) -> str:
         
         return json.dumps({
             "registrado": False, 
-            "mensaje": f"El número {telefono_clean} no tiene un perfil completo guardado en Supabase."
+            "mensaje": f"El número {telefono_tercero} no tiene un perfil completo guardado en Supabase."
         }, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -128,10 +147,11 @@ def obtener_historial_supabase(telefono_jid: str, limite: int = 6) -> List[Dict[
         return []
 
     try:
+        jid_norm = normalizar_jid(telefono_jid)
         response = (
             supabase.table("historial_chats")
             .select("rol, contenido, created_at")
-            .eq("telefono_jid", telefono_jid)
+            .eq("telefono_jid", jid_norm)
             .order("created_at", desc=True)
             .limit(limite)
             .execute()
@@ -147,8 +167,9 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         return
 
     try:
+        jid_norm = normalizar_jid(telefono_jid)
         data = {
-            "telefono_jid": telefono_jid,
+            "telefono_jid": jid_norm,
             "rol": rol,
             "contenido": contenido,
             "tipo_mensaje": tipo_mensaje,
@@ -166,10 +187,6 @@ def consultar_directorio_inteligente(
     centro_medico_preferido: str = "",
     mensaje_raw: str = ""
 ) -> str:
-    """
-    Busca médicos en la tabla 'vitalmi_directorio_master' con algoritmo en cascada (Fallbacks)
-    para evitar dar respuestas de 'No encontrado' cuando existen especialistas disponibles.
-    """
     supabase = obtener_cliente_supabase()
     if not supabase:
         return json.dumps({"error": "Sin conexión a base de datos"})
@@ -183,7 +200,6 @@ def consultar_directorio_inteligente(
 
         texto_limpio = remover_tildes(f"{nombre_medico} {especialidad} {mensaje_raw}").lower()
         
-        # Mapeo de términos médicos comunes a su raíz en la base de datos
         if "urol" in texto_limpio:
             token_especialidad = "urol"
         elif "cardio" in texto_limpio:
@@ -201,7 +217,7 @@ def consultar_directorio_inteligente(
         prov_clean = remover_tildes(provincia).strip()
         centro_clean = remover_tildes(centro_medico_preferido).strip()
 
-        # NIVEL 1: Búsqueda exacta (Provincia + Especialidad + Centro Médico si existe)
+        # NIVEL 1: Búsqueda exacta
         q1 = supabase.table("vitalmi_directorio_master").select("*")
         if prov_clean:
             q1 = q1.ilike("provincia", f"%{prov_clean}%")
@@ -213,14 +229,14 @@ def consultar_directorio_inteligente(
         res1 = q1.limit(10).execute()
         medicos = res1.data or []
 
-        # NIVEL 2 (FALLBACK 1): Si da 0 resultados, buscar la Especialidad en toda la Provincia sin importar la clínica
+        # NIVEL 2: Búsqueda en toda la Provincia
         if not medicos and prov_clean and token_especialidad:
             q2 = supabase.table("vitalmi_directorio_master").select("*").ilike("provincia", f"%{prov_clean}%")
             q2 = q2.or_(f"nombre.ilike.%{token_especialidad}%,especialidad.ilike.%{token_especialidad}%")
             res2 = q2.limit(10).execute()
             medicos = res2.data or []
 
-        # NIVEL 3 (FALLBACK 2): Si sigue dando 0 resultados, buscar la Especialidad en la base de datos general
+        # NIVEL 3: Búsqueda en la base de datos general
         if not medicos and token_especialidad:
             q3 = supabase.table("vitalmi_directorio_master").select("*")
             q3 = q3.or_(f"nombre.ilike.%{token_especialidad}%,especialidad.ilike.%{token_especialidad}%")
@@ -257,10 +273,9 @@ def agendar_cita_medica(
         if not medico_nombre or "ninguno" in medico_nombre.lower():
             return json.dumps({"error": "Debes especificar un médico válido antes de agendar."})
 
-        jid_objetivo = telefono_jid
+        jid_objetivo = normalizar_jid(telefono_jid)
         if es_para_tercero and telefono_tercero:
-            tel_clean = re.sub(r"\D", "", telefono_tercero)
-            jid_objetivo = f"{tel_clean}@s.whatsapp.net"
+            jid_objetivo = normalizar_jid(telefono_tercero)
 
         res_pac = supabase.table("pacientes").select("*").eq("telefono_jid", jid_objetivo).execute()
         if not res_pac.data:
@@ -350,7 +365,8 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     if not client:
         return "Hola, en este momento estamos actualizando el sistema. Escríbeme en un minuto y con gusto te ayudo."
 
-    paciente = registrar_o_actualizar_paciente(numero_usuario, nombre_usuario)
+    jid_normalizado = normalizar_jid(numero_usuario)
+    paciente = registrar_o_actualizar_paciente(jid_normalizado, nombre_usuario)
     
     nombre_contacto = paciente.get("nombre", nombre_usuario) if paciente.get("nombre") else nombre_usuario
     if not nombre_contacto or nombre_contacto in ["Trancrédito", "Usuario WhatsApp", "Paciente", ""]:
@@ -363,7 +379,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     
     url_form_oficial = "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
 
-    # INTERCEPCIÓN DETERMINISTA DE ONBOARDING TITULAR
+    # INTERCEPCIÓN DETERMINISTA DE ONBOARDING TITULAR (SOLO SI NO TIENE PERFIL COMPLETO)
     if not perfil_completo:
         respuesta_onboarding = (
             f"Hola {nombre_contacto}, ¿cómo te sientes hoy? Espero que te encuentres bien de salud. "
@@ -371,19 +387,19 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             f"Favor de hacer click en el siguiente enlace:\n\n"
             f"📋 {url_form_oficial}"
         )
-        guardar_mensaje_supabase(numero_usuario, "user", mensaje_usuario)
-        guardar_mensaje_supabase(numero_usuario, "assistant", respuesta_onboarding)
+        guardar_mensaje_supabase(jid_normalizado, "user", mensaje_usuario)
+        guardar_mensaje_supabase(jid_normalizado, "assistant", respuesta_onboarding)
         return respuesta_onboarding
 
-    # PACIENTE REGISTRADO -> PROCESAMIENTO DINÁMICO
-    guardar_mensaje_supabase(numero_usuario, "user", mensaje_usuario)
-    historial_raw = obtener_historial_supabase(numero_usuario, limite=6)
+    # PACIENTE REGISTRADO -> CONTINÚA CON EL FLUJO NORMAL DE CITAS
+    guardar_mensaje_supabase(jid_normalizado, "user", mensaje_usuario)
+    historial_raw = obtener_historial_supabase(jid_normalizado, limite=6)
     historial_limpio = [{"role": m["rol"] if "rol" in m else m["role"], "content": m["contenido"] if "contenido" in m else m["content"]} for m in historial_raw]
 
     ahora_rd = datetime.now(TZ_RD)
     contexto_temporal = f"\nHoy es {ahora_rd.strftime('%Y-%m-%d %H:%M:%S')} AST en República Dominicana."
     contexto_paciente = (
-        f"\nUSUARIO TITULAR: '{nombre_contacto}' | WhatsApp: {numero_usuario}\n"
+        f"\nUSUARIO TITULAR: '{nombre_contacto}' | WhatsApp: {jid_normalizado}\n"
         f"UBICACIÓN REGISTRADA: Provincia: '{provincia_paciente}', Municipio: '{municipio_paciente}', Sector: '{sector_paciente}'."
     )
     
@@ -473,7 +489,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                         args["municipio"] = municipio_paciente
                     res_tool = consultar_directorio_inteligente(**args)
                 elif name == "agendar_cita_medica":
-                    args["telefono_jid"] = numero_usuario
+                    args["telefono_jid"] = jid_normalizado
                     res_tool = agendar_cita_medica(**args)
                 else:
                     res_tool = json.dumps({"error": "Herramienta no encontrada"})
@@ -496,7 +512,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         else:
             respuesta_texto = response_message.content.strip()
 
-        guardar_mensaje_supabase(numero_usuario, "assistant", respuesta_texto)
+        guardar_mensaje_supabase(jid_normalizado, "assistant", respuesta_texto)
         return respuesta_texto
 
     except Exception as e:
