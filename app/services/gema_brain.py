@@ -197,6 +197,10 @@ def consultar_directorio_inteligente(
     centro_medico_preferido: str = "",
     mensaje_raw: str = ""
 ) -> str:
+    """
+    Busca médicos con triangulación considerando:
+    nombre, especialidad, especialidad_medico, centro_medico, direccion, provincia, municipio_cabecera y sector.
+    """
     supabase = obtener_cliente_supabase()
     if not supabase:
         return json.dumps({"error": "Sin conexión a base de datos"})
@@ -227,36 +231,46 @@ def consultar_directorio_inteligente(
         prov_clean = remover_tildes(provincia).strip()
         centro_clean = remover_tildes(centro_medico_preferido).strip()
 
-        # NIVEL 1: Búsqueda por Provincia + Especialidad + Centro
-        q1 = supabase.table("vitalmi_directorio_master").select("*")
+        # CONSTRUCCIÓN DE LA CONSULTA CON TRIANGULACIÓN COMPLETA
+        query = supabase.table("vitalmi_directorio_master").select("*")
+
+        # 1. Triangulación de Provincia (Busca en provincia y en la columna direccion)
         if prov_clean:
-            q1 = q1.ilike("provincia", f"%{prov_clean}%")
+            query = query.or_(f"provincia.ilike.%{prov_clean}%,direccion.ilike.%{prov_clean}%")
+
+        # 2. Triangulación por Centro Médico (Busca en centro_medico y en direccion)
         if centro_clean:
-            q1 = q1.ilike("centro_medico", f"%{centro_clean}%")
+            query = query.or_(f"centro_medico.ilike.%{centro_clean}%,direccion.ilike.%{centro_clean}%")
+
+        # 3. Triangulación por Especialidad (Busca en especialidad, especialidad_medico y subespecialidades_medico)
         if token_especialidad:
-            q1 = q1.or_(f"nombre.ilike.%{token_especialidad}%,especialidad.ilike.%{token_especialidad}%")
-        
-        res1 = q1.limit(10).execute()
+            query = query.or_(
+                f"nombre.ilike.%{token_especialidad}%,"
+                f"especialidad.ilike.%{token_especialidad}%,"
+                f"especialidad_medico.ilike.%{token_especialidad}%,"
+                f"subespecialidades_medico.ilike.%{token_especialidad}%"
+            )
+
+        res1 = query.limit(10).execute()
         medicos = res1.data or []
 
-        # NIVEL 2: Búsqueda en la Provincia si no hay en el centro
+        # NIVEL 2: Fallback si se buscaba un centro específico y no hubo resultados
         if not medicos and prov_clean and token_especialidad:
-            q2 = supabase.table("vitalmi_directorio_master").select("*").ilike("provincia", f"%{prov_clean}%")
-            q2 = q2.or_(f"nombre.ilike.%{token_especialidad}%,especialidad.ilike.%{token_especialidad}%")
+            q2 = supabase.table("vitalmi_directorio_master").select("*")
+            q2 = q2.or_(f"provincia.ilike.%{prov_clean}%,direccion.ilike.%{prov_clean}%")
+            if token_especialidad:
+                q2 = q2.or_(
+                    f"nombre.ilike.%{token_especialidad}%,"
+                    f"especialidad.ilike.%{token_especialidad}%,"
+                    f"especialidad_medico.ilike.%{token_especialidad}%"
+                )
             res2 = q2.limit(10).execute()
             medicos = res2.data or []
-
-        # NIVEL 3: Búsqueda general
-        if not medicos and token_especialidad:
-            q3 = supabase.table("vitalmi_directorio_master").select("*")
-            q3 = q3.or_(f"nombre.ilike.%{token_especialidad}%,especialidad.ilike.%{token_especialidad}%")
-            res3 = q3.limit(10).execute()
-            medicos = res3.data or []
 
         if not medicos:
             return json.dumps({
                 "total_exacto": 0, 
-                "mensaje": f"No se encontraron especialistas para los criterios especificados.",
+                "mensaje": f"No se encontraron especialistas en {prov_clean if prov_clean else 'la provincia especificada'}.",
                 "medicos_muestra": []
             }, ensure_ascii=False)
 
@@ -376,11 +390,10 @@ Cuando el usuario te salude (ej. "Hola", "Buenas", "Hola Gema"), responde SIEMPR
 
 ### 🧠 BÚSQUEDA INTELIGENTE Y CONTEXTUALIZACIÓN PROGRESIVA:
 1. Si el usuario dice simplemente "necesito un doctor", tu respuesta lógica debe ser: "¿Para cuál especialidad necesitas el doctor?"
-2. Cuando tengas la especialidad (ej. "urólogo", "cardiólogo"), NO asumas inmediatamente que quiere una cita ni invoques agendamiento.
-3. Debes preguntar UNA COSA A LA VEZ para afinar el contexto geográfico:
-   - Primero pregunta por su Provincia (si no la ha mencionado ni está registrada en su contexto).
-   - Luego pregunta por su Municipio o Sector.
-   - Con la especialidad y la ubicación confirmadas, invocas 'consultar_directorio_inteligente' y presentas la lista de especialistas encontrados en esa zona.
+2. Cuando tengas la especialidad (ej. "urólogo", "cardiólogo"):
+   - Pregunta por la Provincia en la que desea buscar (si no la ha mencionado aún).
+   - Una vez confirmada la Provincia, pregunta por el Municipio o Sector.
+   - OBLIGATORIO: Pasa SIEMPRE el parámetro 'provincia' a la función 'consultar_directorio_inteligente'. NUNCA llames a la función con la provincia vacía si el usuario ya te dijo dónde está.
 
 ### 📅 REGLA DE AGENDAMIENTO SECUENCIAL (SOLO CUANDO EL USUARIO PIDA CITA):
 Si el usuario confirma que desea AGENDAR una cita con un médico seleccionado:
@@ -404,7 +417,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     if not nombre_contacto or nombre_contacto in ["Trancrédito", "Usuario WhatsApp", "Paciente", ""]:
         nombre_contacto = "Juan"
     else:
-        # Extraer primer nombre
         nombre_contacto = nombre_contacto.split()[0].capitalize()
 
     provincia_paciente = paciente.get("provincia", "")
@@ -412,14 +424,27 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     sector_paciente = paciente.get("sector", "")
 
     guardar_mensaje_supabase(jid_normalizado, "user", mensaje_usuario)
-    historial_raw = obtener_historial_supabase(jid_normalizado, limite=6)
+    historial_raw = obtener_historial_supabase(jid_normalizado, limite=10)
     historial_limpio = [{"role": m["rol"] if "rol" in m else m["role"], "content": m["contenido"] if "contenido" in m else m["content"]} for m in historial_raw]
+
+    # EXTRAER PROVINCIA DEL HISTORIAL SI NO ESTÁ EN SUPABASE
+    texto_historial = " ".join([m["content"] for m in historial_limpio]).lower()
+    provincia_detectada = provincia_paciente
+    if not provincia_detectada:
+        provincias_rd = [
+            "san cristobal", "santo domingo", "distrito nacional", "santiago", "la vega", 
+            "puerto plata", "la altagracia", "san pedro de macoris", "la romana", "duarte", "espaillat"
+        ]
+        for p in provincias_rd:
+            if p in texto_historial:
+                provincia_detectada = p.title()
+                break
 
     ahora_rd = datetime.now(TZ_RD)
     contexto_temporal = f"\nHoy es {ahora_rd.strftime('%Y-%m-%d %H:%M:%S')} AST en República Dominicana."
     contexto_paciente = (
         f"\nUSUARIO EN CHAT: '{nombre_contacto}' | WhatsApp: {jid_normalizado}\n"
-        f"UBICACIÓN REGISTRADA: Provincia: '{provincia_paciente}', Municipio: '{municipio_paciente}', Sector: '{sector_paciente}'."
+        f"UBICACIÓN CONTEXTUAL: Provincia: '{provincia_detectada}', Municipio: '{municipio_paciente}', Sector: '{sector_paciente}'."
     )
     
     system_prompt = SYSTEM_PROMPT_GEMA + contexto_temporal + contexto_paciente
@@ -502,8 +527,8 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                     res_tool = verificar_registro_tercero(**args)
                 elif name == "consultar_directorio_inteligente":
                     args["mensaje_raw"] = mensaje_usuario
-                    if ("provincia" not in args or not args["provincia"]) and provincia_paciente:
-                        args["provincia"] = provincia_paciente
+                    if ("provincia" not in args or not args["provincia"]) and provincia_detectada:
+                        args["provincia"] = provincia_detectada
                     if ("municipio" not in args or not args["municipio"]) and municipio_paciente:
                         args["municipio"] = municipio_paciente
                     res_tool = consultar_directorio_inteligente(**args)
