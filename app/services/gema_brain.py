@@ -44,7 +44,7 @@ def remover_tildes(texto: str) -> str:
 def normalizar_jid(telefono_raw: str) -> str:
     """
     Extrae únicamente los dígitos de cualquier número de teléfono o JID de WhatsApp 
-    y asegura un formato estándar de 11 dígitos para República Dominicana/EEUU (ej. 18295156422@s.whatsapp.net).
+    y asegura un formato estándar de 11 dígitos para República Dominicana/EEUU.
     """
     if not telefono_raw:
         return ""
@@ -87,23 +87,35 @@ def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") ->
 
     try:
         jid_normalizado = normalizar_jid(telefono_jid)
+        telefono_solo_numeros = re.sub(r"\D", "", telefono_jid)
+        ultimos_10_digitos = telefono_solo_numeros[-10:] if len(telefono_solo_numeros) >= 10 else telefono_solo_numeros
+        
         nombre_guardar = nombre_push.strip() if (nombre_push and nombre_push.strip()) else "Usuario WhatsApp"
         
-        # Búsqueda por JID normalizado
+        # 1. Búsqueda por JID exacto
         res = supabase.table("pacientes").select("*").eq("telefono_jid", jid_normalizado).execute()
         
+        # 2. Fallback: Búsqueda por coincidencia de los últimos 10 dígitos si viene de un ID de dispositivo (3523...)
+        if not res.data and ultimos_10_digitos:
+            res = supabase.table("pacientes").select("*").ilike("telefono_jid", f"%{ultimos_10_digitos}%").execute()
+
+        # 3. Fallback: Búsqueda por coincidencia exacta de Nombre si es un nombre real registrado
+        if not res.data and nombre_guardar not in ["Usuario WhatsApp", "Paciente", "Trancrédito", ""]:
+            res = supabase.table("pacientes").select("*").ilike("nombre", nombre_guardar).execute()
+
         if res.data and len(res.data) > 0:
             paciente_existente = res.data[0]
-            # Si el paciente existe pero no tiene nombre válido, se actualiza
-            if paciente_existente.get("nombre") in ["Paciente", "Usuario WhatsApp", None, "Trancrédito"] and nombre_guardar not in ["Usuario WhatsApp", "Trancrédito"]:
+            # Si el registro encontrado no tiene el JID normalizado actualizado, lo vincula
+            if paciente_existente.get("telefono_jid") != jid_normalizado:
                 supabase.table("pacientes").update({
-                    "nombre": nombre_guardar,
+                    "telefono_jid": jid_normalizado,
                     "updated_at": obtener_hora_rd_iso()
-                }).eq("telefono_jid", jid_normalizado).execute()
-                paciente_existente["nombre"] = nombre_guardar
+                }).eq("id", paciente_existente["id"]).execute()
+                paciente_existente["telefono_jid"] = jid_normalizado
+            
             return paciente_existente
 
-        # Si realmente no existe en Supabase, se crea el perfil pendiente de onboarding
+        # Si tras las 3 búsquedas no existe, se registra el perfil inicial pendiente de onboarding
         datos_nuevo = {
             "telefono_jid": jid_normalizado, 
             "nombre": nombre_guardar, 
@@ -113,7 +125,7 @@ def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") ->
         res_insert = supabase.table("pacientes").insert(datos_nuevo).execute()
         return res_insert.data[0] if res_insert.data else {}
     except Exception as e:
-        print(f"❌ Error registrando/buscando paciente: {e}")
+        print(f"❌ Error buscando o registrando paciente: {e}")
         return {}
 
 def verificar_registro_tercero(telefono_tercero: str) -> str:
@@ -187,6 +199,10 @@ def consultar_directorio_inteligente(
     centro_medico_preferido: str = "",
     mensaje_raw: str = ""
 ) -> str:
+    """
+    Busca médicos en la tabla 'vitalmi_directorio_master' con algoritmo en cascada (Fallbacks)
+    para evitar respuestas de 'No encontrado' cuando existen especialistas disponibles.
+    """
     supabase = obtener_cliente_supabase()
     if not supabase:
         return json.dumps({"error": "Sin conexión a base de datos"})
@@ -200,6 +216,7 @@ def consultar_directorio_inteligente(
 
         texto_limpio = remover_tildes(f"{nombre_medico} {especialidad} {mensaje_raw}").lower()
         
+        # Mapeo de términos médicos comunes a su raíz en la base de datos
         if "urol" in texto_limpio:
             token_especialidad = "urol"
         elif "cardio" in texto_limpio:
@@ -217,7 +234,7 @@ def consultar_directorio_inteligente(
         prov_clean = remover_tildes(provincia).strip()
         centro_clean = remover_tildes(centro_medico_preferido).strip()
 
-        # NIVEL 1: Búsqueda exacta
+        # NIVEL 1: Búsqueda exacta (Provincia + Especialidad + Centro Médico si existe)
         q1 = supabase.table("vitalmi_directorio_master").select("*")
         if prov_clean:
             q1 = q1.ilike("provincia", f"%{prov_clean}%")
@@ -229,14 +246,14 @@ def consultar_directorio_inteligente(
         res1 = q1.limit(10).execute()
         medicos = res1.data or []
 
-        # NIVEL 2: Búsqueda en toda la Provincia
+        # NIVEL 2: Búsqueda en toda la Provincia si no hay en la clínica específica
         if not medicos and prov_clean and token_especialidad:
             q2 = supabase.table("vitalmi_directorio_master").select("*").ilike("provincia", f"%{prov_clean}%")
             q2 = q2.or_(f"nombre.ilike.%{token_especialidad}%,especialidad.ilike.%{token_especialidad}%")
             res2 = q2.limit(10).execute()
             medicos = res2.data or []
 
-        # NIVEL 3: Búsqueda en la base de datos general
+        # NIVEL 3: Búsqueda en la base de datos general si no hay en la provincia
         if not medicos and token_especialidad:
             q3 = supabase.table("vitalmi_directorio_master").select("*")
             q3 = q3.or_(f"nombre.ilike.%{token_especialidad}%,especialidad.ilike.%{token_especialidad}%")
