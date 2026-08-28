@@ -18,52 +18,55 @@ from app.core.supabase import obtener_cliente_supabase
 router = APIRouter()
 
 
-def extraer_campo(respuestas: dict, palabras_clave: list, defecto: str = "") -> str:
-    """
-    Busca de manera flexible una respuesta en el diccionario del Google Form 
-    coincidiendo con una lista de palabras clave.
-    """
-    for clave, valor in respuestas.items():
-        for kw in palabras_clave:
-            if kw.lower() in clave.lower() and valor:
-                return str(valor).strip()
-    return defecto
-
-
 @router.post("/webhook-google-forms")
 async def recibir_google_forms(request: Request):
     """
-    Recibe la Ficha de Registro de Paciente desde Google Forms (vía Apps Script),
-    mapea los campos flexibles (incluyendo Email), limpia el número de teléfono internacional 
-    y envía el mensaje de bienvenida por WhatsApp.
+    Recibe la Ficha de Registro desde Google Forms (vía Apps Script),
+    extrae campos flexibles (municipio, sector, email), actualiza Supabase 
+    y envía confirmación de bienvenida vía WhatsApp.
     """
     try:
         data = await request.json()
         print(f"📋 Ficha de Registro recibida de Google Forms: {data}")
 
-        # Extraer mapa de respuestas (si viene anidado en respuestas o directamente)
         respuestas = data.get("respuestas", {}) if "respuestas" in data else data
+        valores_lista = list(respuestas.values()) if isinstance(respuestas, dict) else []
 
-        # 1. Extracción Flexible de Datos del Formulario
-        nombre_completo = extraer_campo(respuestas, ["nombre completo", "nombre"], "Paciente")
-        telefono_raw = extraer_campo(respuestas, ["whatsapp", "numero", "telefono"], "")
-        cedula = extraer_campo(respuestas, ["cedula", "pasaporte"], "No especificada")
-        edad = extraer_campo(respuestas, ["edad"], "No especificada")
-        ars = extraer_campo(respuestas, ["ars", "seguro"], "Privado")
-        afiliado = extraer_campo(respuestas, ["afiliado", "carnet"], "No especificado")
-        plan = extraer_campo(respuestas, ["plan"], "Básico (PDSS)")
-        provincia = extraer_campo(respuestas, ["provincia"], "San Cristóbal")
-        municipio_sector = extraer_campo(respuestas, ["municipio", "sector"], "")
+        def buscar_valor(palabras_clave: list, indice_fallback: int = -1, defecto: str = "") -> str:
+            if isinstance(respuestas, dict):
+                for clave, valor in respuestas.items():
+                    for kw in palabras_clave:
+                        if kw.lower() in str(clave).lower() and valor:
+                            return str(valor).strip()
+            if indice_fallback >= 0 and indice_fallback < len(valores_lista):
+                val = valores_lista[indice_fallback]
+                if val:
+                    return str(val).strip()
+            return defecto
 
-        # 2. Extracción del Email recopilado automáticamente o por campo
+        # 1. Extracción de Datos
+        nombre_completo = buscar_valor(["nombre", "paciente"], 0, "Paciente")
+        cedula = buscar_valor(["cedula", "pasaporte"], 1, "No especificada")
+        edad = buscar_valor(["edad"], 2, "No especificada")
+        telefono_raw = buscar_valor(["whatsapp", "numero", "telefono", "celular"], 3, "")
+        ars = buscar_valor(["ars", "seguro"], 4, "Privado")
+        afiliado = buscar_valor(["afiliado", "carnet"], 5, "No especificado")
+        plan = buscar_valor(["plan"], 6, "Básico (PDSS)")
+        provincia = buscar_valor(["provincia"], 7, "San Cristóbal")
+        
+        # Campos separados de ubicación
+        municipio = buscar_valor(["municipio"], 8, "")
+        sector = buscar_valor(["sector"], 9, "")
+
+        # Email recopilado
         email_paciente = (
             data.get("email", "") 
             or respuestas.get("Dirección de correo electrónico", "") 
             or respuestas.get("Email Address", "") 
-            or extraer_campo(respuestas, ["correo", "email"], "")
+            or buscar_valor(["correo", "email"], 10, "")
         ).strip()
 
-        # 3. Limpieza Estricta del Número de Teléfono (Formato Internacional WhatsApp)
+        # 2. Limpieza de Teléfono
         telefono_clean = re.sub(r"\D", "", telefono_raw)
         if len(telefono_clean) == 10 and not telefono_clean.startswith("1"):
             telefono_clean = f"1{telefono_clean}"
@@ -71,9 +74,9 @@ async def recibir_google_forms(request: Request):
         usuario_jid = f"{telefono_clean}@s.whatsapp.net" if telefono_clean else ""
 
         if not usuario_jid:
-            raise HTTPException(status_code=400, detail="No se proporcionó un número de WhatsApp válido.")
+            raise HTTPException(status_code=400, detail="Número de WhatsApp no válido.")
 
-        # 4. Guardado / Actualización del Perfil en Supabase
+        # 3. Guardado en Supabase
         supabase = obtener_cliente_supabase()
         if supabase:
             datos_paciente = {
@@ -86,7 +89,8 @@ async def recibir_google_forms(request: Request):
                 "numero_afiliado": afiliado,
                 "tipo_plan": plan,
                 "provincia": provincia,
-                "municipio_sector": municipio_sector,
+                "municipio": municipio,
+                "sector": sector,
                 "perfil_completo": True,
                 "updated_at": obtener_hora_rd_iso()
             }
@@ -97,8 +101,9 @@ async def recibir_google_forms(request: Request):
             else:
                 supabase.table("pacientes").insert(datos_paciente).execute()
 
-        # 5. Enviar Confirmación de Registro por WhatsApp vía Evolution API
+        # 4. Mensaje de Bienvenida
         if telefono_clean:
+            ubicacion_texto = f"{sector}, {municipio}, {provincia}" if sector else f"{municipio}, {provincia}"
             mensaje_bienvenida = (
                 f"🎉 ¡Hola {nombre_completo}! Tu ficha de registro en VitalMi ha sido completada con éxito.\n\n"
                 f"👤 *PERFIL DE PACIENTE REGISTRADO:*\n"
@@ -106,13 +111,13 @@ async def recibir_google_forms(request: Request):
                 f"• *Edad:* {edad} años\n"
                 f"• *Correo:* {email_paciente if email_paciente else 'No registrado'}\n"
                 f"• *Seguro Médico:* {ars} ({plan})\n"
-                f"• *Ubicación:* {municipio_sector}, {provincia}\n\n"
+                f"• *Ubicación:* {ubicacion_texto}\n\n"
                 f"Ya no tendrás que volver a llenar este formulario. A partir de ahora, cuando desees agendar una cita médica, "
                 f"solo escríbeme directamente por aquí indicándome el médico o la especialidad que necesitas."
             )
             await enviar_mensaje_whatsapp(destinatario=f"{telefono_clean}@s.whatsapp.net", texto=mensaje_bienvenida)
 
-        return {"status": "success", "message": "Perfil de paciente y email registrados correctamente."}
+        return {"status": "success", "message": "Perfil registrado correctamente."}
 
     except Exception as e:
         print(f"❌ Error procesando webhook de Google Forms: {e}")
@@ -120,15 +125,10 @@ async def recibir_google_forms(request: Request):
 
 
 async def procesar_webhook_background(payload: dict):
-    """
-    Procesa el mensaje de WhatsApp recibido vía Evolution API.
-    Soporta Texto, Audio (Whisper) y Respuestas Conversacionales con Gema.
-    """
     try:
         data = payload.get("data", {})
         key = data.get("key", {})
         
-        # Ignorar mensajes salientes enviados por el propio bot
         if key.get("fromMe", False):
             return
 
@@ -151,15 +151,11 @@ async def procesar_webhook_background(payload: dict):
         if is_audio_type:
             es_audio = True
             print(f"🎙️ Nota de voz recibida de '{push_name}' ({remote_jid}). Procesando...")
-            
             audio_b64 = await obtener_base64_desde_message(data)
             
             if audio_b64:
-                print("🔤 Transcribiendo audio con Whisper...")
                 texto_usuario = await transcribir_audio_base64(audio_b64)
-                print(f"📝 Transcripción: '{texto_usuario}'")
             else:
-                print("❌ No se pudo extraer el audio.")
                 await enviar_mensaje_whatsapp(
                     destinatario=remote_jid, 
                     texto="Lo siento, no pude escuchar tu nota de voz. ¿Podrías enviarla nuevamente o escribir tu mensaje?"
@@ -174,8 +170,6 @@ async def procesar_webhook_background(payload: dict):
         if not texto_usuario.strip():
             return
 
-        print(f"🧠 Enviando a Gema Brain para {remote_jid} ({push_name}): '{texto_usuario}'")
-        
         respuesta_ia = await obtener_respuesta_gema(
             mensaje_usuario=texto_usuario,
             numero_usuario=remote_jid,
@@ -183,17 +177,12 @@ async def procesar_webhook_background(payload: dict):
         )
 
         if es_audio:
-            print(f"🎙️ Generando audio de respuesta para {remote_jid}...")
             audio_b64_res = await generar_audio_elevenlabs(respuesta_ia)
-            
             if audio_b64_res:
-                print(f"📤 Enviando nota de voz a {remote_jid}...")
                 await enviar_audio_whatsapp(destinatario=remote_jid, audio_base64=audio_b64_res)
             else:
-                print("⚠️ Falló ElevenLabs. Enviando texto alternativo.")
                 await enviar_mensaje_whatsapp(destinatario=remote_jid, texto=respuesta_ia)
         else:
-            print(f"💬 Enviando texto a {remote_jid}...")
             await enviar_mensaje_whatsapp(destinatario=remote_jid, texto=respuesta_ia)
 
     except Exception as e:
@@ -205,7 +194,6 @@ async def procesar_webhook_background(payload: dict):
 async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
     try:
         payload = await request.json()
-        
         event = payload.get("event")
         if event and event not in ["messages.upsert", "MESSAGES_UPSERT"]:
             return {"status": "ignored", "reason": f"Evento '{event}' omitido"}
