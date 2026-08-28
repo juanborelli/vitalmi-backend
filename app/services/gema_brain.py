@@ -42,10 +42,6 @@ def remover_tildes(texto: str) -> str:
     return texto.strip()
 
 def normalizar_jid(telefono_raw: str) -> str:
-    """
-    Extrae únicamente los dígitos de cualquier número de teléfono o JID de WhatsApp 
-    y asegura un formato estándar de 11 dígitos para República Dominicana/EEUU.
-    """
     if not telefono_raw:
         return ""
     solo_numeros = re.sub(r"\D", "", telefono_raw)
@@ -57,28 +53,32 @@ def normalizar_jid(telefono_raw: str) -> str:
 
 def resolver_fecha_relativa(texto_fecha: str) -> str:
     ahora_rd = datetime.now(TZ_RD)
-    texto_clean = remover_tildes(texto_fecha).lower().strip()
+    texto_clean = remover_tildes(str(texto_fecha)).lower().strip()
+
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", texto_clean):
+        return texto_clean
+
+    if "manana" in texto_clean or "mañana" in texto_clean:
+        fecha_calc = ahora_rd + timedelta(days=1)
+        return fecha_calc.strftime("%Y-%m-%d")
+
+    if "hoy" in texto_clean:
+        return ahora_rd.strftime("%Y-%m-%d")
 
     dias_semana_map = {
         "lunes": 0, "martes": 1, "miercoles": 2, "jueves": 3,
         "viernes": 4, "sabado": 5, "domingo": 6
     }
 
-    if re.match(r"^\d{4}-\d{2}-\d{2}$", texto_clean):
-        return texto_clean
-
     for nombre_dia, idx_target in dias_semana_map.items():
         if nombre_dia in texto_clean:
             dias_diferencia = (idx_target - ahora_rd.weekday()) % 7
             if dias_diferencia == 0 or "proximo" in texto_clean or "que viene" in texto_clean:
-                if "proximo" in texto_clean or "que viene" in texto_clean or (dias_diferencia == 0 and ahora_rd.hour >= 12):
-                    dias_diferencia += 7
-                elif dias_diferencia == 0:
-                    dias_diferencia = 7
+                dias_diferencia += 7
             fecha_calculada = ahora_rd + timedelta(days=dias_diferencia)
             return fecha_calculada.strftime("%Y-%m-%d")
 
-    return ahora_rd.strftime("%Y-%m-%d")
+    return (ahora_rd + timedelta(days=1)).strftime("%Y-%m-%d")
 
 def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") -> dict:
     supabase = obtener_cliente_supabase()
@@ -92,20 +92,16 @@ def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") ->
         
         nombre_guardar = nombre_push.strip() if (nombre_push and nombre_push.strip()) else "Usuario WhatsApp"
         
-        # 1. Búsqueda por JID exacto
         res = supabase.table("pacientes").select("*").eq("telefono_jid", jid_normalizado).execute()
         
-        # 2. Fallback: Búsqueda por coincidencia de los últimos 10 dígitos si viene de un ID de dispositivo (3523...)
         if not res.data and ultimos_10_digitos:
             res = supabase.table("pacientes").select("*").ilike("telefono_jid", f"%{ultimos_10_digitos}%").execute()
 
-        # 3. Fallback: Búsqueda por coincidencia exacta de Nombre si es un nombre real registrado
         if not res.data and nombre_guardar not in ["Usuario WhatsApp", "Paciente", "Trancrédito", ""]:
             res = supabase.table("pacientes").select("*").ilike("nombre", nombre_guardar).execute()
 
         if res.data and len(res.data) > 0:
             paciente_existente = res.data[0]
-            # Si el registro encontrado no tiene el JID normalizado actualizado, lo vincula
             if paciente_existente.get("telefono_jid") != jid_normalizado:
                 supabase.table("pacientes").update({
                     "telefono_jid": jid_normalizado,
@@ -115,7 +111,6 @@ def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") ->
             
             return paciente_existente
 
-        # Si tras las 3 búsquedas no existe, se registra el perfil inicial pendiente de onboarding
         datos_nuevo = {
             "telefono_jid": jid_normalizado, 
             "nombre": nombre_guardar, 
@@ -199,10 +194,6 @@ def consultar_directorio_inteligente(
     centro_medico_preferido: str = "",
     mensaje_raw: str = ""
 ) -> str:
-    """
-    Busca médicos en la tabla 'vitalmi_directorio_master' con algoritmo en cascada (Fallbacks)
-    para evitar respuestas de 'No encontrado' cuando existen especialistas disponibles.
-    """
     supabase = obtener_cliente_supabase()
     if not supabase:
         return json.dumps({"error": "Sin conexión a base de datos"})
@@ -211,12 +202,11 @@ def consultar_directorio_inteligente(
         stop_words = [
             "manana", "tarde", "noche", "hoy", "lunes", "martes", "miercoles", "jueves", "viernes", 
             "sabado", "domingo", "doctor", "doctora", "cita", "quiero", "necesito", "con", "del", 
-            "esta", "para", "una", "este", "por", "favor", "dame", "ninguno", "ellos", "clinica", "centro", "urologo"
+            "esta", "para", "una", "este", "por", "favor", "dame", "ninguno", "ellos", "clinica", "centro"
         ]
 
         texto_limpio = remover_tildes(f"{nombre_medico} {especialidad} {mensaje_raw}").lower()
         
-        # Mapeo de términos médicos comunes a su raíz en la base de datos
         if "urol" in texto_limpio:
             token_especialidad = "urol"
         elif "cardio" in texto_limpio:
@@ -234,7 +224,7 @@ def consultar_directorio_inteligente(
         prov_clean = remover_tildes(provincia).strip()
         centro_clean = remover_tildes(centro_medico_preferido).strip()
 
-        # NIVEL 1: Búsqueda exacta (Provincia + Especialidad + Centro Médico si existe)
+        # NIVEL 1
         q1 = supabase.table("vitalmi_directorio_master").select("*")
         if prov_clean:
             q1 = q1.ilike("provincia", f"%{prov_clean}%")
@@ -246,14 +236,14 @@ def consultar_directorio_inteligente(
         res1 = q1.limit(10).execute()
         medicos = res1.data or []
 
-        # NIVEL 2: Búsqueda en toda la Provincia si no hay en la clínica específica
+        # NIVEL 2
         if not medicos and prov_clean and token_especialidad:
             q2 = supabase.table("vitalmi_directorio_master").select("*").ilike("provincia", f"%{prov_clean}%")
             q2 = q2.or_(f"nombre.ilike.%{token_especialidad}%,especialidad.ilike.%{token_especialidad}%")
             res2 = q2.limit(10).execute()
             medicos = res2.data or []
 
-        # NIVEL 3: Búsqueda en la base de datos general si no hay en la provincia
+        # NIVEL 3
         if not medicos and token_especialidad:
             q3 = supabase.table("vitalmi_directorio_master").select("*")
             q3 = q3.or_(f"nombre.ilike.%{token_especialidad}%,especialidad.ilike.%{token_especialidad}%")
@@ -276,8 +266,8 @@ def consultar_directorio_inteligente(
 def agendar_cita_medica(
     telefono_jid: str, 
     medico_nombre: str, 
-    fecha_cita: str, 
-    tanda: str, 
+    fecha_cita: str = "Mañana", 
+    tanda: str = "Mañana", 
     es_para_tercero: bool = False,
     telefono_tercero: str = "",
     motivo_consulta: str = "Consulta General"
@@ -306,11 +296,24 @@ def agendar_cita_medica(
         plan_ars = paciente.get("tipo_plan", "Básico")
         afiliado_ars = paciente.get("numero_afiliado", "No especificado")
 
+        # Resolución de fecha
         fecha_real_iso = resolver_fecha_relativa(fecha_cita)
-        fecha_dt = datetime.strptime(fecha_real_iso, "%Y-%m-%d")
-        dias_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-        meses_es = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
-        fecha_formateada = f"{dias_es[fecha_dt.weekday()]} {fecha_dt.day} de {meses_es[fecha_dt.month - 1]} de {fecha_dt.year}"
+        try:
+            fecha_dt = datetime.strptime(fecha_real_iso, "%Y-%m-%d")
+            dias_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+            meses_es = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+            fecha_formateada = f"{dias_es[fecha_dt.weekday()]} {fecha_dt.day} de {meses_es[fecha_dt.month - 1]} de {fecha_dt.year}"
+        except Exception:
+            fecha_formateada = fecha_cita
+
+        # MAPEO DE HORARIOS SEGÚN LA TANDA
+        tanda_clean = remover_tildes(tanda).lower()
+        if "sabado" in tanda_clean or "sábado" in tanda_clean:
+            tanda_texto = "Sábados (9:00 AM – 2:00 PM)"
+        elif "tarde" in tanda_clean:
+            tanda_texto = "Tarde (3:00 PM – 6:00 PM)"
+        else:
+            tanda_texto = "Mañana (9:00 AM – 12:00 PM)"
 
         centro_medico = "Consultorio Privado Autorizado"
         especialidad_medico = "Medicina General"
@@ -323,7 +326,7 @@ def agendar_cita_medica(
 
         datos_cita = {
             "paciente_id": paciente_id,
-            "motivo_consulta": f"Paciente: {nombre_paciente} | Cédula: {cedula_paciente} | ARS: {ars_paciente} ({plan_ars}, Afiliado: {afiliado_ars}) | Médico: {medico_nombre} ({especialidad_medico}) | Centro: {centro_medico} | Tanda: {tanda} | Fecha: {fecha_formateada} | Motivo: {motivo_consulta}",
+            "motivo_consulta": f"Paciente: {nombre_paciente} | Cédula: {cedula_paciente} | ARS: {ars_paciente} ({plan_ars}, Afiliado: {afiliado_ars}) | Médico: {medico_nombre} ({especialidad_medico}) | Centro: {centro_medico} | Tanda: {tanda_texto} | Fecha: {fecha_formateada} | Motivo: {motivo_consulta}",
             "estado": "pendiente_aprobacion",
             "created_at": obtener_hora_rd_iso()
         }
@@ -344,7 +347,7 @@ def agendar_cita_medica(
             f"• *Centro:* {centro_medico}\n\n"
             "📅 *HORARIO Y DETALLES:*\n"
             f"• *Fecha:* {fecha_formateada}\n"
-            f"• *Tanda:* {tanda}\n"
+            f"• *Tanda y Horario:* {tanda_texto}\n"
             f"• *Motivo:* {motivo_consulta}\n"
             "• *Estado:* ⏳ Cita pendiente de confirmación por el doctor.\n"
         )
@@ -356,25 +359,27 @@ def agendar_cita_medica(
         }, ensure_ascii=False)
 
     except Exception as e:
+        print(f"❌ Error en agendar_cita_medica: {e}")
         return json.dumps({"error": str(e)})
 
 SYSTEM_PROMPT_PACIENTE_REGISTRADO = """
 Eres Gema, la asistente médica virtual de VitalMi en República Dominicana.
-Hablas con un PACIENTE REGISTRADO. Sus datos de perfil principales están en Supabase.
+Hablas con un PACIENTE REGISTRADO. Sus datos fijos de perfil están guardados en Supabase.
 
 ### ⛔ REGLA FUNDAMENTAL DE INTERACCIÓN (UNA SOLA PREGUNTA POR MENSAJE):
-Está ESTRICTAMENTE PROHIBIDO hacer más de una pregunta en el mismo mensaje. Debes avanzar PASO A PASO esperando la respuesta del usuario en cada turno:
+Está ESTRICTAMENTE PROHIBIDO hacer más de una pregunta en el mismo mensaje o agrupar preguntas. Debes avanzar PASO A PASO esperando la respuesta del usuario en cada turno:
 
 - PASO 1 (BENEFICIARIO): Pregunta únicamente si la cita es para él/ella o para un tercero. Espera respuesta.
   * Si es para un tercero, solicita su número de WhatsApp y ejecuta 'verificar_registro_tercero'.
 - PASO 2 (ESPECIALIDAD/MÉDICO): Pregunta únicamente qué especialidad o doctor necesita. Espera respuesta.
-- PASO 3 (CENTRO MÉDICO Y DIRECTORIO): Pregunta si prefiere alguna clínica/centro médico en particular. 
+- PASO 3 (CENTRO MÉDICO Y SELECCIÓN): Pregunta si prefiere alguna clínica o centro médico en particular. 
   * Con esta respuesta, invocas 'consultar_directorio_inteligente', presentas la lista de doctores devuelta y pides que ELIJA UNO. Espera selección.
-- PASO 4 (FECHA Y TANDA): Pide la fecha deseada y la tanda (Mañana o Tarde). Espera respuesta.
-- PASO 5 (MOTIVO): Pregunta el motivo de la consulta. Espera respuesta.
-- PASO 6 (CONFIRMACIÓN): Invoca 'agendar_cita_medica' y entrega el comprobante final.
+- PASO 4 (FECHA PREFERIDA): Pregunta únicamente por la fecha deseada. Espera respuesta.
+- PASO 5 (TANDA): Pregunta únicamente por la tanda deseada: 'Mañana', 'Tarde' o 'Sábados'. (NO menciones los horarios numéricos aquí). Espera respuesta.
+- PASO 6 (MOTIVO DE CONSULTA): Pregunta el motivo principal de la consulta. Espera respuesta.
+- PASO 7 (CONFIRMACIÓN FINAL): Invoca 'agendar_cita_medica' enviando la fecha y tanda seleccionadas, y entrega el comprobante formateado.
 
-Si el usuario responde a un paso, NO te adelantes al siguiente paso sin antes validar y procesar la información actual.
+Si el usuario responde a un paso, NO te adelantes al siguiente paso sin antes validar la respuesta del turno actual.
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
@@ -396,7 +401,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     
     url_form_oficial = "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
 
-    # INTERCEPCIÓN DETERMINISTA DE ONBOARDING TITULAR (SOLO SI NO TIENE PERFIL COMPLETO)
+    # ONBOARDING TITULAR (SOLO SI NO TIENE PERFIL COMPLETO)
     if not perfil_completo:
         respuesta_onboarding = (
             f"Hola {nombre_contacto}, ¿cómo te sientes hoy? Espero que te encuentres bien de salud. "
@@ -408,7 +413,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         guardar_mensaje_supabase(jid_normalizado, "assistant", respuesta_onboarding)
         return respuesta_onboarding
 
-    # PACIENTE REGISTRADO -> CONTINÚA CON EL FLUJO NORMAL DE CITAS
+    # PROCESAMIENTO CONVERSACIONAL DE CITA
     guardar_mensaje_supabase(jid_normalizado, "user", mensaje_usuario)
     historial_raw = obtener_historial_supabase(jid_normalizado, limite=6)
     historial_limpio = [{"role": m["rol"] if "rol" in m else m["role"], "content": m["contenido"] if "contenido" in m else m["content"]} for m in historial_raw]
