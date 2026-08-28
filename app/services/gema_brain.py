@@ -125,9 +125,6 @@ def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") ->
         return {}
 
 def verificar_registro_tercero(telefono_tercero: str) -> str:
-    """
-    Verifica si el tercero está registrado. Si NO lo está, devuelve explícitamente el GForm para el LLM.
-    """
     supabase = obtener_cliente_supabase()
     if not supabase or not telefono_tercero:
         return json.dumps({"registrado": False, "mensaje": "Teléfono inválido o sin datos."})
@@ -145,12 +142,11 @@ def verificar_registro_tercero(telefono_tercero: str) -> str:
                     "mensaje": f"El paciente {pac.get('nombre')} está registrado y con perfil completo."
                 }, ensure_ascii=False)
         
-        # SI NO ESTÁ REGISTRADO: SE RETORNA LA INSTRUCCIÓN DE ENVIAR EL FORMULARIO
         return json.dumps({
             "registrado": False, 
             "requiere_form": True,
             "url_form": URL_FORM_OFICIAL,
-            "mensaje": f"El familiar con el número {telefono_tercero} NO está registrado. Debes indicarle al usuario que para agendar a esta persona debe llenar primero su ficha en este enlace: {URL_FORM_OFICIAL}"
+            "mensaje": f"El familiar con el número {telefono_tercero} NO está registrado. Indícale que para agendar debe llenar este enlace: {URL_FORM_OFICIAL}"
         }, ensure_ascii=False)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -231,7 +227,7 @@ def consultar_directorio_inteligente(
         prov_clean = remover_tildes(provincia).strip()
         centro_clean = remover_tildes(centro_medico_preferido).strip()
 
-        # NIVEL 1: Búsqueda exacta
+        # NIVEL 1: Búsqueda por Provincia + Especialidad + Centro
         q1 = supabase.table("vitalmi_directorio_master").select("*")
         if prov_clean:
             q1 = q1.ilike("provincia", f"%{prov_clean}%")
@@ -243,7 +239,7 @@ def consultar_directorio_inteligente(
         res1 = q1.limit(10).execute()
         medicos = res1.data or []
 
-        # NIVEL 2: Búsqueda en la Provincia
+        # NIVEL 2: Búsqueda en la Provincia si no hay en el centro
         if not medicos and prov_clean and token_especialidad:
             q2 = supabase.table("vitalmi_directorio_master").select("*").ilike("provincia", f"%{prov_clean}%")
             q2 = q2.or_(f"nombre.ilike.%{token_especialidad}%,especialidad.ilike.%{token_especialidad}%")
@@ -260,7 +256,7 @@ def consultar_directorio_inteligente(
         if not medicos:
             return json.dumps({
                 "total_exacto": 0, 
-                "mensaje": f"No se encontraron especialistas para los criterios en {provincia if provincia else 'la zona'}.",
+                "mensaje": f"No se encontraron especialistas para los criterios especificados.",
                 "medicos_muestra": []
             }, ensure_ascii=False)
 
@@ -293,7 +289,6 @@ def agendar_cita_medica(
 
         res_pac = supabase.table("pacientes").select("*").eq("telefono_jid", jid_objetivo).execute()
         if not res_pac.data or not res_pac.data[0].get("perfil_completo", False):
-            # BLOQUEO SI INTENTA AGENDAR SIN TENER PERFIL COMPLETO
             return json.dumps({
                 "error": "perfil_incompleto",
                 "mensaje": f"Para confirmar esta cita, la persona requiere estar registrada. Favor de completar el formulario en este enlace: {URL_FORM_OFICIAL}"
@@ -372,27 +367,29 @@ def agendar_cita_medica(
         return json.dumps({"error": str(e)})
 
 SYSTEM_PROMPT_GEMA = f"""
-Eres Gema, la asistente médica virtual de VitalMi en República Dominicana.
-Tienes acceso a un directorio de casi 10,000 médicos especialistas en todo el país.
+Eres Gema, la asistente inteligente para citas médicas de VitalMi en República Dominicana.
+Cuentas con un directorio de casi 10,000 médicos especialistas en todo el país.
 
-### 🌟 REGLA DE "LA PROBADITA" (BÚSQUEDA LIBRE DE MÉDICOS):
-- Cualquier usuario puede buscar especialidades y médicos libremente llamando a 'consultar_directorio_inteligente'. Muestra los doctores encontrados con gusto para demostrar la capacidad de VitalMi.
-- NO exijas el formulario de registro para simples consultas de directorio o información de médicos.
+### 💬 REGLA DE SALUDO INICIAL Y PRESENTACIÓN:
+Cuando el usuario te salude (ej. "Hola", "Buenas", "Hola Gema"), responde SIEMPRE con este formato exacto usando su primer nombre:
+"Hola [Nombre], soy Gema tu asistente inteligente para citas médicas. Si necesitas algún doctor o especialidad sólo escríbemelo o dímelo por nota de voz."
 
-### ⛔ REGLA DE AGENDAMIENTO Y REGISTRO (UNA SOLA PREGUNTA POR MENSAJE):
-Cuando el usuario desee AGENDAR una cita médica, debes seguir esta secuencia estricta PASO A PASO:
+### 🧠 BÚSQUEDA INTELIGENTE Y CONTEXTUALIZACIÓN PROGRESIVA:
+1. Si el usuario dice simplemente "necesito un doctor", tu respuesta lógica debe ser: "¿Para cuál especialidad necesitas el doctor?"
+2. Cuando tengas la especialidad (ej. "urólogo", "cardiólogo"), NO asumas inmediatamente que quiere una cita ni invoques agendamiento.
+3. Debes preguntar UNA COSA A LA VEZ para afinar el contexto geográfico:
+   - Primero pregunta por su Provincia (si no la ha mencionado ni está registrada en su contexto).
+   - Luego pregunta por su Municipio o Sector.
+   - Con la especialidad y la ubicación confirmadas, invocas 'consultar_directorio_inteligente' y presentas la lista de especialistas encontrados en esa zona.
 
+### 📅 REGLA DE AGENDAMIENTO SECUENCIAL (SOLO CUANDO EL USUARIO PIDA CITA):
+Si el usuario confirma que desea AGENDAR una cita con un médico seleccionado:
 - PASO 1 (BENEFICIARIO): Pregunta únicamente si la cita es para él/ella o para un tercero. Espera respuesta.
-  * Si es para un TERCERO: Pide el número de WhatsApp del tercero y ejecuta 'verificar_registro_tercero'.
-  * SI EL TERCERO NO ESTÁ REGISTRADO: NUNCA pidas sus datos por chat. Entrega inmediatamente el enlace del formulario: {URL_FORM_OFICIAL} y dile que debe llenarlo para continuar.
-- PASO 2 (ESPECIALIDAD/MÉDICO): Pregunta únicamente qué especialidad o doctor necesita. Espera respuesta.
-- PASO 3 (CENTRO MÉDICO Y SELECCIÓN): Pregunta si prefiere alguna clínica o centro médico en particular. 
-  * Con esta respuesta, invocas 'consultar_directorio_inteligente', presentas la lista de doctores devuelta y pides que ELIJA UNO. Espera selección.
-- PASO 4 (FECHA PREFERIDA): Pregunta únicamente por la fecha deseada. Espera respuesta.
-- PASO 5 (TANDA): Pregunta únicamente por la tanda deseada: 'Mañana', 'Tarde' o 'Sábados'. Espera respuesta.
-- PASO 6 (MOTIVO DE CONSULTA): Pregunta el motivo principal de la consulta. Espera respuesta.
-- PASO 7 (CONFIRMACIÓN FINAL): Invoca 'agendar_cita_medica'.
-  * SI EL PACIENTE (TITULAR O TERCERO) NO TIENE PERFIL COMPLETO: La herramienta devolverá 'perfil_incompleto'. En ese momento, invítale amablemente a completar la ficha por única vez en el enlace: {URL_FORM_OFICIAL}
+  * Si es para un TERCERO: Pide el WhatsApp del tercero y ejecuta 'verificar_registro_tercero'. Si no está registrado, entrega el enlace {URL_FORM_OFICIAL}.
+- PASO 2 (FECHA PREFERIDA): Pregunta por la fecha deseada. Espera respuesta.
+- PASO 3 (TANDA): Pregunta únicamente por la tanda deseada ('Mañana', 'Tarde' o 'Sábados'). Espera respuesta.
+- PASO 4 (MOTIVO DE CONSULTA): Pregunta el motivo principal. Espera respuesta.
+- PASO 5 (CONFIRMACIÓN): Invoca 'agendar_cita_medica'.
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
@@ -405,9 +402,12 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     
     nombre_contacto = paciente.get("nombre", nombre_usuario) if paciente.get("nombre") else nombre_usuario
     if not nombre_contacto or nombre_contacto in ["Trancrédito", "Usuario WhatsApp", "Paciente", ""]:
-        nombre_contacto = "JUAN REYES"
+        nombre_contacto = "Juan"
+    else:
+        # Extraer primer nombre
+        nombre_contacto = nombre_contacto.split()[0].capitalize()
 
-    provincia_paciente = paciente.get("provincia", "San Cristóbal")
+    provincia_paciente = paciente.get("provincia", "")
     municipio_paciente = paciente.get("municipio", "")
     sector_paciente = paciente.get("sector", "")
 
@@ -502,9 +502,9 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                     res_tool = verificar_registro_tercero(**args)
                 elif name == "consultar_directorio_inteligente":
                     args["mensaje_raw"] = mensaje_usuario
-                    if "provincia" not in args or not args["provincia"]:
+                    if ("provincia" not in args or not args["provincia"]) and provincia_paciente:
                         args["provincia"] = provincia_paciente
-                    if "municipio" not in args or not args["municipio"]:
+                    if ("municipio" not in args or not args["municipio"]) and municipio_paciente:
                         args["municipio"] = municipio_paciente
                     res_tool = consultar_directorio_inteligente(**args)
                 elif name == "agendar_cita_medica":
