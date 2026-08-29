@@ -42,6 +42,12 @@ def remover_tildes(texto: str) -> str:
         texto = texto.replace(a, b)
     return texto.strip()
 
+def extraer_primer_nombre_valido(nombre_raw: str) -> str:
+    if not nombre_raw:
+        return "Usuario"
+    palabras = [p.capitalize() for p in nombre_raw.split() if len(p) > 2 and p.lower() not in ["del", "las", "los", "san", "santa"]]
+    return palabras[0] if palabras else "Usuario"
+
 def normalizar_jid(telefono_raw: str) -> str:
     if not telefono_raw:
         return ""
@@ -151,7 +157,7 @@ def verificar_registro_tercero(telefono_tercero: str) -> str:
     except Exception as e:
         return json.dumps({"error": str(e)})
 
-def obtener_historial_supabase(telefono_jid: str, limite: int = 6) -> List[Dict[str, str]]:
+def obtener_historial_supabase(telefono_jid: str, limite: int = 10) -> List[Dict[str, str]]:
     supabase = obtener_cliente_supabase()
     if not supabase:
         return []
@@ -197,10 +203,6 @@ def consultar_directorio_inteligente(
     centro_medico_preferido: str = "",
     mensaje_raw: str = ""
 ) -> str:
-    """
-    Busca médicos con triangulación considerando:
-    nombre, especialidad, especialidad_medico, centro_medico, direccion, provincia, municipio_cabecera y sector.
-    """
     supabase = obtener_cliente_supabase()
     if not supabase:
         return json.dumps({"error": "Sin conexión a base de datos"})
@@ -231,18 +233,14 @@ def consultar_directorio_inteligente(
         prov_clean = remover_tildes(provincia).strip()
         centro_clean = remover_tildes(centro_medico_preferido).strip()
 
-        # CONSTRUCCIÓN DE LA CONSULTA CON TRIANGULACIÓN COMPLETA
         query = supabase.table("vitalmi_directorio_master").select("*")
 
-        # 1. Triangulación de Provincia (Busca en provincia y en la columna direccion)
         if prov_clean:
             query = query.or_(f"provincia.ilike.%{prov_clean}%,direccion.ilike.%{prov_clean}%")
 
-        # 2. Triangulación por Centro Médico (Busca en centro_medico y en direccion)
         if centro_clean:
             query = query.or_(f"centro_medico.ilike.%{centro_clean}%,direccion.ilike.%{centro_clean}%")
 
-        # 3. Triangulación por Especialidad (Busca en especialidad, especialidad_medico y subespecialidades_medico)
         if token_especialidad:
             query = query.or_(
                 f"nombre.ilike.%{token_especialidad}%,"
@@ -254,7 +252,6 @@ def consultar_directorio_inteligente(
         res1 = query.limit(10).execute()
         medicos = res1.data or []
 
-        # NIVEL 2: Fallback si se buscaba un centro específico y no hubo resultados
         if not medicos and prov_clean and token_especialidad:
             q2 = supabase.table("vitalmi_directorio_master").select("*")
             q2 = q2.or_(f"provincia.ilike.%{prov_clean}%,direccion.ilike.%{prov_clean}%")
@@ -270,7 +267,7 @@ def consultar_directorio_inteligente(
         if not medicos:
             return json.dumps({
                 "total_exacto": 0, 
-                "mensaje": f"No se encontraron especialistas en {prov_clean if prov_clean else 'la provincia especificada'}.",
+                "mensaje": f"No se encontraron especialistas en los criterios especificados.",
                 "medicos_muestra": []
             }, ensure_ascii=False)
 
@@ -294,8 +291,12 @@ def agendar_cita_medica(
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        if not medico_nombre or "ninguno" in medico_nombre.lower():
-            return json.dumps({"error": "Debes especificar un médico válido antes de agendar."})
+        palabras_invalidas = ["chequeo", "rutina", "consulta", "general", "cita", "revision"]
+        nombre_clean = remover_tildes(medico_nombre).lower()
+        if any(w in nombre_clean for w in palabras_invalidas) and len(medico_nombre.split()) < 4:
+            res_last = supabase.table("vitalmi_directorio_master").select("*").order("created_at", desc=True).limit(1).execute()
+            if res_last.data:
+                medico_nombre = res_last.data[0].get("nombre")
 
         jid_objetivo = normalizar_jid(telefono_jid)
         if es_para_tercero and telefono_tercero:
@@ -334,13 +335,15 @@ def agendar_cita_medica(
             tanda_texto = "Mañana (9:00 AM – 12:00 PM)"
 
         centro_medico = "Consultorio Privado Autorizado"
-        especialidad_medico = "Medicina General"
+        especialidad_medico = "Especialista Clínico"
         
-        res_doc = supabase.table("vitalmi_directorio_master").select("*").ilike("nombre", f"%{remover_tildes(medico_nombre)[:6]}%").limit(1).execute()
-        if res_doc.data:
-            centro_medico = res_doc.data[0].get("centro_medico") or centro_medico
-            medico_nombre = res_doc.data[0].get("nombre") or medico_nombre
-            especialidad_medico = res_doc.data[0].get("especialidad") or especialidad_medico
+        tokens_nombre = [t for t in remover_tildes(medico_nombre).split() if len(t) > 3]
+        if tokens_nombre:
+            res_doc = supabase.table("vitalmi_directorio_master").select("*").ilike("nombre", f"%{tokens_nombre[0]}%").limit(1).execute()
+            if res_doc.data:
+                centro_medico = res_doc.data[0].get("centro_medico") or centro_medico
+                medico_nombre = res_doc.data[0].get("nombre") or medico_nombre
+                especialidad_medico = res_doc.data[0].get("especialidad") or res_doc.data[0].get("especialidad_medico") or especialidad_medico
 
         datos_cita = {
             "paciente_id": paciente_id,
@@ -384,25 +387,28 @@ SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente inteligente para citas médicas de VitalMi en República Dominicana.
 Cuentas con un directorio de casi 10,000 médicos especialistas en todo el país.
 
-### 💬 REGLA DE SALUDO INICIAL Y PRESENTACIÓN:
-Cuando el usuario te salude (ej. "Hola", "Buenas", "Hola Gema"), responde SIEMPRE con este formato exacto usando su primer nombre:
-"Hola [Nombre], soy Gema tu asistente inteligente para citas médicas. Si necesitas algún doctor o especialidad sólo escríbemelo o dímelo por nota de voz."
+### 💬 REGLA DE SALUDO INICIAL Y DESPEDIDA DE CORTESÍA:
+- Al INICIO de la conversación (saludo inicial como "Hola", "Buenas"):
+  "Hola [Nombre], soy Gema tu asistente inteligente para citas médicas. Si necesitas algún doctor o especialidad sólo escríbemelo o dímelo por nota de voz."
+- Cuando el usuario finalice o agradezca (ej. "Ok gracias", "Gracias", "Muchas gracias"):
+  "De nada [Nombre]. Favor de estar pendiente a la confirmación de tu cita. Si hay algo más en lo que pueda asistirte no dudes en decírmelo, ya sea por texto o por voz."
 
 ### 🧠 BÚSQUEDA INTELIGENTE Y CONTEXTUALIZACIÓN PROGRESIVA:
-1. Si el usuario dice simplemente "necesito un doctor", tu respuesta lógica debe ser: "¿Para cuál especialidad necesitas el doctor?"
-2. Cuando tengas la especialidad (ej. "urólogo", "cardiólogo"):
-   - Pregunta por la Provincia en la que desea buscar (si no la ha mencionado aún).
-   - Una vez confirmada la Provincia, pregunta por el Municipio o Sector.
-   - OBLIGATORIO: Pasa SIEMPRE el parámetro 'provincia' a la función 'consultar_directorio_inteligente'. NUNCA llames a la función con la provincia vacía si el usuario ya te dijo dónde está.
+1. Si el usuario dice "necesito un doctor": "¿Para cuál especialidad necesitas el doctor?"
+2. Con la especialidad confirmada:
+   - Pregunta por la Provincia (si no la ha mencionado aún).
+   - Pregunta por el Municipio o Sector.
+   - Pasa la 'provincia' a 'consultar_directorio_inteligente'.
 
-### 📅 REGLA DE AGENDAMIENTO SECUENCIAL (SOLO CUANDO EL USUARIO PIDA CITA):
-Si el usuario confirma que desea AGENDAR una cita con un médico seleccionado:
-- PASO 1 (BENEFICIARIO): Pregunta únicamente si la cita es para él/ella o para un tercero. Espera respuesta.
-  * Si es para un TERCERO: Pide el WhatsApp del tercero y ejecuta 'verificar_registro_tercero'. Si no está registrado, entrega el enlace {URL_FORM_OFICIAL}.
-- PASO 2 (FECHA PREFERIDA): Pregunta por la fecha deseada. Espera respuesta.
-- PASO 3 (TANDA): Pregunta únicamente por la tanda deseada ('Mañana', 'Tarde' o 'Sábados'). Espera respuesta.
-- PASO 4 (MOTIVO DE CONSULTA): Pregunta el motivo principal. Espera respuesta.
-- PASO 5 (CONFIRMACIÓN): Invoca 'agendar_cita_medica'.
+### 📅 REGLA DE AGENDAMIENTO SECUENCIAL (UNA PREGUNTA A LA VEZ):
+Cuando el usuario confirme agendar una cita:
+- NUNCA repitas preguntas ya respondidas en el historial.
+- Pide los datos faltantes uno por uno:
+  1. Beneficiario (Titular o Tercero). Si es tercero no registrado: {URL_FORM_OFICIAL}
+  2. Fecha deseada.
+  3. Tanda ('Mañana', 'Tarde' o 'Sábados').
+  4. Motivo de consulta.
+  5. Invoca 'agendar_cita_medica'.
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
@@ -413,11 +419,8 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     jid_normalizado = normalizar_jid(numero_usuario)
     paciente = registrar_o_actualizar_paciente(jid_normalizado, nombre_usuario)
     
-    nombre_contacto = paciente.get("nombre", nombre_usuario) if paciente.get("nombre") else nombre_usuario
-    if not nombre_contacto or nombre_contacto in ["Trancrédito", "Usuario WhatsApp", "Paciente", ""]:
-        nombre_contacto = "Juan"
-    else:
-        nombre_contacto = nombre_contacto.split()[0].capitalize()
+    nombre_raw = paciente.get("nombre", nombre_usuario) if paciente.get("nombre") else nombre_usuario
+    nombre_contacto = extraer_primer_nombre_valido(nombre_raw)
 
     provincia_paciente = paciente.get("provincia", "")
     municipio_paciente = paciente.get("municipio", "")
@@ -427,7 +430,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     historial_raw = obtener_historial_supabase(jid_normalizado, limite=10)
     historial_limpio = [{"role": m["rol"] if "rol" in m else m["role"], "content": m["contenido"] if "contenido" in m else m["content"]} for m in historial_raw]
 
-    # EXTRAER PROVINCIA DEL HISTORIAL SI NO ESTÁ EN SUPABASE
     texto_historial = " ".join([m["content"] for m in historial_limpio]).lower()
     provincia_detectada = provincia_paciente
     if not provincia_detectada:
