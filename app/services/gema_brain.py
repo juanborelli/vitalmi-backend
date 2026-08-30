@@ -263,7 +263,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         print(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO INTELIGENTE ROBUSTO (SIN BUCLES)
+# DIRECTORIO INTELIGENTE ROBUSTO
 # ==========================================
 
 def consultar_directorio_inteligente(
@@ -282,7 +282,6 @@ def consultar_directorio_inteligente(
     try:
         texto_limpio = remover_tildes(f"{nombre_medico} {especialidad} {mensaje_raw}").lower()
         
-        # Detección inteligente de especialidad
         token_especialidad = ""
         especialidades_clave = ["pediat", "cardio", "ginec", "urol", "derma", "oftalmo", "ortop", "odont", "psiquiat", "neurol"]
         for esp in especialidades_clave:
@@ -295,7 +294,6 @@ def consultar_directorio_inteligente(
             tokens = [t for t in re.findall(r'\b\w{3,}\b', texto_limpio) if t not in stop_words]
             token_especialidad = tokens[0] if tokens else "pediat"
 
-        # Búsqueda Nivel 1: Filtrar por especialidad en el directorio
         query = supabase.table("vitalmi_directorio_master").select("*")
         if token_especialidad:
             query = query.or_(
@@ -307,7 +305,6 @@ def consultar_directorio_inteligente(
         res = query.limit(5).execute()
         medicos = res.data or []
 
-        # Fallback Nivel 2: Si no trajo resultados, recuperar los primeros especialistas disponibles de la tabla
         if not medicos:
             res_fb = supabase.table("vitalmi_directorio_master").select("*").limit(5).execute()
             medicos = res_fb.data or []
@@ -403,6 +400,7 @@ def agendar_cita_medica(
     tanda: str = "Mañana", 
     es_para_tercero: bool = False,
     telefono_tercero: str = "",
+    nombre_menor_paciente: str = "",
     motivo_consulta: str = "Consulta General"
 ) -> str:
     supabase = obtener_cliente_supabase()
@@ -430,7 +428,12 @@ def agendar_cita_medica(
 
         paciente = res_pac.data[0]
         paciente_id = paciente.get("id")
-        nombre_paciente = paciente.get("nombre", "Paciente")
+        nombre_tutor = paciente.get("nombre", "Paciente Titular")
+        
+        # Lógica pediátrica: si viene el nombre del menor, se muestra ese nombre como paciente
+        nombre_paciente_final = nombre_menor_paciente.strip() if nombre_menor_paciente else nombre_tutor
+        etiqueta_tutor = f" (Tutor: {nombre_tutor})" if nombre_menor_paciente else ""
+        
         cedula_paciente = paciente.get("cedula", "No registrada")
         ars_paciente = paciente.get("ars", "Privado")
         plan_ars = paciente.get("tipo_plan", "Básico")
@@ -471,7 +474,7 @@ def agendar_cita_medica(
 
         datos_cita = {
             "paciente_id": paciente_id,
-            "motivo_consulta": f"Paciente: {nombre_paciente} | Cédula: {cedula_paciente} | ARS: {ars_paciente} ({plan_ars}) | Médico: {medico_nombre} | Centro: {centro_medico} | Motivo: {motivo_consulta}",
+            "motivo_consulta": f"Paciente: {nombre_paciente_final}{etiqueta_tutor} | Cédula Tutor: {cedula_paciente} | ARS: {ars_paciente} ({plan_ars}) | Médico: {medico_nombre} | Centro: {centro_medico} | Motivo: {motivo_consulta}",
             "estado": "pendiente_aprobacion",
             "doctor_whatsapp_jid": normalizar_jid(doc_whatsapp) if doc_whatsapp else None,
             "whatsapp_status": "pendiente",
@@ -493,8 +496,8 @@ def agendar_cita_medica(
         mensaje_final = (
             "📋 *SOLICITUD DE CITA REGISTRADA*\n\n"
             "👤 *DATOS DEL PACIENTE:*\n"
-            f"• *Nombre:* {nombre_paciente}\n"
-            f"• *Cédula:* {cedula_paciente}\n"
+            f"• *Nombre:* {nombre_paciente_final}{etiqueta_tutor}\n"
+            f"• *Cédula Tutor:* {cedula_paciente}\n"
             f"• *ARS:* {ars_paciente} ({plan_ars})\n\n"
             "👨‍⚕️ *ESPECIALISTA Y CENTRO:*\n"
             f"• *Doctor:* {medico_nombre}\n"
@@ -533,15 +536,18 @@ Cuentas con un directorio de casi 10,000 médicos especialistas en todo el país
 - Cuando el usuario finalice o agradezca (ej. "Ok gracias", "Gracias", "Muchas gracias"):
   "De nada [Nombre]. Favor de estar pendiente a la confirmación de tu cita. Si hay algo más en lo que pueda asistirte no dudes en decírmelo, ya sea por texto o por voz."
 
-### 🧠 BÚSQUEDA INTELIGENTE Y CONTEXTUALIZACIÓN PROGRESIVA:
-1. Si el usuario solicita un doctor o especialidad, invoca inmediatamente `consultar_directorio_inteligente`.
-2. Muestra los médicos encontrados con su nombre y centro médico de forma clara.
+### 👶 REGLA ESPECIAL PARA CONSULTAS PEDIÁTRICAS:
+- Si la especialidad detectada es PEDIATRÍA (o subespecialidades pediátricas):
+  1. Asume que la cita es para un menor de edad.
+  2. Si el usuario no ha indicado el nombre del menor, pregunta amablemente:
+     "¿Cuál es el nombre completo y edad del niño o niña que asistirá a la consulta?"
+  3. Al agendar, pasa este nombre al parámetro `nombre_menor_paciente`.
 
 ### 📅 REGLA DE CONFIRMACIÓN PREVIA (ANTES DE REGISTRAR):
 Antes de invocar la herramienta `agendar_cita_medica`, DEBES mostrarle un resumen previo al usuario y pedirle confirmación explícita con la siguiente estructura:
 
 "📌 *RESUMEN DE TU SOLICITUD DE CITA:*
-• *Paciente:* [Nombre del Paciente]
+• *Paciente:* [Nombre del Niño/a o Paciente] [Indicar Tutor si aplica]
 • *Especialista:* [Nombre del Doctor]
 • *Centro Médico:* [Nombre del Centro]
 • *Fecha Solicitada:* [Fecha calculada legible, ej: Martes 1 de septiembre de 2026]
@@ -551,7 +557,7 @@ Antes de invocar la herramienta `agendar_cita_medica`, DEBES mostrarle un resume
 Antes de enviar la solicitud al doctor, favor confirmarnos si los datos de la cita son correctos. ¿Son correctos?"
 
 - SOLO cuando el usuario responda afirmativamente ("Sí", "Correcto", "Está bien", "Adelante"), procederás a ejecutar la herramienta `agendar_cita_medica`.
-- Si responde que desea cambiar algo, ajusta la fecha, tanda o especialidad antes de pedir confirmación nuevamente.
+- Si responde que desea cambiar algo, ajusta los datos antes de pedir confirmación nuevamente.
 - Al ejecutar `agendar_cita_medica`, tu ÚNICA respuesta debe ser el mensaje formateado que devuelve la herramienta, SIN agregar coletillas de despedida ni saludos adicionales al final.
 """
 
@@ -660,6 +666,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                         "tanda": {"type": "string"},
                         "es_para_tercero": {"type": "boolean"},
                         "telefono_tercero": {"type": "string"},
+                        "nombre_menor_paciente": {"type": "string"},
                         "motivo_consulta": {"type": "string"}
                     },
                     "required": ["medico_nombre", "fecha_cita", "tanda"]
