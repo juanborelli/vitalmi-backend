@@ -85,8 +85,7 @@ def resolver_fecha_relativa(texto_fecha: str) -> str:
         return texto_clean
 
     if "manana" in texto_clean or "mañana" in texto_clean:
-        fecha_calc = ahora_rd + timedelta(days=1)
-        return fecha_calc.strftime("%Y-%m-%d")
+        return (ahora_rd + timedelta(days=1)).strftime("%Y-%m-%d")
 
     if "hoy" in texto_clean:
         return ahora_rd.strftime("%Y-%m-%d")
@@ -98,9 +97,13 @@ def resolver_fecha_relativa(texto_fecha: str) -> str:
 
     for nombre_dia, idx_target in dias_semana_map.items():
         if nombre_dia in texto_clean:
-            dias_diferencia = (idx_target - ahora_rd.weekday()) % 7
-            if dias_diferencia == 0 or "proximo" in texto_clean or "que viene" in texto_clean:
+            dias_diferencia = idx_target - ahora_rd.weekday()
+            if dias_diferencia <= 0:
                 dias_diferencia += 7
+            
+            if ("proximo" in texto_clean or "que viene" in texto_clean) and dias_diferencia < 3:
+                dias_diferencia += 7
+                
             fecha_calculada = ahora_rd + timedelta(days=dias_diferencia)
             return fecha_calculada.strftime("%Y-%m-%d")
 
@@ -117,7 +120,6 @@ def autodetectar_ubicacion(sector_usuario: str) -> Dict[str, str]:
 
     sector_limpio = sector_usuario.strip()
 
-    # 1. Resolver mediante la Función RPC resolver_ubicacion_rd
     try:
         res_rpc = supabase.rpc("resolver_ubicacion_rd", {"texto_sector": sector_limpio}).execute()
         if res_rpc.data and len(res_rpc.data) > 0:
@@ -131,7 +133,6 @@ def autodetectar_ubicacion(sector_usuario: str) -> Dict[str, str]:
     except Exception as e:
         logger.warning(f"⚠️ Error o timeout en RPC resolver_ubicacion_rd: {e}")
 
-    # 2. Fallback sobre la Vista Consolidada vista_geo_rd
     try:
         res_vista = (
             supabase.table("vista_geo_rd")
@@ -358,12 +359,6 @@ def consultar_directorio_inteligente(
 # ==========================================
 
 def despachar_notificacion_doctor(cita_id: str) -> dict:
-    """
-    1. Obtiene los datos de la cita desde Supabase.
-    2. Valida si el número del doctor posee WhatsApp activo mediante evolution_service.
-    3. Si falla, hace fallback al número del centro médico/secretaría.
-    4. Despacha el mensaje y actualiza la trazabilidad en Supabase.
-    """
     supabase = obtener_cliente_supabase()
     if not supabase:
         return {"status": "error", "mensaje": "Sin conexión a base de datos"}
@@ -383,7 +378,6 @@ def despachar_notificacion_doctor(cita_id: str) -> dict:
             if "Médico:" in p:
                 medico_nombre = p.replace("Médico:", "").strip()
 
-    # Verificar si el número tiene WhatsApp
     whatsapp_valido = False
     if doc_jid:
         try:
@@ -392,7 +386,6 @@ def despachar_notificacion_doctor(cita_id: str) -> dict:
             logger.warning(f"⚠️ Error verificando WhatsApp del doctor: {e}")
             whatsapp_valido = False
 
-    # Fallback a Secretaría / Centro Médico si el doctor no tiene WhatsApp activo
     if not whatsapp_valido:
         logger.warning(f"⚠️ WhatsApp del médico ({doc_jid}) no activo. Conmutando a secretaría...")
         if medico_nombre:
@@ -408,7 +401,6 @@ def despachar_notificacion_doctor(cita_id: str) -> dict:
         supabase.table("citas").update({"whatsapp_status": "fallido_sin_numero"}).eq("id", cita_id).execute()
         return {"status": "fallido", "error": "Sin número de WhatsApp válido"}
 
-    # Plantilla interactiva para el Doctor / Secretaría
     mensaje_doctor = (
         "🏥 *NUEVA SOLICITUD DE CITA - VITALMI*\n\n"
         f"📝 *Detalles de la Cita #{str(cita_id)[:8]}:*\n"
@@ -420,7 +412,6 @@ def despachar_notificacion_doctor(cita_id: str) -> dict:
         "❌ *RECHAZAR* - Para indicar que no hay disponibilidad."
     )
 
-    # Enviar mensaje usando evolution_service
     try:
         res_envio = enviar_mensaje_whatsapp(doc_jid, mensaje_doctor)
     except Exception as err_api:
@@ -529,7 +520,6 @@ def agendar_cita_medica(
         res_cita = supabase.table("citas").insert(datos_cita).execute()
         cita_creada = res_cita.data[0] if res_cita.data else {}
 
-        # Despachar notificación automática al doctor/secretaría
         if cita_creada.get("id"):
             try:
                 despachar_notificacion_doctor(cita_creada["id"])
@@ -570,10 +560,10 @@ Cuentas con un directorio de casi 10,000 médicos especialistas en todo el país
 
 ### 📍 MANEJO INTELIGENTE DE UBICACIONES Y SECTORES:
 1. Ya posees el mapa territorial completo de República Dominicana integrado en la base de datos (vista_geo_rd y resolver_ubicacion_rd).
-2. Si el usuario menciona un barrio, sector o comunidad (ej: "Piantini", "Madre Vieja", "Bella Vista", "Los Ríos"), invoca la herramienta `resolver_ubicacion_rd` o pasa el sector a `consultar_directorio_inteligente`.
+2. Si el usuario menciona un barrio, sector o comunidad (ej: "Piantini", "Madre Vieja", "Bella Vista"), invoca la herramienta `resolver_ubicacion_rd` o pasa el sector a `consultar_directorio_inteligente`.
 3. NUNCA le preguntes al usuario en qué provincia o municipio queda un sector si el sistema ya logró autodetectarlo.
 
-### 💬 REGLA DE SALUDO INICIAL Y DESPEDIDA DE CORTESÍA:
+### 💬 REGLA DE SALUDO Y DESPEDIDA DE CORTESÍA:
 - Al INICIO de la conversación (saludo inicial como "Hola", "Buenas"):
   "Hola [Nombre], soy Gema tu asistente inteligente para citas médicas. Si necesitas algún doctor o especialidad sólo escríbemelo o dímelo por nota de voz."
 - Cuando el usuario finalice o agradezca (ej. "Ok gracias", "Gracias", "Muchas gracias"):
@@ -585,15 +575,22 @@ Cuentas con un directorio de casi 10,000 médicos especialistas en todo el país
    - Pregunta por el Sector, Municipio o Provincia (si no lo ha mencionado aún).
    - Utiliza las herramientas de autodetección para deducir la jerarquía completa.
 
-### 📅 REGLA DE AGENDAMIENTO SECUENCIAL (UNA PREGUNTA A LA VEZ):
-Cuando el usuario confirme agendar una cita:
-- NUNCA repitas preguntas ya respondidas en el historial.
-- Pide los datos faltantes uno por uno:
-  1. Beneficiario (Titular o Tercero). Si es tercero no registrado: {URL_FORM_OFICIAL}
-  2. Fecha deseada.
-  3. Tanda ('Mañana', 'Tarde' o 'Sábados').
-  4. Motivo de consulta.
-  5. Invoca 'agendar_cita_medica'.
+### 📅 REGLA DE CONFIRMACIÓN PREVIA (ANTES DE REGISTRAR):
+Antes de invocar la herramienta `agendar_cita_medica`, DEBES mostrarle un resumen previo al usuario y pedirle confirmación explícita con la siguiente estructura:
+
+"📌 *RESUMEN DE TU SOLICITUD DE CITA:*
+• *Paciente:* [Nombre del Paciente]
+• *Especialista:* [Nombre del Doctor]
+• *Centro Médico:* [Nombre del Centro]
+• *Fecha Solicitada:* [Fecha calculada legible, ej: Martes 1 de septiembre de 2026]
+• *Tanda:* [Mañana / Tarde / Sábados]
+• *Motivo:* [Motivo de consulta]
+
+Antes de enviar la solicitud al doctor, favor confirmarnos si los datos de la cita son correctos. ¿Son correctos?"
+
+- SOLO cuando el usuario responda afirmativamente ("Sí", "Correcto", "Está bien", "Adelante"), procederás a ejecutar la herramienta `agendar_cita_medica`.
+- Si responde que desea cambiar algo, ajusta la fecha, tanda o especialidad antes de pedir confirmación nuevamente.
+- Al ejecutar `agendar_cita_medica`, tu ÚNICA respuesta debe ser el mensaje formateado que devuelve la herramienta, SIN agregar coletillas de despedida ni saludos adicionales al final.
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
