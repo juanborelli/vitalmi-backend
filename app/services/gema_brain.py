@@ -98,50 +98,10 @@ def resolver_fecha_relativa(texto_fecha: str) -> str:
             dias_diferencia = idx_target - ahora_rd.weekday()
             if dias_diferencia <= 0:
                 dias_diferencia += 7
-                
             fecha_calculada = ahora_rd + timedelta(days=dias_diferencia)
             return fecha_calculada.strftime("%Y-%m-%d")
 
     return (ahora_rd + timedelta(days=1)).strftime("%Y-%m-%d")
-
-def autodetectar_ubicacion(sector_usuario: str) -> Dict[str, str]:
-    supabase = obtener_cliente_supabase()
-    if not supabase or not sector_usuario:
-        return {}
-
-    sector_limpio = sector_usuario.strip()
-
-    try:
-        res_rpc = supabase.rpc("resolver_ubicacion_rd", {"texto_sector": sector_limpio}).execute()
-        if res_rpc.data and len(res_rpc.data) > 0:
-            data = res_rpc.data[0]
-            return {
-                "provincia": data.get("provincia", ""),
-                "municipio": data.get("municipio", ""),
-                "sector": data.get("sector", sector_limpio)
-            }
-    except Exception as e:
-        logger.warning(f"⚠️ Error en RPC resolver_ubicacion_rd: {e}")
-
-    try:
-        res_vista = (
-            supabase.table("vista_geo_rd")
-            .select("provincia, municipio, barrio")
-            .ilike("busqueda_texto", f"%{remover_tildes(sector_limpio).lower()}%")
-            .limit(1)
-            .execute()
-        )
-        if res_vista.data and len(res_vista.data) > 0:
-            data = res_vista.data[0]
-            return {
-                "provincia": data.get("provincia", ""),
-                "municipio": data.get("municipio", ""),
-                "sector": data.get("barrio", sector_limpio)
-            }
-    except Exception as e:
-        logger.error(f"❌ Error consultando vista_geo_rd: {e}")
-
-    return {"sector": sector_limpio}
 
 def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") -> dict:
     supabase = obtener_cliente_supabase()
@@ -159,9 +119,6 @@ def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") ->
         
         if not res.data and ultimos_10_digitos:
             res = supabase.table("pacientes").select("*").ilike("telefono_jid", f"%{ultimos_10_digitos}%").execute()
-
-        if not res.data and nombre_guardar not in ["Usuario WhatsApp", "Paciente", "Trancrédito", ""]:
-            res = supabase.table("pacientes").select("*").ilike("nombre", nombre_guardar).execute()
 
         if res.data and len(res.data) > 0:
             paciente_existente = res.data[0]
@@ -185,33 +142,6 @@ def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") ->
     except Exception as e:
         print(f"❌ Error buscando o registrando paciente: {e}")
         return {}
-
-def verificar_registro_tercero(telefono_tercero: str) -> str:
-    supabase = obtener_cliente_supabase()
-    if not supabase or not telefono_tercero:
-        return json.dumps({"registrado": False, "mensaje": "Teléfono inválido o sin datos."})
-
-    jid_tercero = normalizar_jid(telefono_tercero)
-
-    try:
-        res = supabase.table("pacientes").select("id, nombre, perfil_completo, provincia, ars").eq("telefono_jid", jid_tercero).execute()
-        if res.data and len(res.data) > 0:
-            pac = res.data[0]
-            if pac.get("perfil_completo", False):
-                return json.dumps({
-                    "registrado": True, 
-                    "paciente": pac, 
-                    "mensaje": f"El paciente {pac.get('nombre')} está registrado y con perfil completo."
-                }, ensure_ascii=False)
-        
-        return json.dumps({
-            "registrado": False, 
-            "requiere_form": True,
-            "url_form": URL_FORM_OFICIAL,
-            "mensaje": f"El familiar con el número {telefono_tercero} NO está registrado. Indícale que para agendar debe llenar este enlace: {URL_FORM_OFICIAL}"
-        }, ensure_ascii=False)
-    except Exception as e:
-        return json.dumps({"error": str(e)})
 
 def obtener_historial_supabase(telefono_jid: str, limite: int = 10) -> List[Dict[str, str]]:
     supabase = obtener_cliente_supabase()
@@ -252,7 +182,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         print(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO MASTER - ALGORITMO DE BÚSQUEDA CORREGIDO CON FILTROS STRICTOS
+# DIRECTORIO MASTER - ALGORITMO DE BÚSQUEDA AISLADO
 # ==========================================
 
 def consultar_directorio_inteligente(
@@ -269,9 +199,11 @@ def consultar_directorio_inteligente(
         return json.dumps({"total_exacto": 0, "medicos_muestra": []})
 
     try:
-        texto_raw_clean = remover_tildes(f"{nombre_medico} {centro_medico_preferido} {mensaje_raw}").lower()
+        texto_msg = remover_tildes(mensaje_raw).lower()
+        texto_medico = remover_tildes(nombre_medico).lower()
+        texto_centro = remover_tildes(centro_medico_preferido).lower()
 
-        # Detección de especialidad
+        # Detección de especialidad por tokens
         token_especialidad = ""
         especialidades_clave = [
             ("cardio", "Cardiología"), ("pediat", "Pediatría"), ("ginec", "Ginecología"), 
@@ -280,38 +212,74 @@ def consultar_directorio_inteligente(
             ("neurol", "Neurología"), ("interna", "Medicina Interna")
         ]
         for key, _ in especialidades_clave:
-            if key in remover_tildes(especialidad).lower() or key in texto_raw_clean:
+            if key in remover_tildes(especialidad).lower() or key in texto_msg:
                 token_especialidad = key
                 break
 
-        # Determinar lugar solicitado
-        lugar_target = remover_tildes(provincia or municipio or sector).strip().lower()
+        # EXTRAER CIUDAD SOLO SI CONSTA EN EL MENSAJE ACTUAL
+        ciudades_conocidas = [
+            "santiago", "san cristobal", "san pedro", "san juan", "samana", 
+            "la romana", "bani", "santo domingo", "higuey", "puerto plata", "barahona", "azua"
+        ]
+        ciudad_mensaje_actual = ""
+        for c in ciudades_conocidas:
+            if c in texto_msg:
+                ciudad_mensaje_actual = c
+                break
 
-        if not lugar_target:
-            ciudades_rd = ["santiago", "san cristobal", "san pedro", "san juan", "samana", "la romana", "bani", "santo domingo", "higuey", "puerto plata"]
-            for c in ciudades_rd:
-                if c in texto_raw_clean:
-                    lugar_target = c
-                    break
+        # CASO 1: Búsqueda por Nombre de Médico (sin restringir por provincia previa)
+        tokens_nombre = [t for t in re.findall(r'\b\w{3,}\b', texto_medico or texto_msg) if t not in ["doctor", "doctora", "dra", "dr", "clinica", "san", "necesito", "cita", "con", "este"]]
+        if tokens_nombre and ("dr" in texto_msg or "doctor" in texto_msg or nombre_medico):
+            q_name = supabase.table("vitalmi_directorio_master").select("*")
+            for tok in tokens_nombre[:2]:
+                q_name = q_name.ilike("nombre", f"%{tok}%")
+            
+            if ciudad_mensaje_actual:
+                q_name = q_name.or_(f"provincia.ilike.%{ciudad_mensaje_actual}%,municipio.ilike.%{ciudad_mensaje_actual}%,direccion.ilike.%{ciudad_mensaje_actual}%")
 
-        # Búsqueda SQL defensiva
-        q = supabase.table("vitalmi_directorio_master").select("*")
+            res_name = q_name.limit(5).execute()
+            if res_name.data and len(res_name.data) > 0:
+                return json.dumps({
+                    "nivel_busqueda": "nombre_exacto",
+                    "total_exacto": len(res_name.data),
+                    "medicos_muestra": res_name.data
+                }, ensure_ascii=False)
 
-        # Filtro estricto por especialidad
+        # CASO 2: Búsqueda por Centro Médico (ej. SEMECO, Betancourt)
+        palabras_centro = ["semeco", "cedano", "pina", "bethancur", "betancourt", "abel gonzalez", "homs"]
+        target_centro = texto_centro or texto_msg
+        centro_detectado = next((pc for pc in palabras_centro if pc in target_centro), "")
+
+        if centro_detectado:
+            q_cent = supabase.table("vitalmi_directorio_master").select("*")
+            if token_especialidad:
+                q_cent = q_cent.or_(f"especialidad.ilike.%{token_especialidad}%,especialidad_medico.ilike.%{token_especialidad}%")
+            q_cent = q_cent.ilike("centro_medico", f"%{centro_detectado}%")
+            res_cent = q_cent.limit(5).execute()
+            if res_cent.data and len(res_cent.data) > 0:
+                return json.dumps({
+                    "nivel_busqueda": "centro_medico_exacto",
+                    "total_exacto": len(res_cent.data),
+                    "medicos_muestra": res_cent.data
+                }, ensure_ascii=False)
+
+        # CASO 3: Búsqueda por Especialidad y Ubicación
+        q_geo = supabase.table("vitalmi_directorio_master").select("*")
+
         if token_especialidad:
-            q = q.or_(f"especialidad.ilike.%{token_especialidad}%,especialidad_medico.ilike.%{token_especialidad}%")
+            q_geo = q_geo.or_(f"especialidad.ilike.%{token_especialidad}%,especialidad_medico.ilike.%{token_especialidad}%")
 
-        # Filtro estricto por lugar (evita OR sueltos que traigan médicos de todo el país)
-        if lugar_target:
-            q = q.or_(f"provincia.ilike.%{lugar_target}%,municipio.ilike.%{lugar_target}%,direccion.ilike.%{lugar_target}%,centro_medico.ilike.%{lugar_target}%")
+        lugar_final = ciudad_mensaje_actual or remover_tildes(provincia or municipio or sector).strip().lower()
 
-        res = q.limit(5).execute()
-        medicos = res.data or []
+        if lugar_final:
+            q_geo = q_geo.or_(f"provincia.ilike.%{lugar_final}%,municipio.ilike.%{lugar_final}%,direccion.ilike.%{lugar_final}%,centro_medico.ilike.%{lugar_final}%")
 
-        # SI NO HAY MÉDICOS EN ESA CIUDAD ESPECÍFICA: Devolver 0 (PROHIBIDO devolver médicos de otras provincias)
+        res_geo = q_geo.limit(5).execute()
+        medicos = res_geo.data or []
+
         return json.dumps({
             "nivel_busqueda": "coincidencia_exitosa" if medicos else "sin_resultados",
-            "lugar_solicitado": lugar_target or "General",
+            "lugar_solicitado": lugar_final or "General",
             "total_exacto": len(medicos),
             "medicos_muestra": medicos
         }, ensure_ascii=False)
@@ -526,10 +494,22 @@ def agendar_cita_medica(
 SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente inteligente para citas médicas de VitalMi en República Dominicana.
 
-### 📍 MANEJO DE UBICACIONES Y BÚSQUEDAS STRICTAS:
-1. SIEMPRE debes utilizar `consultar_directorio_inteligente` para consultar médicos en la base de datos.
-2. NUNCA respondas que un médico está en una provincia diferente a la que retorna la herramienta (ej. NUNCA digas que un médico de Higüey, Puerto Plata o Santo Domingo está en San Cristóbal).
-3. SI el usuario solicita una fecha, tanda o agendamiento específico, DEBES solicitar la confirmación previa usando la tarjeta estructurada antes de proceder.
+### 📍 REGLAS DE BÚSQUEDA Y TRANSPARENCIA:
+1. SIEMPRE utiliza `consultar_directorio_inteligente` para consultar especialistas.
+2. NO arrastres provincias o ubicaciones del mensaje anterior si el usuario está preguntando por una nueva clínica o médico.
+3. SI la herramienta retorna médicos, preséntalos de inmediato con su Nombre, Especialidad, Centro Médico y Teléfono.
+4. SI la herramienta devuelve 0 resultados, responde de forma transparente: "No encontré médicos registrados para esa búsqueda específica. ¿Te gustaría intentar en otra zona o especialidad?"
+
+### 📅 REGLA DE TARJETA DE CONFIRMACIÓN PREVIA:
+Si el usuario especifica fecha y tanda para agendar, DEBES mostrar la tarjeta de resumen previo antes de registrar la cita:
+"📌 *RESUMEN DE TU SOLICITUD DE CITA:*
+• *Paciente:* [Nombre + Edad] — Tutor: [Nombre Usuario]
+• *Especialista:* [Nombre Doctor]
+• *Centro Médico:* [Centro Médico]
+• *Fecha Solicitada:* [Fecha con día de semana correcto]
+• *Tanda y Horario:* [Mañana (9:00 AM – 12:00 PM) / Tarde (3:00 PM – 6:00 PM) / Sábados (9:00 AM – 2:00 PM)]
+
+Antes de enviar la solicitud al doctor, favor confirmarnos si los datos de la cita son correctos. ¿Son correctos?"
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
@@ -554,30 +534,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     system_prompt = SYSTEM_PROMPT_GEMA + contexto_temporal + contexto_paciente
 
     tools = [
-        {
-            "type": "function",
-            "function": {
-                "name": "resolver_ubicacion_rd",
-                "description": "Resuelve la Provincia y Municipio exacto a partir del nombre de un barrio o sector de República Dominicana.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"texto_sector": {"type": "string"}},
-                    "required": ["texto_sector"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "verificar_registro_tercero",
-                "description": "Verifica si el número de WhatsApp de un tercero/familiar está registrado en Supabase.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"telefono_tercero": {"type": "string"}},
-                    "required": ["telefono_tercero"]
-                }
-            }
-        },
         {
             "type": "function",
             "function": {
@@ -641,12 +597,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 name = tool_call.function.name
                 args = json.loads(tool_call.function.arguments)
 
-                if name == "resolver_ubicacion_rd":
-                    res_geo = autodetectar_ubicacion(args.get("texto_sector", ""))
-                    res_tool = json.dumps(res_geo, ensure_ascii=False)
-                elif name == "verificar_registro_tercero":
-                    res_tool = verificar_registro_tercero(**args)
-                elif name == "consultar_directorio_inteligente":
+                if name == "consultar_directorio_inteligente":
                     args["mensaje_raw"] = mensaje_usuario
                     res_tool = consultar_directorio_inteligente(**args)
                 elif name == "agendar_cita_medica":
