@@ -265,7 +265,6 @@ def consultar_directorio_inteligente(
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        # Autodetección geográfica si hay un sector especificado sin provincia/municipio
         if sector and (not provincia or not municipio):
             geo_info = autodetectar_ubicacion(sector)
             provincia = provincia or geo_info.get("provincia", "")
@@ -382,7 +381,6 @@ def agendar_cita_medica(
         cedula_paciente = paciente.get("cedula", "No registrada")
         ars_paciente = paciente.get("ars", "Privado")
         plan_ars = paciente.get("tipo_plan", "Básico")
-        afiliado_ars = paciente.get("numero_afiliado", "No especificado")
 
         fecha_real_iso = resolver_fecha_relativa(fecha_cita)
         try:
@@ -403,19 +401,30 @@ def agendar_cita_medica(
 
         centro_medico = "Consultorio Privado Autorizado"
         especialidad_medico = "Especialista Clínico"
-        
+        costo_consulta = 2500.00
+        metodo_pago = "Efectivo / Facturación en recepción"
+        reglas_llegada = "Orden de llegada. La recepción abre 30 mins antes de la tanda."
+        doc_whatsapp = ""
+
         tokens_nombre = [t for t in remover_tildes(medico_nombre).split() if len(t) > 3]
         if tokens_nombre:
             res_doc = supabase.table("vitalmi_directorio_master").select("*").ilike("nombre", f"%{tokens_nombre[0]}%").limit(1).execute()
             if res_doc.data:
-                centro_medico = res_doc.data[0].get("centro_medico") or centro_medico
-                medico_nombre = res_doc.data[0].get("nombre") or medico_nombre
-                especialidad_medico = res_doc.data[0].get("especialidad") or res_doc.data[0].get("especialidad_medico") or especialidad_medico
+                doc_data = res_doc.data[0]
+                centro_medico = doc_data.get("centro_medico") or centro_medico
+                medico_nombre = doc_data.get("nombre") or medico_nombre
+                especialidad_medico = doc_data.get("especialidad") or doc_data.get("especialidad_medico") or especialidad_medico
+                doc_whatsapp = doc_data.get("telefono") or doc_data.get("whatsapp") or ""
 
         datos_cita = {
             "paciente_id": paciente_id,
-            "motivo_consulta": f"Paciente: {nombre_paciente} | Cédula: {cedula_paciente} | ARS: {ars_paciente} ({plan_ars}, Afiliado: {afiliado_ars}) | Médico: {medico_nombre} ({especialidad_medico}) | Centro: {centro_medico} | Tanda: {tanda_texto} | Fecha: {fecha_formateada} | Motivo: {motivo_consulta}",
+            "motivo_consulta": f"Paciente: {nombre_paciente} | Cédula: {cedula_paciente} | ARS: {ars_paciente} ({plan_ars}) | Médico: {medico_nombre} | Centro: {centro_medico} | Motivo: {motivo_consulta}",
             "estado": "pendiente_aprobacion",
+            "doctor_whatsapp_jid": normalizar_jid(doc_whatsapp) if doc_whatsapp else None,
+            "whatsapp_status": "pendiente",
+            "costo_consulta": costo_consulta,
+            "metodo_pago": metodo_pago,
+            "reglas_llegada": reglas_llegada,
             "created_at": obtener_hora_rd_iso()
         }
 
@@ -427,17 +436,17 @@ def agendar_cita_medica(
             "👤 *DATOS DEL PACIENTE:*\n"
             f"• *Nombre:* {nombre_paciente}\n"
             f"• *Cédula:* {cedula_paciente}\n"
-            f"• *ARS:* {ars_paciente} ({plan_ars})\n"
-            f"• *No. Afiliado:* {afiliado_ars}\n\n"
-            "👨‍⚕️ *DATOS DEL ESPECIALISTA:*\n"
+            f"• *ARS:* {ars_paciente} ({plan_ars})\n\n"
+            "👨‍⚕️ *ESPECIALISTA Y CENTRO:*\n"
             f"• *Doctor:* {medico_nombre}\n"
             f"• *Especialidad:* {especialidad_medico}\n"
-            f"• *Centro:* {centro_medico}\n\n"
-            "📅 *HORARIO Y DETALLES:*\n"
+            f"• *Centro Médico:* {centro_medico}\n\n"
+            "📅 *HORARIO Y LOGÍSTICA:*\n"
             f"• *Fecha:* {fecha_formateada}\n"
-            f"• *Tanda y Horario:* {tanda_texto}\n"
-            f"• *Motivo:* {motivo_consulta}\n"
-            "• *Estado:* ⏳ Cita pendiente de confirmación por el doctor.\n"
+            f"• *Tanda:* {tanda_texto}\n"
+            f"• *Costo Estimado:* RD$ {costo_consulta:,.2f} ({metodo_pago})\n"
+            f"• *Atención:* {reglas_llegada}\n\n"
+            "⏳ *ESTADO:* Solicitud enviada al doctor/secretaría. Te notificaremos por aquí tan pronto sea confirmada."
         )
 
         return json.dumps({
@@ -497,7 +506,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     municipio_paciente = paciente.get("municipio", "")
     sector_paciente = paciente.get("sector", "")
 
-    # Autodetección automática si el mensaje contiene un sector clave del chat
     geo_auto = {}
     if mensaje_usuario:
         geo_auto = autodetectar_ubicacion(mensaje_usuario)
