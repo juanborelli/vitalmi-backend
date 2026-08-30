@@ -10,7 +10,19 @@ from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
 from app.core.supabase import obtener_cliente_supabase
-from app.services.evolution_service import verificar_numero_whatsapp, enviar_mensaje_whatsapp
+
+# Importar funciones de Evolution Service con protección fallback contra ImportError
+try:
+    from app.services.evolution_service import enviar_mensaje_whatsapp
+except ImportError:
+    def enviar_mensaje_whatsapp(jid: str, texto: str) -> dict:
+        return {"success": False, "error": "enviar_mensaje_whatsapp no encontrado"}
+
+try:
+    from app.services.evolution_service import verificar_numero_whatsapp
+except ImportError:
+    def verificar_numero_whatsapp(jid: str) -> bool:
+        return True
 
 # Configuración de Logs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -362,26 +374,34 @@ def despachar_notificacion_doctor(cita_id: str) -> dict:
 
     cita = res_cita.data[0]
     doc_jid = cita.get("doctor_whatsapp_jid")
-    medico_nombre = cita.get("motivo_consulta", "").split("|")[3].replace("Médico:", "").strip() if "|" in cita.get("motivo_consulta", "") else ""
+    
+    motivo_raw = cita.get("motivo_consulta", "")
+    medico_nombre = ""
+    if "|" in motivo_raw:
+        partes = motivo_raw.split("|")
+        for p in partes:
+            if "Médico:" in p:
+                medico_nombre = p.replace("Médico:", "").strip()
 
-    # Usar evolution_service para verificar si el número tiene WhatsApp
+    # Verificar si el número tiene WhatsApp
     whatsapp_valido = False
     if doc_jid:
         try:
             whatsapp_valido = verificar_numero_whatsapp(doc_jid)
         except Exception as e:
             logger.warning(f"⚠️ Error verificando WhatsApp del doctor: {e}")
+            whatsapp_valido = False
 
     # Fallback a Secretaría / Centro Médico si el doctor no tiene WhatsApp activo
     if not whatsapp_valido:
         logger.warning(f"⚠️ WhatsApp del médico ({doc_jid}) no activo. Conmutando a secretaría...")
-        res_doc = supabase.table("vitalmi_directorio_master").select("telefono, whatsapp, centro_medico").ilike("nombre", f"%{medico_nombre}%").limit(1).execute()
-        
-        if res_doc.data:
-            sec_phone = res_doc.data[0].get("whatsapp") or res_doc.data[0].get("telefono")
-            if sec_phone:
-                doc_jid = normalizar_jid(sec_phone)
-                logger.info(f"📍 Redirigido a WhatsApp de Secretaría: {doc_jid}")
+        if medico_nombre:
+            res_doc = supabase.table("vitalmi_directorio_master").select("telefono, whatsapp, centro_medico").ilike("nombre", f"%{medico_nombre}%").limit(1).execute()
+            if res_doc.data:
+                sec_phone = res_doc.data[0].get("whatsapp") or res_doc.data[0].get("telefono")
+                if sec_phone:
+                    doc_jid = normalizar_jid(sec_phone)
+                    logger.info(f"📍 Redirigido a WhatsApp de Secretaría: {doc_jid}")
 
     if not doc_jid:
         logger.error(f"❌ No se encontró número de WhatsApp válido para la cita #{cita_id}")
@@ -401,7 +421,11 @@ def despachar_notificacion_doctor(cita_id: str) -> dict:
     )
 
     # Enviar mensaje usando evolution_service
-    res_envio = enviar_mensaje_whatsapp(doc_jid, mensaje_doctor)
+    try:
+        res_envio = enviar_mensaje_whatsapp(doc_jid, mensaje_doctor)
+    except Exception as err_api:
+        logger.error(f"❌ Error llamando a enviar_mensaje_whatsapp: {err_api}")
+        res_envio = None
     
     if res_envio and (res_envio.get("success") or res_envio.get("status") in ["success", 200]):
         msg_id = res_envio.get("message_id") or res_envio.get("id") or res_envio.get("key", {}).get("id")
