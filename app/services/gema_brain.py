@@ -11,6 +11,7 @@ from openai import AsyncOpenAI
 
 from app.core.supabase import obtener_cliente_supabase
 
+# Importar funciones de Evolution Service con protección fallback contra ImportError
 try:
     from app.services.evolution_service import enviar_mensaje_whatsapp
 except ImportError:
@@ -23,6 +24,7 @@ except ImportError:
     def verificar_numero_whatsapp(jid: str) -> bool:
         return True
 
+# Configuración de Logs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("GemaBrain")
 
@@ -105,8 +107,38 @@ def resolver_fecha_relativa(texto_fecha: str) -> str:
     return (ahora_rd + timedelta(days=1)).strftime("%Y-%m-%d")
 
 # ==========================================
-# MÓDULO DE RESOLUCIÓN GEOGRÁFICA (RD)
+# MÓDULO DE RESOLUCIÓN Y DESAMBIGUACIÓN GEOGRÁFICA (RD)
 # ==========================================
+
+def desambiguar_sector_rd(texto_sector: str) -> Dict:
+    supabase = obtener_cliente_supabase()
+    if not supabase or not texto_sector:
+        return {"requiere_desambiguacion": False, "opciones": []}
+
+    sector_clean = remover_tildes(texto_sector).strip().lower()
+
+    try:
+        res = (
+            supabase.table("vista_geo_rd")
+            .select("provincia, municipio, barrio")
+            .ilike("busqueda_texto", f"%{sector_clean}%")
+            .limit(10)
+            .execute()
+        )
+        if res.data:
+            sectores_unicos = list(set([d.get("barrio") for d in res.data if d.get("barrio")]))
+            if len(sectores_unicos) > 1 and not any(k in sector_clean for k in ["norte", "sur", "este", "oeste", "centro"]):
+                return {
+                    "requiere_desambiguacion": True,
+                    "provincia": res.data[0].get("provincia", ""),
+                    "municipio": res.data[0].get("municipio", ""),
+                    "sector_base": texto_sector,
+                    "opciones": sectores_unicos
+                }
+    except Exception as e:
+        logger.warning(f"⚠️ Error en desambiguación geográfica: {e}")
+
+    return {"requiere_desambiguacion": False, "opciones": []}
 
 def autodetectar_ubicacion(sector_usuario: str) -> Dict[str, str]:
     supabase = obtener_cliente_supabase()
@@ -119,14 +151,13 @@ def autodetectar_ubicacion(sector_usuario: str) -> Dict[str, str]:
         res_rpc = supabase.rpc("resolver_ubicacion_rd", {"texto_sector": sector_limpio}).execute()
         if res_rpc.data and len(res_rpc.data) > 0:
             data = res_rpc.data[0]
-            logger.info(f"📍 Ubicación resuelta vía RPC: {data}")
             return {
                 "provincia": data.get("provincia", ""),
                 "municipio": data.get("municipio", ""),
                 "sector": data.get("sector", sector_limpio)
             }
     except Exception as e:
-        logger.warning(f"⚠️ Error o timeout en RPC resolver_ubicacion_rd: {e}")
+        logger.warning(f"⚠️ Error en RPC resolver_ubicacion_rd: {e}")
 
     try:
         res_vista = (
@@ -138,7 +169,6 @@ def autodetectar_ubicacion(sector_usuario: str) -> Dict[str, str]:
         )
         if res_vista.data and len(res_vista.data) > 0:
             data = res_vista.data[0]
-            logger.info(f"📍 Ubicación resuelta vía vista_geo_rd: {data}")
             return {
                 "provincia": data.get("provincia", ""),
                 "municipio": data.get("municipio", ""),
@@ -258,7 +288,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         print(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO CON TRIANGULACIÓN GEOGRÁFICA STRICTA
+# DIRECTORIO MASTER - ALGORITMO DE BÚSQUEDA JERÁRQUICO
 # ==========================================
 
 def consultar_directorio_inteligente(
@@ -275,6 +305,23 @@ def consultar_directorio_inteligente(
         return json.dumps({"total_exacto": 0, "medicos_muestra": []})
 
     try:
+        # Verificar desambiguación si hay un sector genérico
+        if sector:
+            desamb = desambiguar_sector_rd(sector)
+            if desamb.get("requiere_desambiguacion"):
+                return json.dumps({
+                    "requiere_desambiguacion": True,
+                    "sector_base": sector,
+                    "municipio": desamb.get("municipio"),
+                    "opciones": desamb.get("opciones"),
+                    "mensaje": f"En {desamb.get('municipio')} existen varias zonas relativas a '{sector}': {', '.join(desamb.get('opciones'))}. ¿A cuál de ellas te refieres o prefieres que busque en todas?"
+                }, ensure_ascii=False)
+
+        if sector and (not provincia or not municipio):
+            geo = autodetectar_ubicacion(sector)
+            provincia = provincia or geo.get("provincia", "")
+            municipio = municipio or geo.get("municipio", "")
+
         texto_limpio = remover_tildes(f"{nombre_medico} {especialidad} {mensaje_raw}").lower()
         
         token_especialidad = ""
@@ -291,45 +338,64 @@ def consultar_directorio_inteligente(
 
         sector_clean = remover_tildes(sector).strip().lower()
         muni_clean = remover_tildes(municipio).strip().lower()
+        prov_clean = remover_tildes(provincia).strip().lower()
 
-        # 1. Búsqueda exacta por sector
-        if sector_clean:
-            q_sector = supabase.table("vitalmi_directorio_master").select("*")
+        # NIVEL 1: Coincidencia EXACTA por Sector o Barrio
+        if sector_clean and sector_clean not in ["todo", "todas"]:
+            q_sec = supabase.table("vitalmi_directorio_master").select("*")
             if token_especialidad:
-                q_sector = q_sector.or_(f"especialidad.ilike.%{token_especialidad}%,especialidad_medico.ilike.%{token_especialidad}%")
-            q_sector = q_sector.or_(f"direccion.ilike.%{sector_clean}%,centro_medico.ilike.%{sector_clean}%")
-            
-            res_sec = q_sector.limit(5).execute()
+                q_sec = q_sec.or_(f"especialidad.ilike.%{token_especialidad}%,especialidad_medico.ilike.%{token_especialidad}%")
+            q_sec = q_sec.or_(f"direccion.ilike.%{sector_clean}%,centro_medico.ilike.%{sector_clean}%")
+            res_sec = q_sec.limit(5).execute()
             if res_sec.data and len(res_sec.data) > 0:
                 return json.dumps({
+                    "nivel_busqueda": "sector_exacto",
                     "total_exacto": len(res_sec.data),
-                    "coincidencia_exacta_sector": True,
                     "sector_buscado": sector,
                     "medicos_muestra": res_sec.data
                 }, ensure_ascii=False)
 
-        # 2. Fallback a Municipio/Provincia si no hay en el sector
-        q_muni = supabase.table("vitalmi_directorio_master").select("*")
-        if token_especialidad:
-            q_muni = q_muni.or_(f"especialidad.ilike.%{token_especialidad}%,especialidad_medico.ilike.%{token_especialidad}%")
-        
+        # NIVEL 2: Coincidencia por Municipio
         if muni_clean:
-            q_muni = q_muni.or_(f"municipio.ilike.%{muni_clean}%,provincia.ilike.%{muni_clean}%,direccion.ilike.%{muni_clean}%")
+            q_muni = supabase.table("vitalmi_directorio_master").select("*")
+            if token_especialidad:
+                q_muni = q_muni.or_(f"especialidad.ilike.%{token_especialidad}%,especialidad_medico.ilike.%{token_especialidad}%")
+            q_muni = q_muni.or_(f"municipio.ilike.%{muni_clean}%,direccion.ilike.%{muni_clean}%")
+            res_muni = q_muni.limit(5).execute()
+            if res_muni.data and len(res_muni.data) > 0:
+                return json.dumps({
+                    "nivel_busqueda": "municipio",
+                    "total_exacto": len(res_muni.data),
+                    "sector_buscado": sector,
+                    "municipio_buscado": municipio,
+                    "medicos_muestra": res_muni.data
+                }, ensure_ascii=False)
 
-        res_muni = q_muni.limit(5).execute()
-        medicos = res_muni.data or []
+        # NIVEL 3: Coincidencia por Provincia
+        if prov_clean:
+            q_prov = supabase.table("vitalmi_directorio_master").select("*")
+            if token_especialidad:
+                q_prov = q_prov.or_(f"especialidad.ilike.%{token_especialidad}%,especialidad_medico.ilike.%{token_especialidad}%")
+            q_prov = q_prov.or_(f"provincia.ilike.%{prov_clean}%,direccion.ilike.%{prov_clean}%")
+            res_prov = q_prov.limit(5).execute()
+            if res_prov.data and len(res_prov.data) > 0:
+                return json.dumps({
+                    "nivel_busqueda": "provincia",
+                    "total_exacto": len(res_prov.data),
+                    "provincia_buscada": provincia,
+                    "medicos_muestra": res_prov.data
+                }, ensure_ascii=False)
 
+        # NIVEL 4: Sin resultados en la Base de Datos (SIN inventar)
         return json.dumps({
-            "total_exacto": len(medicos),
-            "coincidencia_exacta_sector": False,
-            "sector_buscado": sector,
-            "municipio_encontrado": municipio or "San Cristóbal",
-            "medicos_muestra": medicos
+            "nivel_busqueda": "sin_resultados",
+            "total_exacto": 0,
+            "medicos_muestra": []
         }, ensure_ascii=False)
 
     except Exception as e:
         logger.error(f"❌ Error en consultar_directorio_inteligente: {e}")
-        return json.dumps({"total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
+        return json.dumps({"nivel_busqueda": "error", "total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
 
 # ==========================================
 # NOTIFICACIÓN AL DOCTOR / SECRETARÍA
@@ -446,7 +512,6 @@ def agendar_cita_medica(
         paciente_id = paciente.get("id")
         nombre_tutor = paciente.get("nombre", "Paciente Titular")
         
-        # Etiqueta de paciente estructurada con tutor
         if nombre_menor_paciente:
             nombre_paciente_final = f"{nombre_menor_paciente.strip()} (Tutor: {nombre_tutor})"
         else:
@@ -456,7 +521,6 @@ def agendar_cita_medica(
         ars_paciente = paciente.get("ars", "Privado")
         plan_ars = paciente.get("tipo_plan", "Básico")
 
-        # Sincronización estricta de fecha y día de la semana
         fecha_real_iso = resolver_fecha_relativa(fecha_cita)
         try:
             fecha_dt = datetime.strptime(fecha_real_iso, "%Y-%m-%d")
@@ -467,7 +531,7 @@ def agendar_cita_medica(
             fecha_formateada = fecha_cita
 
         tanda_clean = remover_tildes(tanda).lower()
-        if "sabado" in tanda_clean or "sábado" in tanda_clean or fecha_dt.weekday() == 5:
+        if "sabado" in tanda_clean or "sábado" in tanda_clean or (fecha_dt and fecha_dt.weekday() == 5):
             tanda_texto = "Sábados (9:00 AM – 2:00 PM)"
         elif "tarde" in tanda_clean:
             tanda_texto = "Tarde (3:00 PM – 6:00 PM)"
@@ -544,47 +608,46 @@ SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente inteligente para citas médicas de VitalMi en República Dominicana.
 Cuentas con un directorio de casi 10,000 médicos especialistas en todo el país.
 
-### 📍 MANEJO INTELIGENTE DE UBICACIONES Y SECTORES:
-1. Ya posees el mapa territorial completo de República Dominicana integrado en la base de datos (vista_geo_rd y resolver_ubicacion_rd).
-2. Si el usuario menciona un barrio, sector o comunidad (ej: "Piantini", "Madre Vieja", "Bella Vista"), invoca la herramienta `resolver_ubicacion_rd` o pasa el sector a `consultar_directorio_inteligente`.
-3. REGLA DE TRANSPARENCIA TERRITORIAL:
-   Si la herramienta `consultar_directorio_inteligente` devuelve `coincidencia_exacta_sector: false`, NUNCA afirmes que los médicos se encuentran dentro de ese sector. Debes responder con total transparencia:
-   "No encontré especialistas ubicados exactamente en el sector [Sector], pero aquí tienes las opciones disponibles en el centro urbano de [Municipio/Provincia]:"
+### 📍 MANEJO INTELIGENTE DE UBICACIONES Y ACOTACIÓN GEOGRÁFICA (REPÚBLICA DOMINICANA):
+1. PACIENTE NO REGISTRADO O CONSULTA GENÉRICA POR PROVINCIA:
+   Si el usuario pide un especialista indicando solo una provincia o ciudad genérica (ej. "quiero un cardiólogo en San Cristóbal", "pediatra en Santiago", "ginecólogo en La Romana"):
+   - NO muestres médicos de toda la provincia de entrada ni adivines su ubicación.
+   - Pregunta amablemente por la precisión geográfica: "Con gusto te ayudo a encontrar un [Especialidad] en [Provincia]. Para mostrarte las opciones más cercanas a ti, ¿en cuál municipio o sector te encuentras?"
 
-### 💬 REGLA DE SALUDO Y DESPEDIDA DE CORTESÍA:
-- Al INICIO de la conversación (saludo inicial como "Hola", "Buenas"):
-  "Hola [Nombre], soy Gema tu asistente inteligente para citas médicas. Si necesitas algún doctor o especialidad sólo escríbemelo o dímelo por nota de voz."
-- Cuando el usuario finalice o agradezca (ej. "Ok gracias", "Gracias", "Muchas gracias"):
-  "De nada [Nombre]. Favor de estar pendiente a la confirmación de tu cita. Si hay algo más en lo que pueda asistirte no dudes en decírmelo, ya sea por texto o por voz."
+2. PACIENTE REGISTRADO CON UBICACIÓN CONOCIDA:
+   Si el contexto del usuario indica que ya tiene perfil completo en Supabase (con municipio y sector), toma esa ubicación como referencia e infórmalo:
+   "Tomando en cuenta que estás ubicado en [Sector / Municipio], he buscado las opciones para ti:"
+
+3. DESAMBIGUACIÓN GEOGRÁFICA NACIONAL:
+   SI `consultar_directorio_inteligente` devuelve `requiere_desambiguacion: true`, PREGUNTA a cuál de las variantes del sector se refiere (ej. "En [Municipio] existen Madre Vieja Norte y Madre Vieja Sur, ¿en cuál deseas buscar o prefieres en todo Madre Vieja?").
+
+4. REGLA DE TRANSPARENCIA:
+   - Si la herramienta devuelve `nivel_busqueda: "municipio"`, indica: "No encontré especialistas ubicados exactamente dentro del sector [Sector], pero aquí tienes las opciones disponibles en el centro urbano de [Municipio]:"
+   - NUNCA inventes nombres de médicos ni centros médicos que no provengan exactamente de la base de datos.
+
+### 💬 REGLAS DE CORTESÍA:
+- Al INICIO del chat: "Hola [Nombre], soy Gema tu asistente inteligente para citas médicas. Si necesitas algún doctor o especialidad sólo escríbemelo o dímelo por nota de voz."
+- Al FINALIZAR: "De nada [Nombre]. Favor de estar pendiente a la confirmación de tu cita. Si hay algo más en lo que pueda asistirte no dudes en decírmelo, ya sea por texto o por voz."
 
 ### 👶 REGLA ESPECIAL PARA CONSULTAS PEDIÁTRICAS:
-- Si la especialidad detectada es PEDIATRÍA (o subespecialidades pediátricas):
-  1. Asume que la cita es para un menor de edad.
-  2. Si el usuario no ha indicado el nombre del menor, pregunta amablemente:
-     "¿Cuál es el nombre completo y edad del niño o niña que asistirá a la consulta?"
-  3. Al agendar, pasa este nombre al parámetro `nombre_menor_paciente`.
+- Si la especialidad detectada es PEDIATRÍA (o subespecialidades):
+  1. Pregunta amablemente: "¿Cuál es el nombre completo y edad del niño o niña que asistirá a la consulta?"
+  2. Pasa este nombre al parámetro `nombre_menor_paciente`.
 
 ### 📅 REGLA DE CONFIRMACIÓN PREVIA (ANTES DE REGISTRAR):
-Antes de invocar la herramienta `agendar_cita_medica`, DEBES mostrarle un resumen previo al usuario y pedirle confirmación explícita con la siguiente estructura:
+Antes de invocar `agendar_cita_medica`, DEBES mostrar un resumen previo con la siguiente estructura:
 
 "📌 *RESUMEN DE TU SOLICITUD DE CITA:*
 • *Paciente:* [Nombre del Niño/a + Edad] — Tutor: [Nombre del usuario Titular]
-• *Especialista:* [Nombre del Doctor]
-• *Centro Médico:* [Nombre del Centro]
-• *Fecha Solicitada:* [Fecha calculada legible con día correcto de la semana, ej: Viernes 4 de septiembre de 2026]
+• *Especialista:* [Nombre del Doctor exacto de la DB]
+• *Centro Médico:* [Nombre del Centro exacto de la DB]
+• *Fecha Solicitada:* [Fecha calculada legible con el día correcto de la semana, ej: Viernes 4 de septiembre de 2026]
 • *Tanda y Horario:* [Mañana (9:00 AM – 12:00 PM) / Tarde (3:00 PM – 6:00 PM) / Sábados (9:00 AM – 2:00 PM)]
 • *Motivo:* [Motivo de consulta]
 
 Antes de enviar la solicitud al doctor, favor confirmarnos si los datos de la cita son correctos. ¿Son correctos?"
 
-- REGLA DE TANDAS Y HORARIOS:
-  * Tanda Mañana: 9:00 AM – 12:00 PM.
-  * Tanda Tarde: 3:00 PM – 6:00 PM.
-  * Sábados: Únicamente tanda única de 9:00 AM – 2:00 PM (no hay tanda tarde los sábados). Si el usuario pide la tarde un sábado, corrige automáticamente a 'Sábados (9:00 AM – 2:00 PM)'.
-
-- SOLO cuando el usuario responda afirmativamente ("Sí", "Correcto", "Está bien", "Adelante"), procederás a ejecutar la herramienta `agendar_cita_medica`.
-- Si responde que desea cambiar algo, ajusta los datos antes de pedir confirmación nuevamente.
-- Al ejecutar `agendar_cita_medica`, tu ÚNICA respuesta debe ser el mensaje formateado que devuelve la herramienta, SIN agregar coletillas de despedida ni saludos adicionales al final.
+- SOLO cuando el usuario responda afirmativamente ("Sí", "Correcto"), procederás a ejecutar `agendar_cita_medica`.
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
@@ -598,6 +661,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     nombre_raw = paciente.get("nombre", nombre_usuario) if paciente.get("nombre") else nombre_usuario
     nombre_contacto = extraer_primer_nombre_valido(nombre_raw)
 
+    perfil_completo = paciente.get("perfil_completo", False)
     provincia_paciente = paciente.get("provincia", "")
     municipio_paciente = paciente.get("municipio", "")
     sector_paciente = paciente.get("sector", "")
@@ -629,8 +693,8 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     ahora_rd = datetime.now(TZ_RD)
     contexto_temporal = f"\nHoy es {ahora_rd.strftime('%Y-%m-%d %H:%M:%S')} AST en República Dominicana."
     contexto_paciente = (
-        f"\nUSUARIO EN CHAT: '{nombre_contacto}' | WhatsApp: {jid_normalizado}\n"
-        f"UBICACIÓN CONTEXTUAL: Provincia: '{provincia_detectada}', Municipio: '{municipio_paciente}', Sector: '{sector_paciente}'."
+        f"\nUSUARIO EN CHAT: '{nombre_contacto}' | WhatsApp: {jid_normalizado} | Perfil Completo: {perfil_completo}\n"
+        f"UBICACIÓN CONTEXTUAL DEL PACIENTE: Provincia: '{provincia_detectada}', Municipio: '{municipio_paciente}', Sector: '{sector_paciente}'."
     )
     
     system_prompt = SYSTEM_PROMPT_GEMA + contexto_temporal + contexto_paciente
