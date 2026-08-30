@@ -11,7 +11,6 @@ from openai import AsyncOpenAI
 
 from app.core.supabase import obtener_cliente_supabase
 
-# Importar funciones de Evolution Service con protección fallback contra ImportError
 try:
     from app.services.evolution_service import enviar_mensaje_whatsapp
 except ImportError:
@@ -24,7 +23,6 @@ except ImportError:
     def verificar_numero_whatsapp(jid: str) -> bool:
         return True
 
-# Configuración de Logs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("GemaBrain")
 
@@ -260,7 +258,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         print(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO INTELIGENTE ROBUSTO
+# DIRECTORIO CON TRIANGULACIÓN GEOGRÁFICA STRICTA
 # ==========================================
 
 def consultar_directorio_inteligente(
@@ -291,25 +289,46 @@ def consultar_directorio_inteligente(
             tokens = [t for t in re.findall(r'\b\w{3,}\b', texto_limpio) if t not in stop_words]
             token_especialidad = tokens[0] if tokens else "pediat"
 
-        query = supabase.table("vitalmi_directorio_master").select("*")
+        sector_clean = remover_tildes(sector).strip().lower()
+        muni_clean = remover_tildes(municipio).strip().lower()
+
+        # 1. Búsqueda exacta por sector
+        if sector_clean:
+            q_sector = supabase.table("vitalmi_directorio_master").select("*")
+            if token_especialidad:
+                q_sector = q_sector.or_(f"especialidad.ilike.%{token_especialidad}%,especialidad_medico.ilike.%{token_especialidad}%")
+            q_sector = q_sector.or_(f"direccion.ilike.%{sector_clean}%,centro_medico.ilike.%{sector_clean}%")
+            
+            res_sec = q_sector.limit(5).execute()
+            if res_sec.data and len(res_sec.data) > 0:
+                return json.dumps({
+                    "total_exacto": len(res_sec.data),
+                    "coincidencia_exacta_sector": True,
+                    "sector_buscado": sector,
+                    "medicos_muestra": res_sec.data
+                }, ensure_ascii=False)
+
+        # 2. Fallback a Municipio/Provincia si no hay en el sector
+        q_muni = supabase.table("vitalmi_directorio_master").select("*")
         if token_especialidad:
-            query = query.or_(
-                f"especialidad.ilike.%{token_especialidad}%,"
-                f"especialidad_medico.ilike.%{token_especialidad}%,"
-                f"nombre.ilike.%{token_especialidad}%"
-            )
+            q_muni = q_muni.or_(f"especialidad.ilike.%{token_especialidad}%,especialidad_medico.ilike.%{token_especialidad}%")
+        
+        if muni_clean:
+            q_muni = q_muni.or_(f"municipio.ilike.%{muni_clean}%,provincia.ilike.%{muni_clean}%,direccion.ilike.%{muni_clean}%")
 
-        res = query.limit(5).execute()
-        medicos = res.data or []
+        res_muni = q_muni.limit(5).execute()
+        medicos = res_muni.data or []
 
-        if not medicos:
-            res_fb = supabase.table("vitalmi_directorio_master").select("*").limit(5).execute()
-            medicos = res_fb.data or []
-
-        return json.dumps({"total_exacto": len(medicos), "medicos_muestra": medicos}, ensure_ascii=False)
+        return json.dumps({
+            "total_exacto": len(medicos),
+            "coincidencia_exacta_sector": False,
+            "sector_buscado": sector,
+            "municipio_encontrado": municipio or "San Cristóbal",
+            "medicos_muestra": medicos
+        }, ensure_ascii=False)
 
     except Exception as e:
-        logger.error(f"❌ Error controlado en consultar_directorio_inteligente: {e}")
+        logger.error(f"❌ Error en consultar_directorio_inteligente: {e}")
         return json.dumps({"total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
 
 # ==========================================
@@ -427,13 +446,17 @@ def agendar_cita_medica(
         paciente_id = paciente.get("id")
         nombre_tutor = paciente.get("nombre", "Paciente Titular")
         
-        nombre_paciente_final = nombre_menor_paciente.strip() if nombre_menor_paciente else nombre_tutor
-        etiqueta_tutor = f" (Tutor: {nombre_tutor})" if nombre_menor_paciente else ""
-        
+        # Etiqueta de paciente estructurada con tutor
+        if nombre_menor_paciente:
+            nombre_paciente_final = f"{nombre_menor_paciente.strip()} (Tutor: {nombre_tutor})"
+        else:
+            nombre_paciente_final = nombre_tutor
+
         cedula_paciente = paciente.get("cedula", "No registrada")
         ars_paciente = paciente.get("ars", "Privado")
         plan_ars = paciente.get("tipo_plan", "Básico")
 
+        # Sincronización estricta de fecha y día de la semana
         fecha_real_iso = resolver_fecha_relativa(fecha_cita)
         try:
             fecha_dt = datetime.strptime(fecha_real_iso, "%Y-%m-%d")
@@ -444,7 +467,7 @@ def agendar_cita_medica(
             fecha_formateada = fecha_cita
 
         tanda_clean = remover_tildes(tanda).lower()
-        if "sabado" in tanda_clean or "sábado" in tanda_clean:
+        if "sabado" in tanda_clean or "sábado" in tanda_clean or fecha_dt.weekday() == 5:
             tanda_texto = "Sábados (9:00 AM – 2:00 PM)"
         elif "tarde" in tanda_clean:
             tanda_texto = "Tarde (3:00 PM – 6:00 PM)"
@@ -470,7 +493,7 @@ def agendar_cita_medica(
 
         datos_cita = {
             "paciente_id": paciente_id,
-            "motivo_consulta": f"Paciente: {nombre_paciente_final}{etiqueta_tutor} | Cédula Tutor: {cedula_paciente} | ARS: {ars_paciente} ({plan_ars}) | Médico: {medico_nombre} | Centro: {centro_medico} | Motivo: {motivo_consulta}",
+            "motivo_consulta": f"Paciente: {nombre_paciente_final} | Cédula Tutor: {cedula_paciente} | ARS: {ars_paciente} ({plan_ars}) | Médico: {medico_nombre} | Centro: {centro_medico} | Motivo: {motivo_consulta}",
             "estado": "pendiente_aprobacion",
             "doctor_whatsapp_jid": normalizar_jid(doc_whatsapp) if doc_whatsapp else None,
             "whatsapp_status": "pendiente",
@@ -492,7 +515,7 @@ def agendar_cita_medica(
         mensaje_final = (
             "📋 *SOLICITUD DE CITA REGISTRADA*\n\n"
             "👤 *DATOS DEL PACIENTE:*\n"
-            f"• *Nombre:* {nombre_paciente_final}{etiqueta_tutor}\n"
+            f"• *Nombre:* {nombre_paciente_final}\n"
             f"• *Cédula Tutor:* {cedula_paciente}\n"
             f"• *ARS:* {ars_paciente} ({plan_ars})\n\n"
             "👨‍⚕️ *ESPECIALISTA Y CENTRO:*\n"
@@ -524,7 +547,9 @@ Cuentas con un directorio de casi 10,000 médicos especialistas en todo el país
 ### 📍 MANEJO INTELIGENTE DE UBICACIONES Y SECTORES:
 1. Ya posees el mapa territorial completo de República Dominicana integrado en la base de datos (vista_geo_rd y resolver_ubicacion_rd).
 2. Si el usuario menciona un barrio, sector o comunidad (ej: "Piantini", "Madre Vieja", "Bella Vista"), invoca la herramienta `resolver_ubicacion_rd` o pasa el sector a `consultar_directorio_inteligente`.
-3. NUNCA le preguntes al usuario en qué provincia o municipio queda un sector si el sistema ya logró autodetectarlo.
+3. REGLA DE TRANSPARENCIA TERRITORIAL:
+   Si la herramienta `consultar_directorio_inteligente` devuelve `coincidencia_exacta_sector: false`, NUNCA afirmes que los médicos se encuentran dentro de ese sector. Debes responder con total transparencia:
+   "No encontré especialistas ubicados exactamente en el sector [Sector], pero aquí tienes las opciones disponibles en el centro urbano de [Municipio/Provincia]:"
 
 ### 💬 REGLA DE SALUDO Y DESPEDIDA DE CORTESÍA:
 - Al INICIO de la conversación (saludo inicial como "Hola", "Buenas"):
@@ -543,10 +568,10 @@ Cuentas con un directorio de casi 10,000 médicos especialistas en todo el país
 Antes de invocar la herramienta `agendar_cita_medica`, DEBES mostrarle un resumen previo al usuario y pedirle confirmación explícita con la siguiente estructura:
 
 "📌 *RESUMEN DE TU SOLICITUD DE CITA:*
-• *Paciente:* [Nombre del Niño/a o Paciente] [Indicar Tutor si aplica]
+• *Paciente:* [Nombre del Niño/a + Edad] — Tutor: [Nombre del usuario Titular]
 • *Especialista:* [Nombre del Doctor]
 • *Centro Médico:* [Nombre del Centro]
-• *Fecha Solicitada:* [Fecha calculada legible, ej: Martes 1 de septiembre de 2026]
+• *Fecha Solicitada:* [Fecha calculada legible con día correcto de la semana, ej: Viernes 4 de septiembre de 2026]
 • *Tanda y Horario:* [Mañana (9:00 AM – 12:00 PM) / Tarde (3:00 PM – 6:00 PM) / Sábados (9:00 AM – 2:00 PM)]
 • *Motivo:* [Motivo de consulta]
 
