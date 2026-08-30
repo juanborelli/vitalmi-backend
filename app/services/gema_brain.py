@@ -100,9 +100,6 @@ def resolver_fecha_relativa(texto_fecha: str) -> str:
             dias_diferencia = idx_target - ahora_rd.weekday()
             if dias_diferencia <= 0:
                 dias_diferencia += 7
-            
-            if ("proximo" in texto_clean or "que viene" in texto_clean) and dias_diferencia < 3:
-                dias_diferencia += 7
                 
             fecha_calculada = ahora_rd + timedelta(days=dias_diferencia)
             return fecha_calculada.strftime("%Y-%m-%d")
@@ -430,7 +427,6 @@ def agendar_cita_medica(
         paciente_id = paciente.get("id")
         nombre_tutor = paciente.get("nombre", "Paciente Titular")
         
-        # Lógica pediátrica: si viene el nombre del menor, se muestra ese nombre como paciente
         nombre_paciente_final = nombre_menor_paciente.strip() if nombre_menor_paciente else nombre_tutor
         etiqueta_tutor = f" (Tutor: {nombre_tutor})" if nombre_menor_paciente else ""
         
@@ -551,10 +547,15 @@ Antes de invocar la herramienta `agendar_cita_medica`, DEBES mostrarle un resume
 • *Especialista:* [Nombre del Doctor]
 • *Centro Médico:* [Nombre del Centro]
 • *Fecha Solicitada:* [Fecha calculada legible, ej: Martes 1 de septiembre de 2026]
-• *Tanda:* [Mañana / Tarde / Sábados]
+• *Tanda y Horario:* [Mañana (9:00 AM – 12:00 PM) / Tarde (3:00 PM – 6:00 PM) / Sábados (9:00 AM – 2:00 PM)]
 • *Motivo:* [Motivo de consulta]
 
 Antes de enviar la solicitud al doctor, favor confirmarnos si los datos de la cita son correctos. ¿Son correctos?"
+
+- REGLA DE TANDAS Y HORARIOS:
+  * Tanda Mañana: 9:00 AM – 12:00 PM.
+  * Tanda Tarde: 3:00 PM – 6:00 PM.
+  * Sábados: Únicamente tanda única de 9:00 AM – 2:00 PM (no hay tanda tarde los sábados). Si el usuario pide la tarde un sábado, corrige automáticamente a 'Sábados (9:00 AM – 2:00 PM)'.
 
 - SOLO cuando el usuario responda afirmativamente ("Sí", "Correcto", "Está bien", "Adelante"), procederás a ejecutar la herramienta `agendar_cita_medica`.
 - Si responde que desea cambiar algo, ajusta los datos antes de pedir confirmación nuevamente.
