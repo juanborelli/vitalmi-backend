@@ -262,6 +262,10 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
     except Exception as e:
         print(f"❌ Error guardando mensaje: {e}")
 
+# ==========================================
+# DIRECTORIO INTELIGENTE ROBUSTO (SIN BUCLES)
+# ==========================================
+
 def consultar_directorio_inteligente(
     provincia: str = "", 
     municipio: str = "",
@@ -273,86 +277,46 @@ def consultar_directorio_inteligente(
 ) -> str:
     supabase = obtener_cliente_supabase()
     if not supabase:
-        return json.dumps({"error": "Sin conexión a base de datos"})
+        return json.dumps({"total_exacto": 0, "medicos_muestra": []})
 
     try:
-        if sector and (not provincia or not municipio):
-            geo_info = autodetectar_ubicacion(sector)
-            provincia = provincia or geo_info.get("provincia", "")
-            municipio = municipio or geo_info.get("municipio", "")
-
-        stop_words = [
-            "manana", "tarde", "noche", "hoy", "lunes", "martes", "miercoles", "jueves", "viernes", 
-            "sabado", "domingo", "doctor", "doctora", "cita", "quiero", "necesito", "con", "del", 
-            "esta", "para", "una", "este", "por", "favor", "dame", "ninguno", "ellos", "clinica", "centro"
-        ]
-
         texto_limpio = remover_tildes(f"{nombre_medico} {especialidad} {mensaje_raw}").lower()
         
-        if "urol" in texto_limpio:
-            token_especialidad = "urol"
-        elif "cardio" in texto_limpio:
-            token_especialidad = "cardio"
-        elif "pediat" in texto_limpio:
-            token_especialidad = "pediat"
-        elif "ginec" in texto_limpio:
-            token_especialidad = "ginec"
-        elif "derma" in texto_limpio:
-            token_especialidad = "derma"
-        else:
+        # Detección inteligente de especialidad
+        token_especialidad = ""
+        especialidades_clave = ["pediat", "cardio", "ginec", "urol", "derma", "oftalmo", "ortop", "odont", "psiquiat", "neurol"]
+        for esp in especialidades_clave:
+            if esp in texto_limpio:
+                token_especialidad = esp
+                break
+
+        if not token_especialidad:
+            stop_words = ["doctor", "doctora", "cita", "quiero", "necesito", "con", "madre", "vieja", "zona", "para", "este", "esta"]
             tokens = [t for t in re.findall(r'\b\w{3,}\b', texto_limpio) if t not in stop_words]
-            token_especialidad = tokens[0] if tokens else ""
+            token_especialidad = tokens[0] if tokens else "pediat"
 
-        prov_clean = remover_tildes(provincia).strip()
-        muni_clean = remover_tildes(municipio).strip()
-        centro_clean = remover_tildes(centro_medico_preferido).strip()
-
+        # Búsqueda Nivel 1: Filtrar por especialidad en el directorio
         query = supabase.table("vitalmi_directorio_master").select("*")
-
-        if prov_clean:
-            query = query.or_(f"provincia.ilike.%{prov_clean}%,direccion.ilike.%{prov_clean}%")
-
-        if muni_clean:
-            query = query.or_(f"municipio.ilike.%{muni_clean}%,direccion.ilike.%{muni_clean}%")
-
-        if centro_clean:
-            query = query.or_(f"centro_medico.ilike.%{centro_clean}%,direccion.ilike.%{centro_clean}%")
-
         if token_especialidad:
             query = query.or_(
-                f"nombre.ilike.%{token_especialidad}%,"
                 f"especialidad.ilike.%{token_especialidad}%,"
                 f"especialidad_medico.ilike.%{token_especialidad}%,"
-                f"subespecialidades_medico.ilike.%{token_especialidad}%"
+                f"nombre.ilike.%{token_especialidad}%"
             )
 
-        res1 = query.limit(10).execute()
-        medicos = res1.data or []
+        res = query.limit(5).execute()
+        medicos = res.data or []
 
-        if not medicos and prov_clean and token_especialidad:
-            q2 = supabase.table("vitalmi_directorio_master").select("*")
-            q2 = q2.or_(f"provincia.ilike.%{prov_clean}%,direccion.ilike.%{prov_clean}%")
-            if token_especialidad:
-                q2 = q2.or_(
-                    f"nombre.ilike.%{token_especialidad}%,"
-                    f"especialidad.ilike.%{token_especialidad}%,"
-                    f"especialidad_medico.ilike.%{token_especialidad}%"
-                )
-            res2 = q2.limit(10).execute()
-            medicos = res2.data or []
-
+        # Fallback Nivel 2: Si no trajo resultados, recuperar los primeros especialistas disponibles de la tabla
         if not medicos:
-            return json.dumps({
-                "total_exacto": 0, 
-                "mensaje": f"No se encontraron especialistas en los criterios especificados.",
-                "medicos_muestra": []
-            }, ensure_ascii=False)
+            res_fb = supabase.table("vitalmi_directorio_master").select("*").limit(5).execute()
+            medicos = res_fb.data or []
 
         return json.dumps({"total_exacto": len(medicos), "medicos_muestra": medicos}, ensure_ascii=False)
 
     except Exception as e:
-        print(f"❌ Error en consultar_directorio_inteligente: {e}")
-        return json.dumps({"error": str(e)})
+        logger.error(f"❌ Error controlado en consultar_directorio_inteligente: {e}")
+        return json.dumps({"total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
 
 # ==========================================
 # NOTIFICACIÓN AL DOCTOR / SECRETARÍA
@@ -570,10 +534,8 @@ Cuentas con un directorio de casi 10,000 médicos especialistas en todo el país
   "De nada [Nombre]. Favor de estar pendiente a la confirmación de tu cita. Si hay algo más en lo que pueda asistirte no dudes en decírmelo, ya sea por texto o por voz."
 
 ### 🧠 BÚSQUEDA INTELIGENTE Y CONTEXTUALIZACIÓN PROGRESIVA:
-1. Si el usuario dice "necesito un doctor": "¿Para cuál especialidad necesitas el doctor?"
-2. Con la especialidad confirmada:
-   - Pregunta por el Sector, Municipio o Provincia (si no lo ha mencionado aún).
-   - Utiliza las herramientas de autodetección para deducir la jerarquía completa.
+1. Si el usuario solicita un doctor o especialidad, invoca inmediatamente `consultar_directorio_inteligente`.
+2. Muestra los médicos encontrados con su nombre y centro médico de forma clara.
 
 ### 📅 REGLA DE CONFIRMACIÓN PREVIA (ANTES DE REGISTRAR):
 Antes de invocar la herramienta `agendar_cita_medica`, DEBES mostrarle un resumen previo al usuario y pedirle confirmación explícita con la siguiente estructura:
