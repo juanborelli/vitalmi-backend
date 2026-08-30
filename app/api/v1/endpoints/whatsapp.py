@@ -22,8 +22,8 @@ router = APIRouter()
 async def recibir_google_forms(request: Request):
     """
     Recibe la Ficha de Registro desde Google Forms (vía Apps Script),
-    normaliza el identificador de WhatsApp para evitar duplicados, 
-    actualiza Supabase con perfil_completo = True y envía la bienvenida.
+    unifica perfiles buscando por teléfono de 10 dígitos o cédula
+    para evitar duplicados en Supabase, y envía confirmación por WhatsApp.
     """
     try:
         data = await request.json()
@@ -64,13 +64,16 @@ async def recibir_google_forms(request: Request):
             or buscar_valor(["correo", "email"], 10, "")
         ).strip()
 
-        # 2. Normalización Estricta de WhatsApp
+        # Normalización telefónica
+        telefono_solo_numeros = re.sub(r"\D", "", telefono_raw)
+        if len(telefono_solo_numeros) >= 10:
+            ultimos_10_digitos = telefono_solo_numeros[-10:]
+        else:
+            ultimos_10_digitos = telefono_solo_numeros
+
         usuario_jid = normalizar_jid(telefono_raw)
 
-        if not usuario_jid or len(usuario_jid) < 15:
-            raise HTTPException(status_code=400, detail="Número de WhatsApp no válido.")
-
-        # 3. Guardado/Actualización Unificada en Supabase
+        # 2. Búsqueda y Unificación en Supabase para Evitar Filas Duplicadas
         supabase = obtener_cliente_supabase()
         if supabase:
             datos_paciente = {
@@ -89,28 +92,41 @@ async def recibir_google_forms(request: Request):
                 "updated_at": obtener_hora_rd_iso()
             }
 
+            # Búsqueda 1: Por JID exacto
             res_exist = supabase.table("pacientes").select("id").eq("telefono_jid", usuario_jid).execute()
+            
+            # Búsqueda 2: Si no existe por JID exacto, buscar por coincidencia de los 10 dígitos del teléfono
+            if not res_exist.data and ultimos_10_digitos:
+                res_exist = supabase.table("pacientes").select("id").ilike("telefono_jid", f"%{ultimos_10_digitos}%").execute()
+
+            # Búsqueda 3: Si tampoco existe, buscar por Cédula si fue provista
+            if not res_exist.data and cedula and cedula != "No especificada":
+                res_exist = supabase.table("pacientes").select("id").eq("cedula", cedula).execute()
+
+            # Si se encuentra un registro previo (incluso incompleto), se actualiza la misma fila
             if res_exist.data:
-                supabase.table("pacientes").update(datos_paciente).eq("telefono_jid", usuario_jid).execute()
+                paciente_id = res_exist.data[0]["id"]
+                supabase.table("pacientes").update(datos_paciente).eq("id", paciente_id).execute()
             else:
                 supabase.table("pacientes").insert(datos_paciente).execute()
 
-        # 4. Mensaje de Bienvenida por WhatsApp
-        ubicacion_texto = f"{sector}, {municipio}, {provincia}" if sector else f"{municipio}, {provincia}"
-        mensaje_bienvenida = (
-            f"🎉 ¡Hola {nombre_completo}! Tu ficha de registro en VitalMi ha sido completada con éxito.\n\n"
-            f"👤 *PERFIL DE PACIENTE REGISTRADO:*\n"
-            f"• *Cédula:* {cedula}\n"
-            f"• *Edad:* {edad} años\n"
-            f"• *Correo:* {email_paciente if email_paciente else 'No registrado'}\n"
-            f"• *Seguro Médico:* {ars} ({plan})\n"
-            f"• *Ubicación:* {ubicacion_texto}\n\n"
-            f"Ya no tendrás que volver a llenar este formulario. A partir de ahora, cuando desees agendar una cita médica, "
-            f"solo escríbeme directamente por aquí indicándome el médico o la especialidad que necesitas."
-        )
-        await enviar_mensaje_whatsapp(destinatario=usuario_jid, texto=mensaje_bienvenida)
+        # 3. Enviar Confirmación de Registro por WhatsApp
+        if usuario_jid:
+            ubicacion_texto = f"{sector}, {municipio}, {provincia}" if sector else f"{municipio}, {provincia}"
+            mensaje_bienvenida = (
+                f"🎉 ¡Hola {nombre_completo}! Tu ficha de registro en VitalMi ha sido completada con éxito.\n\n"
+                f"👤 *PERFIL DE PACIENTE REGISTRADO:*\n"
+                f"• *Cédula:* {cedula}\n"
+                f"• *Edad:* {edad} años\n"
+                f"• *Correo:* {email_paciente if email_paciente else 'No registrado'}\n"
+                f"• *Seguro Médico:* {ars} ({plan})\n"
+                f"• *Ubicación:* {ubicacion_texto}\n\n"
+                f"Ya no tendrás que volver a llenar este formulario. A partir de ahora, cuando desees agendar una cita médica, "
+                f"solo escríbeme directamente por aquí indicándome el médico o la especialidad que necesitas."
+            )
+            await enviar_mensaje_whatsapp(destinatario=usuario_jid, texto=mensaje_bienvenida)
 
-        return {"status": "success", "message": "Perfil registrado correctamente."}
+        return {"status": "success", "message": "Perfil unificado y registrado correctamente."}
 
     except Exception as e:
         print(f"❌ Error procesando webhook de Google Forms: {e}")

@@ -1,13 +1,18 @@
 import os
 import re
 import json
+import logging
 from datetime import datetime, timedelta
 import zoneinfo
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from app.core.supabase import obtener_cliente_supabase
+
+# Configuración de Logs
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("GemaBrain")
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 env_path = BASE_DIR / ".env"
@@ -16,7 +21,7 @@ load_dotenv(dotenv_path=env_path, override=True)
 TZ_RD = zoneinfo.ZoneInfo("America/Santo_Domingo")
 URL_FORM_OFICIAL = "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
 
-def obtener_cliente_openai() -> AsyncOpenAI:
+def obtener_cliente_openai() -> Optional[AsyncOpenAI]:
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key and env_path.exists():
         with open(env_path, "r") as f:
@@ -86,6 +91,57 @@ def resolver_fecha_relativa(texto_fecha: str) -> str:
             return fecha_calculada.strftime("%Y-%m-%d")
 
     return (ahora_rd + timedelta(days=1)).strftime("%Y-%m-%d")
+
+# ==========================================
+# MÓDULO DE RESOLUCIÓN GEOGRÁFICA (RD)
+# ==========================================
+
+def autodetectar_ubicacion(sector_usuario: str) -> Dict[str, str]:
+    """
+    Recibe un sector/barrio o municipio (ej: 'Piantini', 'Madre Vieja') y resuelve 
+    automáticamente su Provincia, Municipio y Sector en Supabase.
+    """
+    supabase = obtener_cliente_supabase()
+    if not supabase or not sector_usuario:
+        return {}
+
+    sector_limpio = sector_usuario.strip()
+
+    # 1. Resolver mediante la Función RPC resolver_ubicacion_rd
+    try:
+        res_rpc = supabase.rpc("resolver_ubicacion_rd", {"texto_sector": sector_limpio}).execute()
+        if res_rpc.data and len(res_rpc.data) > 0:
+            data = res_rpc.data[0]
+            logger.info(f"📍 Ubicación resuelta vía RPC: {data}")
+            return {
+                "provincia": data.get("provincia", ""),
+                "municipio": data.get("municipio", ""),
+                "sector": data.get("sector", sector_limpio)
+            }
+    except Exception as e:
+        logger.warning(f"⚠️ Error o timeout en RPC resolver_ubicacion_rd: {e}")
+
+    # 2. Fallback sobre la Vista Consolidada vista_geo_rd
+    try:
+        res_vista = (
+            supabase.table("vista_geo_rd")
+            .select("provincia, municipio, barrio")
+            .ilike("busqueda_texto", f"%{remover_tildes(sector_limpio).lower()}%")
+            .limit(1)
+            .execute()
+        )
+        if res_vista.data and len(res_vista.data) > 0:
+            data = res_vista.data[0]
+            logger.info(f"📍 Ubicación resuelta vía vista_geo_rd: {data}")
+            return {
+                "provincia": data.get("provincia", ""),
+                "municipio": data.get("municipio", ""),
+                "sector": data.get("barrio", sector_limpio)
+            }
+    except Exception as e:
+        logger.error(f"❌ Error consultando vista_geo_rd: {e}")
+
+    return {"sector": sector_limpio}
 
 def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") -> dict:
     supabase = obtener_cliente_supabase()
@@ -198,6 +254,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
 def consultar_directorio_inteligente(
     provincia: str = "", 
     municipio: str = "",
+    sector: str = "",
     especialidad: str = "", 
     nombre_medico: str = "", 
     centro_medico_preferido: str = "",
@@ -208,6 +265,12 @@ def consultar_directorio_inteligente(
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
+        # Autodetección geográfica si hay un sector especificado sin provincia/municipio
+        if sector and (not provincia or not municipio):
+            geo_info = autodetectar_ubicacion(sector)
+            provincia = provincia or geo_info.get("provincia", "")
+            municipio = municipio or geo_info.get("municipio", "")
+
         stop_words = [
             "manana", "tarde", "noche", "hoy", "lunes", "martes", "miercoles", "jueves", "viernes", 
             "sabado", "domingo", "doctor", "doctora", "cita", "quiero", "necesito", "con", "del", 
@@ -231,12 +294,16 @@ def consultar_directorio_inteligente(
             token_especialidad = tokens[0] if tokens else ""
 
         prov_clean = remover_tildes(provincia).strip()
+        muni_clean = remover_tildes(municipio).strip()
         centro_clean = remover_tildes(centro_medico_preferido).strip()
 
         query = supabase.table("vitalmi_directorio_master").select("*")
 
         if prov_clean:
             query = query.or_(f"provincia.ilike.%{prov_clean}%,direccion.ilike.%{prov_clean}%")
+
+        if muni_clean:
+            query = query.or_(f"municipio.ilike.%{muni_clean}%,direccion.ilike.%{muni_clean}%")
 
         if centro_clean:
             query = query.or_(f"centro_medico.ilike.%{centro_clean}%,direccion.ilike.%{centro_clean}%")
@@ -387,6 +454,11 @@ SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente inteligente para citas médicas de VitalMi en República Dominicana.
 Cuentas con un directorio de casi 10,000 médicos especialistas en todo el país.
 
+### 📍 MANEJO INTELIGENTE DE UBICACIONES Y SECTORES:
+1. Ya posees el mapa territorial completo de República Dominicana integrado en la base de datos (vista_geo_rd y resolver_ubicacion_rd).
+2. Si el usuario menciona un barrio, sector o comunidad (ej: "Piantini", "Madre Vieja", "Bella Vista", "Los Ríos"), invoca la herramienta `resolver_ubicacion_rd` o pasa el sector a `consultar_directorio_inteligente`.
+3. NUNCA le preguntes al usuario en qué provincia o municipio queda un sector si el sistema ya logró autodetectarlo.
+
 ### 💬 REGLA DE SALUDO INICIAL Y DESPEDIDA DE CORTESÍA:
 - Al INICIO de la conversación (saludo inicial como "Hola", "Buenas"):
   "Hola [Nombre], soy Gema tu asistente inteligente para citas médicas. Si necesitas algún doctor o especialidad sólo escríbemelo o dímelo por nota de voz."
@@ -396,9 +468,8 @@ Cuentas con un directorio de casi 10,000 médicos especialistas en todo el país
 ### 🧠 BÚSQUEDA INTELIGENTE Y CONTEXTUALIZACIÓN PROGRESIVA:
 1. Si el usuario dice "necesito un doctor": "¿Para cuál especialidad necesitas el doctor?"
 2. Con la especialidad confirmada:
-   - Pregunta por la Provincia (si no la ha mencionado aún).
-   - Pregunta por el Municipio o Sector.
-   - Pasa la 'provincia' a 'consultar_directorio_inteligente'.
+   - Pregunta por el Sector, Municipio o Provincia (si no lo ha mencionado aún).
+   - Utiliza las herramientas de autodetección para deducir la jerarquía completa.
 
 ### 📅 REGLA DE AGENDAMIENTO SECUENCIAL (UNA PREGUNTA A LA VEZ):
 Cuando el usuario confirme agendar una cita:
@@ -425,6 +496,15 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     provincia_paciente = paciente.get("provincia", "")
     municipio_paciente = paciente.get("municipio", "")
     sector_paciente = paciente.get("sector", "")
+
+    # Autodetección automática si el mensaje contiene un sector clave del chat
+    geo_auto = {}
+    if mensaje_usuario:
+        geo_auto = autodetectar_ubicacion(mensaje_usuario)
+        if geo_auto.get("provincia"):
+            provincia_paciente = geo_auto.get("provincia")
+            municipio_paciente = geo_auto.get("municipio")
+            sector_paciente = geo_auto.get("sector")
 
     guardar_mensaje_supabase(jid_normalizado, "user", mensaje_usuario)
     historial_raw = obtener_historial_supabase(jid_normalizado, limite=10)
@@ -455,6 +535,18 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         {
             "type": "function",
             "function": {
+                "name": "resolver_ubicacion_rd",
+                "description": "Resuelve la Provincia y Municipio exacto a partir del nombre de un barrio o sector de República Dominicana.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"texto_sector": {"type": "string"}},
+                    "required": ["texto_sector"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "verificar_registro_tercero",
                 "description": "Verifica si el número de WhatsApp de un tercero/familiar está registrado en Supabase.",
                 "parameters": {
@@ -468,7 +560,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             "type": "function",
             "function": {
                 "name": "consultar_directorio_inteligente",
-                "description": "Busca especialistas en el directorio según ubicación y centro médico deseado.",
+                "description": "Busca especialistas en el directorio según ubicación, sector y centro médico deseado.",
                 "parameters": {
                     "type": "object", 
                     "properties": {
@@ -476,6 +568,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                         "nombre_medico": {"type": "string"},
                         "provincia": {"type": "string"},
                         "municipio": {"type": "string"},
+                        "sector": {"type": "string"},
                         "centro_medico_preferido": {"type": "string"}
                     }, 
                     "required": []
@@ -525,7 +618,10 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 name = tool_call.function.name
                 args = json.loads(tool_call.function.arguments)
 
-                if name == "verificar_registro_tercero":
+                if name == "resolver_ubicacion_rd":
+                    res_geo = autodetectar_ubicacion(args.get("texto_sector", ""))
+                    res_tool = json.dumps(res_geo, ensure_ascii=False)
+                elif name == "verificar_registro_tercero":
                     res_tool = verificar_registro_tercero(**args)
                 elif name == "consultar_directorio_inteligente":
                     args["mensaje_raw"] = mensaje_usuario
@@ -533,6 +629,8 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                         args["provincia"] = provincia_detectada
                     if ("municipio" not in args or not args["municipio"]) and municipio_paciente:
                         args["municipio"] = municipio_paciente
+                    if ("sector" not in args or not args["sector"]) and sector_paciente:
+                        args["sector"] = sector_paciente
                     res_tool = consultar_directorio_inteligente(**args)
                 elif name == "agendar_cita_medica":
                     args["telefono_jid"] = jid_normalizado
