@@ -11,6 +11,7 @@ from openai import AsyncOpenAI
 
 from app.core.supabase import obtener_cliente_supabase
 
+# Importar funciones de Evolution Service con protección fallback contra ImportError
 try:
     from app.services.evolution_service import enviar_mensaje_whatsapp
 except ImportError:
@@ -23,6 +24,7 @@ except ImportError:
     def verificar_numero_whatsapp(jid: str) -> bool:
         return True
 
+# Configuración de Logs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("GemaBrain")
 
@@ -105,7 +107,7 @@ def resolver_fecha_relativa(texto_fecha: str) -> str:
     return (ahora_rd + timedelta(days=1)).strftime("%Y-%m-%d")
 
 # ==========================================
-# MÓDULO GEOGRÁFICO DE REPUBLICA DOMINICANA
+# MÓDULO GEOGRÁFICO DE REPÚBLICA DOMINICANA
 # ==========================================
 
 def desambiguar_sector_rd(texto_sector: str) -> Dict:
@@ -305,13 +307,7 @@ def consultar_directorio_inteligente(
     try:
         texto_raw_clean = remover_tildes(f"{nombre_medico} {centro_medico_preferido} {mensaje_raw}").lower()
 
-        # Detección inteligente si se mencionó un centro médico en lugar de un sector
-        palabras_centro = ["clinica", "hospital", "centro", "semeco", "cedano", "pina", "grupo medico", "bethancur", "betancourt"]
-        if any(pc in sector.lower() for pc in palabras_centro) and not centro_medico_preferido:
-            centro_medico_preferido = sector
-            sector = ""
-
-        # Detección flexible de especialidad
+        # 1. Detección flexible de especialidades clave
         token_especialidad = ""
         especialidades_clave = [
             ("cardio", "Cardiología"), ("pediat", "Pediatría"), ("ginec", "Ginecología"), 
@@ -319,30 +315,39 @@ def consultar_directorio_inteligente(
             ("ortop", "Ortopedia"), ("odont", "Odontología"), ("psiquiat", "Psiquiatría"), 
             ("neurol", "Neurología"), ("interna", "Medicina Interna")
         ]
-        for key, esp_nombre in especialidades_clave:
+        for key, _ in especialidades_clave:
             if key in remover_tildes(especialidad).lower() or key in texto_raw_clean:
                 token_especialidad = key
                 break
 
-        # Limpieza de tokens de ubicación
-        provincia_target = remover_tildes(provincia).strip().lower() or "san cristobal"
-        municipio_target = remover_tildes(municipio).strip().lower() or "san cristobal"
-        sector_target = remover_tildes(sector).strip().lower()
+        # 2. Reasignación si viene una clínica en lugar de un sector
+        palabras_centro = ["clinica", "hospital", "centro", "semeco", "cedano", "pina", "grupo medico", "bethancur", "betancourt"]
+        if any(pc in sector.lower() for pc in palabras_centro) and not centro_medico_preferido:
+            centro_medico_preferido = sector
+            sector = ""
 
-        # 1. Búsqueda por Nombre de Médico (Tolerancia a tipografía / fragmentos de nombre)
+        # 3. Determinar ciudad objetivo sin sobreescribir con la ubicación base
+        lugar_target = remover_tildes(provincia or municipio or sector).strip().lower()
+        if not lugar_target:
+            ciudades_rd = ["santiago", "san cristobal", "san pedro", "san juan", "samana", "la romana", "bani", "santo domingo", "higuey", "puerto plata"]
+            for c in ciudades_rd:
+                if c in texto_raw_clean:
+                    lugar_target = c
+                    break
+
+        # 4. BÚSQUEDA SQL MULTI-CAPA
+
+        # Capa A: Búsqueda por Nombre de Médico (Tolerancia a tipografía / fragmentos de nombre)
         tokens_nombre = [t for t in re.findall(r'\b\w{3,}\b', remover_tildes(nombre_medico).lower()) if t not in ["doctor", "doctora", "dra", "dr", "clinica", "san"]]
         if not tokens_nombre:
-            # Buscar si vino en mensaje_raw (ej. "dr grabiel garcia")
             m_doc = re.search(r'\b(dr|dra|doctor|doctora)\s+([a-z\s]+)', texto_raw_clean)
             if m_doc:
                 tokens_nombre = [t for t in m_doc.group(2).split() if len(t) > 2]
 
         if tokens_nombre:
             q_name = supabase.table("vitalmi_directorio_master").select("*")
-            # Probar cada token de nombre
             for tok in tokens_nombre[:2]:
                 q_name = q_name.ilike("nombre", f"%{tok}%")
-            
             res_name = q_name.limit(5).execute()
             if res_name.data and len(res_name.data) > 0:
                 return json.dumps({
@@ -351,7 +356,7 @@ def consultar_directorio_inteligente(
                     "medicos_muestra": res_name.data
                 }, ensure_ascii=False)
 
-        # 2. Búsqueda por Centro Médico Específico (ej. SEMECO, Clínica San Cristóbal)
+        # Capa B: Búsqueda por Centro Médico Específico (ej. SEMECO, Betancourt)
         if centro_medico_preferido or any(pc in texto_raw_clean for pc in palabras_centro):
             target_centro = remover_tildes(centro_medico_preferido).lower() if centro_medico_preferido else texto_raw_clean
             tokens_centro = [t for t in re.findall(r'\b\w{3,}\b', target_centro) if t not in ["clinica", "hospital", "centro", "del", "las", "san"]]
@@ -360,8 +365,6 @@ def consultar_directorio_inteligente(
                 q_cent = supabase.table("vitalmi_directorio_master").select("*")
                 if token_especialidad:
                     q_cent = q_cent.or_(f"especialidad.ilike.%{token_especialidad}%,especialidad_medico.ilike.%{token_especialidad}%")
-                
-                # Filtrar por el token principal de la clínica (ej. "semeco", "bethancur")
                 q_cent = q_cent.ilike("centro_medico", f"%{tokens_centro[0]}%")
                 res_cent = q_cent.limit(5).execute()
                 if res_cent.data and len(res_cent.data) > 0:
@@ -372,40 +375,29 @@ def consultar_directorio_inteligente(
                         "medicos_muestra": res_cent.data
                     }, ensure_ascii=False)
 
-        # 3. Búsqueda Jerárquica por Ubicación (San Cristóbal / Provincia)
+        # Capa C: Búsqueda por Especialidad + Ciudad
         q_geo = supabase.table("vitalmi_directorio_master").select("*")
         if token_especialidad:
             q_geo = q_geo.or_(f"especialidad.ilike.%{token_especialidad}%,especialidad_medico.ilike.%{token_especialidad}%")
 
-        # Filtro geográfico ESTRICTO: San Cristóbal
-        if "san cristobal" in municipio_target or "san cristobal" in provincia_target:
-            q_geo = q_geo.or_("municipio.ilike.%san cristobal%,provincia.ilike.%san cristobal%,direccion.ilike.%san cristobal%")
+        if lugar_target:
+            q_geo = q_geo.or_(f"provincia.ilike.%{lugar_target}%,municipio.ilike.%{lugar_target}%,direccion.ilike.%{lugar_target}%,centro_medico.ilike.%{lugar_target}%")
 
-        res_geo = q_geo.limit(10).execute()
+        res_geo = q_geo.limit(5).execute()
         medicos = res_geo.data or []
 
         if medicos:
-            # Filtrar si hay coincidencia por sector exacto dentro de San Cristóbal
-            if sector_target:
-                medicos_sector = [m for m in medicos if sector_target in remover_tildes(m.get("direccion", "")).lower() or sector_target in remover_tildes(m.get("centro_medico", "")).lower()]
-                if medicos_sector:
-                    return json.dumps({
-                        "nivel_busqueda": "sector_exacto",
-                        "total_exacto": len(medicos_sector),
-                        "sector_buscado": sector,
-                        "medicos_muestra": medicos_sector
-                    }, ensure_ascii=False)
-
             return json.dumps({
-                "nivel_busqueda": "municipio",
+                "nivel_busqueda": "coincidencia_exitosa",
+                "lugar_solicitado": lugar_target or "General",
                 "total_exacto": len(medicos),
-                "municipio_buscado": "San Cristóbal",
-                "medicos_muestra": medicos[:5]
+                "medicos_muestra": medicos
             }, ensure_ascii=False)
 
-        # 4. Fallback Seguro SIN Alucinaciones (Nunca salir de la provincia solicitada)
+        # Capa D: Sin resultados (Respuesta Transparente Cero Alucinaciones)
         return json.dumps({
             "nivel_busqueda": "sin_resultados",
+            "lugar_solicitado": lugar_target,
             "total_exacto": 0,
             "medicos_muestra": []
         }, ensure_ascii=False)
@@ -413,10 +405,6 @@ def consultar_directorio_inteligente(
     except Exception as e:
         logger.error(f"❌ Error en consultar_directorio_inteligente: {e}")
         return json.dumps({"nivel_busqueda": "error", "total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
-
-# ==========================================
-# NOTIFICACIÓN AL DOCTOR / SECRETARÍA
-# ==========================================
 
 def despachar_notificacion_doctor(cita_id: str) -> dict:
     supabase = obtener_cliente_supabase()
@@ -623,12 +611,11 @@ def agendar_cita_medica(
 
 SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente inteligente para citas médicas de VitalMi en República Dominicana.
-Cuentas con un directorio de miles de médicos especialistas.
 
-### 📍 INSTRUCCIONES ESTRICTAS DE BÚSQUEDA Y NUNCA MEZCLAR PROVINCIAS:
-1. SIEMPRE debes llamar a `consultar_directorio_inteligente` para consultar médicos en la base de datos.
-2. NUNCA respondas que un médico está en una ciudad si en los datos de la herramienta dice que está en otra (ej. NUNCA digas que un médico de Higüey o Santo Domingo está en San Cristóbal).
-3. SI la herramienta devuelve resultados, preséntalos DE INMEDIATO con su Nombre, Especialidad, Centro Médico y Teléfono. NUNCA digas "Un momento por favor" sin entregar la lista.
+### 📍 MANEJO DE UBICACIONES Y CONSULTAS:
+1. SIEMPRE debes utilizar `consultar_directorio_inteligente` para consultar médicos en la base de datos.
+2. NUNCA afirmes que un médico está en una provincia diferente a la que retorna la herramienta (ej. NUNCA digas que un médico de Higüey o Santo Domingo está en San Cristóbal).
+3. SI la herramienta devuelve médicos, preséntalos DE INMEDIATO con su Nombre, Especialidad, Centro Médico, Dirección y Teléfono exacto retornado. NUNCA envíes mensajes vacíos diciendo "Un momento por favor".
 4. NUNCA confundas una Clínica o Centro Médico con un Sector (ej. SEMECO, Clínica San Cristóbal son centros médicos).
 
 ### 💬 REGLAS DE CORTESÍA:
@@ -638,7 +625,7 @@ Cuentas con un directorio de miles de médicos especialistas.
 - Si la especialidad detectada es PEDIATRÍA: pregunta el nombre y edad del menor antes de agendar.
 
 ### 📅 REGLA DE CONFIRMACIÓN PREVIA:
-Antes de invocar `agendar_cita_medica`, muestra la tarjeta con resumen previa y pide confirmación explícita ("¿Son correctos?").
+Antes de invocar `agendar_cita_medica`, muestra la tarjeta con resumen previa y pide confirmación explícita ("¿Son correctos los datos?").
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
@@ -652,21 +639,13 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     nombre_raw = paciente.get("nombre", nombre_usuario) if paciente.get("nombre") else nombre_usuario
     nombre_contacto = extraer_primer_nombre_valido(nombre_raw)
 
-    perfil_completo = paciente.get("perfil_completo", False)
-    provincia_paciente = paciente.get("provincia", "San Cristóbal")
-    municipio_paciente = paciente.get("municipio", "San Cristóbal")
-    sector_paciente = paciente.get("sector", "")
-
     guardar_mensaje_supabase(jid_normalizado, "user", mensaje_usuario)
     historial_raw = obtener_historial_supabase(jid_normalizado, limite=10)
     historial_limpio = [{"role": m["rol"] if "rol" in m else m["role"], "content": m["contenido"] if "contenido" in m else m["content"]} for m in historial_raw]
 
     ahora_rd = datetime.now(TZ_RD)
     contexto_temporal = f"\nHoy es {ahora_rd.strftime('%Y-%m-%d %H:%M:%S')} AST en República Dominicana."
-    contexto_paciente = (
-        f"\nUSUARIO EN CHAT: '{nombre_contacto}' | WhatsApp: {jid_normalizado} | Perfil Completo: {perfil_completo}\n"
-        f"UBICACIÓN BASE: Provincia: '{provincia_paciente}', Municipio: '{municipio_paciente}', Sector: '{sector_paciente}'."
-    )
+    contexto_paciente = f"\nUSUARIO EN CHAT: '{nombre_contacto}' | WhatsApp: {jid_normalizado}."
     
     system_prompt = SYSTEM_PROMPT_GEMA + contexto_temporal + contexto_paciente
 
@@ -765,10 +744,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                     res_tool = verificar_registro_tercero(**args)
                 elif name == "consultar_directorio_inteligente":
                     args["mensaje_raw"] = mensaje_usuario
-                    if ("provincia" not in args or not args["provincia"]) and provincia_paciente:
-                        args["provincia"] = provincia_paciente
-                    if ("municipio" not in args or not args["municipio"]) and municipio_paciente:
-                        args["municipio"] = municipio_paciente
                     res_tool = consultar_directorio_inteligente(**args)
                 elif name == "agendar_cita_medica":
                     args["telefono_jid"] = jid_normalizado
