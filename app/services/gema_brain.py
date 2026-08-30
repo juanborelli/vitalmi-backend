@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
+
 from app.core.supabase import obtener_cliente_supabase
+from app.services.evolution_service import verificar_numero_whatsapp, enviar_mensaje_whatsapp
 
 # Configuración de Logs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -97,10 +99,6 @@ def resolver_fecha_relativa(texto_fecha: str) -> str:
 # ==========================================
 
 def autodetectar_ubicacion(sector_usuario: str) -> Dict[str, str]:
-    """
-    Recibe un sector/barrio o municipio (ej: 'Piantini', 'Madre Vieja') y resuelve 
-    automáticamente su Provincia, Municipio y Sector en Supabase.
-    """
     supabase = obtener_cliente_supabase()
     if not supabase or not sector_usuario:
         return {}
@@ -343,6 +341,82 @@ def consultar_directorio_inteligente(
         print(f"❌ Error en consultar_directorio_inteligente: {e}")
         return json.dumps({"error": str(e)})
 
+# ==========================================
+# NOTIFICACIÓN AL DOCTOR / SECRETARÍA
+# ==========================================
+
+def despachar_notificacion_doctor(cita_id: str) -> dict:
+    """
+    1. Obtiene los datos de la cita desde Supabase.
+    2. Valida si el número del doctor posee WhatsApp activo mediante evolution_service.
+    3. Si falla, hace fallback al número del centro médico/secretaría.
+    4. Despacha el mensaje y actualiza la trazabilidad en Supabase.
+    """
+    supabase = obtener_cliente_supabase()
+    if not supabase:
+        return {"status": "error", "mensaje": "Sin conexión a base de datos"}
+
+    res_cita = supabase.table("citas").select("*").eq("id", cita_id).execute()
+    if not res_cita.data:
+        return {"status": "error", "mensaje": "Cita no encontrada"}
+
+    cita = res_cita.data[0]
+    doc_jid = cita.get("doctor_whatsapp_jid")
+    medico_nombre = cita.get("motivo_consulta", "").split("|")[3].replace("Médico:", "").strip() if "|" in cita.get("motivo_consulta", "") else ""
+
+    # Usar evolution_service para verificar si el número tiene WhatsApp
+    whatsapp_valido = False
+    if doc_jid:
+        try:
+            whatsapp_valido = verificar_numero_whatsapp(doc_jid)
+        except Exception as e:
+            logger.warning(f"⚠️ Error verificando WhatsApp del doctor: {e}")
+
+    # Fallback a Secretaría / Centro Médico si el doctor no tiene WhatsApp activo
+    if not whatsapp_valido:
+        logger.warning(f"⚠️ WhatsApp del médico ({doc_jid}) no activo. Conmutando a secretaría...")
+        res_doc = supabase.table("vitalmi_directorio_master").select("telefono, whatsapp, centro_medico").ilike("nombre", f"%{medico_nombre}%").limit(1).execute()
+        
+        if res_doc.data:
+            sec_phone = res_doc.data[0].get("whatsapp") or res_doc.data[0].get("telefono")
+            if sec_phone:
+                doc_jid = normalizar_jid(sec_phone)
+                logger.info(f"📍 Redirigido a WhatsApp de Secretaría: {doc_jid}")
+
+    if not doc_jid:
+        logger.error(f"❌ No se encontró número de WhatsApp válido para la cita #{cita_id}")
+        supabase.table("citas").update({"whatsapp_status": "fallido_sin_numero"}).eq("id", cita_id).execute()
+        return {"status": "fallido", "error": "Sin número de WhatsApp válido"}
+
+    # Plantilla interactiva para el Doctor / Secretaría
+    mensaje_doctor = (
+        "🏥 *NUEVA SOLICITUD DE CITA - VITALMI*\n\n"
+        f"📝 *Detalles de la Cita #{str(cita_id)[:8]}:*\n"
+        f"• *Datos del Paciente:* {cita.get('motivo_consulta')}\n"
+        f"• *Costo Estimado:* RD$ {cita.get('costo_consulta', 2500):,.2f}\n"
+        f"• *Atención:* {cita.get('reglas_llegada')}\n\n"
+        "Por favor responda a este mensaje con una de estas opciones:\n"
+        "✅ *CONFIRMAR* - Para aceptar la cita en el horario solicitado.\n"
+        "❌ *RECHAZAR* - Para indicar que no hay disponibilidad."
+    )
+
+    # Enviar mensaje usando evolution_service
+    res_envio = enviar_mensaje_whatsapp(doc_jid, mensaje_doctor)
+    
+    if res_envio and (res_envio.get("success") or res_envio.get("status") in ["success", 200]):
+        msg_id = res_envio.get("message_id") or res_envio.get("id") or res_envio.get("key", {}).get("id")
+        supabase.table("citas").update({
+            "doctor_whatsapp_jid": doc_jid,
+            "whatsapp_msg_id": msg_id,
+            "whatsapp_status": "enviado",
+            "updated_at": obtener_hora_rd_iso()
+        }).eq("id", cita_id).execute()
+        
+        return {"status": "exitoso", "jid_destinatario": doc_jid, "message_id": msg_id}
+    else:
+        supabase.table("citas").update({"whatsapp_status": "fallido_envio"}).eq("id", cita_id).execute()
+        return {"status": "fallido", "error": "Falló el envío de la API"}
+
 def agendar_cita_medica(
     telefono_jid: str, 
     medico_nombre: str, 
@@ -430,6 +504,13 @@ def agendar_cita_medica(
 
         res_cita = supabase.table("citas").insert(datos_cita).execute()
         cita_creada = res_cita.data[0] if res_cita.data else {}
+
+        # Despachar notificación automática al doctor/secretaría
+        if cita_creada.get("id"):
+            try:
+                despachar_notificacion_doctor(cita_creada["id"])
+            except Exception as err_notif:
+                logger.error(f"⚠️ Error al despachar notificación al doctor: {err_notif}")
 
         mensaje_final = (
             "📋 *SOLICITUD DE CITA REGISTRADA*\n\n"
