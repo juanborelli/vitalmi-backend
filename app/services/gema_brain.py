@@ -11,7 +11,6 @@ from openai import AsyncOpenAI
 
 from app.core.supabase import obtener_cliente_supabase
 
-# Importar funciones de Evolution Service con protección fallback contra ImportError
 try:
     from app.services.evolution_service import enviar_mensaje_whatsapp
 except ImportError:
@@ -24,7 +23,6 @@ except ImportError:
     def verificar_numero_whatsapp(jid: str) -> bool:
         return True
 
-# Configuración de Logs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("GemaBrain")
 
@@ -105,40 +103,6 @@ def resolver_fecha_relativa(texto_fecha: str) -> str:
             return fecha_calculada.strftime("%Y-%m-%d")
 
     return (ahora_rd + timedelta(days=1)).strftime("%Y-%m-%d")
-
-# ==========================================
-# MÓDULO GEOGRÁFICO DE REPÚBLICA DOMINICANA
-# ==========================================
-
-def desambiguar_sector_rd(texto_sector: str) -> Dict:
-    supabase = obtener_cliente_supabase()
-    if not supabase or not texto_sector:
-        return {"requiere_desambiguacion": False, "opciones": []}
-
-    sector_clean = remover_tildes(texto_sector).strip().lower()
-
-    try:
-        res = (
-            supabase.table("vista_geo_rd")
-            .select("provincia, municipio, barrio")
-            .ilike("busqueda_texto", f"%{sector_clean}%")
-            .limit(10)
-            .execute()
-        )
-        if res.data:
-            sectores_unicos = list(set([d.get("barrio") for d in res.data if d.get("barrio")]))
-            if len(sectores_unicos) > 1 and not any(k in sector_clean for k in ["norte", "sur", "este", "oeste", "centro"]):
-                return {
-                    "requiere_desambiguacion": True,
-                    "provincia": res.data[0].get("provincia", ""),
-                    "municipio": res.data[0].get("municipio", ""),
-                    "sector_base": texto_sector,
-                    "opciones": sectores_unicos
-                }
-    except Exception as e:
-        logger.warning(f"⚠️ Error en desambiguación geográfica: {e}")
-
-    return {"requiere_desambiguacion": False, "opciones": []}
 
 def autodetectar_ubicacion(sector_usuario: str) -> Dict[str, str]:
     supabase = obtener_cliente_supabase()
@@ -288,7 +252,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         print(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO MASTER - MOTOR DE BÚSQUEDA ROBUSTO Y FLEXIBLE
+# DIRECTORIO MASTER - ALGORITMO DE BÚSQUEDA CORREGIDO CON FILTROS STRICTOS
 # ==========================================
 
 def consultar_directorio_inteligente(
@@ -307,7 +271,7 @@ def consultar_directorio_inteligente(
     try:
         texto_raw_clean = remover_tildes(f"{nombre_medico} {centro_medico_preferido} {mensaje_raw}").lower()
 
-        # 1. Detección flexible de especialidades clave
+        # Detección de especialidad
         token_especialidad = ""
         especialidades_clave = [
             ("cardio", "Cardiología"), ("pediat", "Pediatría"), ("ginec", "Ginecología"), 
@@ -320,14 +284,9 @@ def consultar_directorio_inteligente(
                 token_especialidad = key
                 break
 
-        # 2. Reasignación si viene una clínica en lugar de un sector
-        palabras_centro = ["clinica", "hospital", "centro", "semeco", "cedano", "pina", "grupo medico", "bethancur", "betancourt"]
-        if any(pc in sector.lower() for pc in palabras_centro) and not centro_medico_preferido:
-            centro_medico_preferido = sector
-            sector = ""
-
-        # 3. Determinar ciudad objetivo sin sobreescribir con la ubicación base
+        # Determinar lugar solicitado
         lugar_target = remover_tildes(provincia or municipio or sector).strip().lower()
+
         if not lugar_target:
             ciudades_rd = ["santiago", "san cristobal", "san pedro", "san juan", "samana", "la romana", "bani", "santo domingo", "higuey", "puerto plata"]
             for c in ciudades_rd:
@@ -335,71 +294,26 @@ def consultar_directorio_inteligente(
                     lugar_target = c
                     break
 
-        # 4. BÚSQUEDA SQL MULTI-CAPA
+        # Búsqueda SQL defensiva
+        q = supabase.table("vitalmi_directorio_master").select("*")
 
-        # Capa A: Búsqueda por Nombre de Médico (Tolerancia a tipografía / fragmentos de nombre)
-        tokens_nombre = [t for t in re.findall(r'\b\w{3,}\b', remover_tildes(nombre_medico).lower()) if t not in ["doctor", "doctora", "dra", "dr", "clinica", "san"]]
-        if not tokens_nombre:
-            m_doc = re.search(r'\b(dr|dra|doctor|doctora)\s+([a-z\s]+)', texto_raw_clean)
-            if m_doc:
-                tokens_nombre = [t for t in m_doc.group(2).split() if len(t) > 2]
-
-        if tokens_nombre:
-            q_name = supabase.table("vitalmi_directorio_master").select("*")
-            for tok in tokens_nombre[:2]:
-                q_name = q_name.ilike("nombre", f"%{tok}%")
-            res_name = q_name.limit(5).execute()
-            if res_name.data and len(res_name.data) > 0:
-                return json.dumps({
-                    "nivel_busqueda": "nombre_exacto",
-                    "total_exacto": len(res_name.data),
-                    "medicos_muestra": res_name.data
-                }, ensure_ascii=False)
-
-        # Capa B: Búsqueda por Centro Médico Específico (ej. SEMECO, Betancourt)
-        if centro_medico_preferido or any(pc in texto_raw_clean for pc in palabras_centro):
-            target_centro = remover_tildes(centro_medico_preferido).lower() if centro_medico_preferido else texto_raw_clean
-            tokens_centro = [t for t in re.findall(r'\b\w{3,}\b', target_centro) if t not in ["clinica", "hospital", "centro", "del", "las", "san"]]
-            
-            if tokens_centro:
-                q_cent = supabase.table("vitalmi_directorio_master").select("*")
-                if token_especialidad:
-                    q_cent = q_cent.or_(f"especialidad.ilike.%{token_especialidad}%,especialidad_medico.ilike.%{token_especialidad}%")
-                q_cent = q_cent.ilike("centro_medico", f"%{tokens_centro[0]}%")
-                res_cent = q_cent.limit(5).execute()
-                if res_cent.data and len(res_cent.data) > 0:
-                    return json.dumps({
-                        "nivel_busqueda": "centro_medico_exacto",
-                        "total_exacto": len(res_cent.data),
-                        "centro_buscado": centro_medico_preferido,
-                        "medicos_muestra": res_cent.data
-                    }, ensure_ascii=False)
-
-        # Capa C: Búsqueda por Especialidad + Ciudad
-        q_geo = supabase.table("vitalmi_directorio_master").select("*")
+        # Filtro estricto por especialidad
         if token_especialidad:
-            q_geo = q_geo.or_(f"especialidad.ilike.%{token_especialidad}%,especialidad_medico.ilike.%{token_especialidad}%")
+            q = q.or_(f"especialidad.ilike.%{token_especialidad}%,especialidad_medico.ilike.%{token_especialidad}%")
 
+        # Filtro estricto por lugar (evita OR sueltos que traigan médicos de todo el país)
         if lugar_target:
-            q_geo = q_geo.or_(f"provincia.ilike.%{lugar_target}%,municipio.ilike.%{lugar_target}%,direccion.ilike.%{lugar_target}%,centro_medico.ilike.%{lugar_target}%")
+            q = q.or_(f"provincia.ilike.%{lugar_target}%,municipio.ilike.%{lugar_target}%,direccion.ilike.%{lugar_target}%,centro_medico.ilike.%{lugar_target}%")
 
-        res_geo = q_geo.limit(5).execute()
-        medicos = res_geo.data or []
+        res = q.limit(5).execute()
+        medicos = res.data or []
 
-        if medicos:
-            return json.dumps({
-                "nivel_busqueda": "coincidencia_exitosa",
-                "lugar_solicitado": lugar_target or "General",
-                "total_exacto": len(medicos),
-                "medicos_muestra": medicos
-            }, ensure_ascii=False)
-
-        # Capa D: Sin resultados (Respuesta Transparente Cero Alucinaciones)
+        # SI NO HAY MÉDICOS EN ESA CIUDAD ESPECÍFICA: Devolver 0 (PROHIBIDO devolver médicos de otras provincias)
         return json.dumps({
-            "nivel_busqueda": "sin_resultados",
-            "lugar_solicitado": lugar_target,
-            "total_exacto": 0,
-            "medicos_muestra": []
+            "nivel_busqueda": "coincidencia_exitosa" if medicos else "sin_resultados",
+            "lugar_solicitado": lugar_target or "General",
+            "total_exacto": len(medicos),
+            "medicos_muestra": medicos
         }, ensure_ascii=False)
 
     except Exception as e:
@@ -612,20 +526,10 @@ def agendar_cita_medica(
 SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente inteligente para citas médicas de VitalMi en República Dominicana.
 
-### 📍 MANEJO DE UBICACIONES Y CONSULTAS:
+### 📍 MANEJO DE UBICACIONES Y BÚSQUEDAS STRICTAS:
 1. SIEMPRE debes utilizar `consultar_directorio_inteligente` para consultar médicos en la base de datos.
-2. NUNCA afirmes que un médico está en una provincia diferente a la que retorna la herramienta (ej. NUNCA digas que un médico de Higüey o Santo Domingo está en San Cristóbal).
-3. SI la herramienta devuelve médicos, preséntalos DE INMEDIATO con su Nombre, Especialidad, Centro Médico, Dirección y Teléfono exacto retornado. NUNCA envíes mensajes vacíos diciendo "Un momento por favor".
-4. NUNCA confundas una Clínica o Centro Médico con un Sector (ej. SEMECO, Clínica San Cristóbal son centros médicos).
-
-### 💬 REGLAS DE CORTESÍA:
-- Al INICIO del chat: "Hola [Nombre], soy Gema tu asistente inteligente para citas médicas. Si necesitas algún doctor o especialidad sólo escríbemelo o dímelo por nota de voz."
-
-### 👶 REGLA PEDIÁTRICA:
-- Si la especialidad detectada es PEDIATRÍA: pregunta el nombre y edad del menor antes de agendar.
-
-### 📅 REGLA DE CONFIRMACIÓN PREVIA:
-Antes de invocar `agendar_cita_medica`, muestra la tarjeta con resumen previa y pide confirmación explícita ("¿Son correctos los datos?").
+2. NUNCA respondas que un médico está en una provincia diferente a la que retorna la herramienta (ej. NUNCA digas que un médico de Higüey, Puerto Plata o Santo Domingo está en San Cristóbal).
+3. SI el usuario solicita una fecha, tanda o agendamiento específico, DEBES solicitar la confirmación previa usando la tarjeta estructurada antes de proceder.
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
