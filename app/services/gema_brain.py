@@ -163,7 +163,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         logger.error(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO MASTER - MOTOR DE BÚSQUEDA FLEXIBLE POR TOKENS
+# DIRECTORIO MASTER - LECTURA DIRECTA Y FILTRADO TOLERANTE
 # ==========================================
 
 def consultar_directorio_inteligente(
@@ -177,35 +177,47 @@ def consultar_directorio_inteligente(
         return json.dumps({"total_exacto": 0, "medicos_muestra": []})
 
     try:
-        # Extraer palabras clave de más de 3 letras descartando conectores
-        busqueda_combinada = f"{especialidad} {ubicacion} {centro_medico} {nombre_medico}"
-        texto_clean = remover_tildes(busqueda_combinada).lower().strip()
-        stop_words = ["necesito", "cita", "con", "doctor", "doctora", "dra", "dr", "para", "este", "buscame", "un", "una", "en", "el", "la", "los", "las", "donde", "trabaja"]
-        tokens = [t for t in re.findall(r'\b\w{3,}\b', texto_clean) if t not in stop_words]
+        tok_esp = remover_tildes(especialidad).lower().strip()
+        for r in ["cardio", "pediat", "urol", "ginec", "derma", "oftalmo", "ortop", "odont", "interna"]:
+            if r in tok_esp:
+                tok_esp = r
+                break
 
-        if not tokens:
-            return json.dumps({"total_exacto": 0, "medicos_muestra": []})
+        tok_ubi = remover_tildes(ubicacion).lower().strip()
+        tok_cent = remover_tildes(centro_medico).lower().strip()
+        tok_nom = remover_tildes(nombre_medico).lower().strip()
 
-        query = supabase.table("vitalmi_directorio_master").select("*")
-        
-        # Buscar cada token en todas las columnas relevantes (Supercampo)
-        condiciones = []
-        for t in tokens:
-            condiciones.append(f"direccion.ilike.%{t}%")
-            condiciones.append(f"centro_medico.ilike.%{t}%")
-            condiciones.append(f"nombre.ilike.%{t}%")
-            condiciones.append(f"especialidad.ilike.%{t}%")
-            condiciones.append(f"especialidad_medico.ilike.%{t}%")
-            condiciones.append(f"provincia.ilike.%{t}%")
-            condiciones.append(f"municipio.ilike.%{t}%")
+        # Consulta inicial por especialidad
+        q = supabase.table("vitalmi_directorio_master").select("*")
 
-        query = query.or_(",".join(condiciones))
-        res = query.limit(5).execute()
-        medicos = res.data or []
+        if tok_esp:
+            q = q.ilike("especialidad", f"%{tok_esp}%")
+
+        res = q.limit(30).execute()
+        registros = res.data or []
+
+        # Filtrado flexible por ubicación/provincia/centro
+        if registros and (tok_ubi or tok_cent or tok_nom):
+            filtrados = []
+            for r in registros:
+                texto_registro = remover_tildes(
+                    f"{r.get('provincia','')} {r.get('municipio','')} {r.get('direccion','')} {r.get('centro_medico','')} {r.get('nombre','')}"
+                ).lower()
+
+                match_ubi = not tok_ubi or any(token in texto_registro for token in tok_ubi.split() if len(token) > 2)
+                match_cent = not tok_cent or tok_cent in texto_registro
+                match_nom = not tok_nom or tok_nom in texto_registro
+
+                if match_ubi and match_cent and match_nom:
+                    filtrados.append(r)
+            
+            medicos_finales = filtrados[:5]
+        else:
+            medicos_finales = registros[:5]
 
         return json.dumps({
-            "total_exacto": len(medicos),
-            "medicos_muestra": medicos
+            "total_exacto": len(medicos_finales),
+            "medicos_muestra": medicos_finales
         }, ensure_ascii=False)
 
     except Exception as e:
@@ -396,7 +408,7 @@ def agendar_cita_medica(
         return json.dumps({"error": str(e)})
 
 # ==========================================
-# SYSTEM PROMPT CON FLUJO CONVERSACIONAL GUIADO
+# SYSTEM PROMPT
 # ==========================================
 
 SYSTEM_PROMPT_GEMA = f"""
@@ -412,7 +424,7 @@ Debes seguir ESTRICTAMENTE el siguiente flujo conversacional en cada paso:
 
 2. **PASO 2 (RECEPCIÓN DE UBICACIÓN Y CENTRO MÉDICO):**
    - Cuando el usuario indique la provincia, municipio o centro (ej. "Lo necesito para San Cristóbal, Centro Médico Cemeco"):
-     * Invoca `consultar_directorio_inteligente` pasando los términos.
+     * Invoca `consultar_directorio_inteligente` pasando la provincia/ubicación.
      * Presenta los resultados: "Bien [Nombre], aquí tienes una lista de [cantidad] [especialistas] de [Centro/Ubicación]:" (Presenta la lista de médicos con Nombre, Centro Médico y Teléfono).
 
 3. **PASO 3 (RESPUESTA DE AGRADECIMIENTO TRAS LA LISTA):**
