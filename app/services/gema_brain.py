@@ -123,7 +123,7 @@ def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") ->
         res_insert = supabase.table("pacientes").insert(datos_nuevo).execute()
         return res_insert.data[0] if res_insert.data else {}
     except Exception as e:
-        logger.error(f"❌ Error buscando o registrando paciente: {e}")
+        logger.error(f"❌ Error registrando paciente: {e}")
         return {}
 
 def obtener_historial_supabase(telefono_jid: str, limite: int = 10) -> List[Dict[str, str]]:
@@ -163,63 +163,40 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         logger.error(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO MASTER - BÚSQUEDA ROBUSTA
+# DIRECTORIO MASTER
 # ==========================================
 
 def consultar_directorio_inteligente(
     especialidad: str = "", 
     ubicacion: str = "", 
-    nombre_o_clinica: str = "",
-    mensaje_raw: str = ""
+    centro_medico: str = "",
+    nombre_medico: str = ""
 ) -> str:
     supabase = obtener_cliente_supabase()
     if not supabase:
         return json.dumps({"total_exacto": 0, "medicos_muestra": []})
 
     try:
-        texto_comb = remover_tildes(f"{especialidad} {ubicacion} {nombre_o_clinica} {mensaje_raw}").lower().strip()
-        
-        # Detectar especialidad principal
-        token_esp = remover_tildes(especialidad).lower().strip()
-        if not token_esp:
-            for esp in ["pediat", "cardio", "urol", "ginec", "derma", "oftalmo", "ortop", "odont", "interna"]:
-                if esp in texto_comb:
-                    token_esp = esp
-                    break
-
-        # Detectar ubicación principal
-        token_ubi = remover_tildes(ubicacion).lower().strip()
-        if not token_ubi:
-            for ubi in ["san cristobal", "santiago", "san juan", "san pedro", "la romana", "bani", "santo domingo", "higuey"]:
-                if ubi in texto_comb:
-                    token_ubi = ubi
-                    break
-
-        # Construcción de la consulta SQL
         q = supabase.table("vitalmi_directorio_master").select("*")
 
-        if token_esp:
-            q = q.or_(f"especialidad.ilike.%{token_esp}%,especialidad_medico.ilike.%{token_esp}%")
+        if especialidad:
+            tok_esp = remover_tildes(especialidad).lower().strip()
+            q = q.or_(f"especialidad.ilike.%{tok_esp}%,especialidad_medico.ilike.%{tok_esp}%")
 
-        if token_ubi:
-            q = q.or_(f"provincia.ilike.%{token_ubi}%,municipio.ilike.%{token_ubi}%,direccion.ilike.%{token_ubi}%,centro_medico.ilike.%{token_ubi}%")
+        if centro_medico:
+            tok_cent = remover_tildes(centro_medico).lower().strip()
+            q = q.ilike("centro_medico", f"%{tok_cent}%")
 
-        if nombre_o_clinica:
-            tok_nom = remover_tildes(nombre_o_clinica).lower().strip()
-            q = q.or_(f"nombre.ilike.%{tok_nom}%,centro_medico.ilike.%{tok_nom}%")
+        if ubicacion and not centro_medico:
+            tok_ubi = remover_tildes(ubicacion).lower().strip()
+            q = q.or_(f"provincia.ilike.%{tok_ubi}%,municipio.ilike.%{tok_ubi}%,direccion.ilike.%{tok_ubi}%")
+
+        if nombre_medico:
+            tok_nom = remover_tildes(nombre_medico).lower().strip()
+            q = q.ilike("nombre", f"%{tok_nom}%")
 
         res = q.limit(5).execute()
         medicos = res.data or []
-
-        # Fallback de rescate si la combinación estricta dio 0 resultados
-        if not medicos and (token_esp or token_ubi):
-            q_fb = supabase.table("vitalmi_directorio_master").select("*")
-            if token_esp:
-                q_fb = q_fb.or_(f"especialidad.ilike.%{token_esp}%,especialidad_medico.ilike.%{token_esp}%")
-            if token_ubi:
-                q_fb = q_fb.or_(f"provincia.ilike.%{token_ubi}%,municipio.ilike.%{token_ubi}%,direccion.ilike.%{token_ubi}%")
-            res_fb = q_fb.limit(5).execute()
-            medicos = res_fb.data or []
 
         return json.dumps({
             "total_exacto": len(medicos),
@@ -230,14 +207,18 @@ def consultar_directorio_inteligente(
         logger.error(f"❌ Error en consultar_directorio_inteligente: {e}")
         return json.dumps({"total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
 
+# ==========================================
+# NOTIFICACIÓN Y AGENDAMIENTO DE CITAS
+# ==========================================
+
 def despachar_notificacion_doctor(cita_id: str) -> dict:
     supabase = obtener_cliente_supabase()
     if not supabase:
-        return {"status": "error", "mensaje": "Sin conexión a base de datos"}
+        return {"status": "error", "mensaje": "Sin conexión a base de datos", "mensaje_doctor_texto": ""}
 
     res_cita = supabase.table("citas").select("*").eq("id", cita_id).execute()
     if not res_cita.data:
-        return {"status": "error", "mensaje": "Cita no encontrada"}
+        return {"status": "error", "mensaje": "Cita no encontrada", "mensaje_doctor_texto": ""}
 
     cita = res_cita.data[0]
     doc_jid = cita.get("doctor_whatsapp_jid")
@@ -265,20 +246,21 @@ def despachar_notificacion_doctor(cita_id: str) -> dict:
             if sec_phone:
                 doc_jid = normalizar_jid(sec_phone)
 
-    if not doc_jid:
-        supabase.table("citas").update({"whatsapp_status": "fallido_sin_numero"}).eq("id", cita_id).execute()
-        return {"status": "fallido", "error": "Sin número de WhatsApp válido"}
-
     mensaje_doctor = (
-        "🏥 *NUEVA SOLICITUD DE CITA - VITALMI*\n\n"
-        f"📝 *Detalles de la Cita #{str(cita_id)[:8]}:*\n"
-        f"• *Datos del Paciente:* {cita.get('motivo_consulta')}\n"
+        f"Estimado(a) {medico_nombre},\n\n"
+        "Soy Gema, la asistente inteligente para citas médicas de VitalMi.\n\n"
+        f"📝 *NUEVA SOLICITUD DE CITA:*\n"
+        f"• *Paciente:* {cita.get('motivo_consulta')}\n"
         f"• *Costo Estimado:* RD$ {cita.get('costo_consulta', 2500):,.2f}\n"
-        f"• *Atención:* {cita.get('reglas_llegada')}\n\n"
-        "Por favor responda a este mensaje con una de estas opciones:\n"
-        "✅ *CONFIRMAR* - Para aceptar la cita en el horario solicitado.\n"
+        f"• *Reglas de Atención:* {cita.get('reglas_llegada')}\n\n"
+        "Por favor responda a este mensaje con:\n"
+        "✅ *CONFIRMAR* - Para aceptar la cita.\n"
         "❌ *RECHAZAR* - Para indicar que no hay disponibilidad."
     )
+
+    if not doc_jid:
+        supabase.table("citas").update({"whatsapp_status": "fallido_sin_numero"}).eq("id", cita_id).execute()
+        return {"status": "fallido", "error": "Sin número de WhatsApp válido", "mensaje_doctor_texto": mensaje_doctor}
 
     try:
         res_envio = enviar_mensaje_whatsapp(doc_jid, mensaje_doctor)
@@ -295,10 +277,10 @@ def despachar_notificacion_doctor(cita_id: str) -> dict:
             "updated_at": obtener_hora_rd_iso()
         }).eq("id", cita_id).execute()
         
-        return {"status": "exitoso", "jid_destinatario": doc_jid, "message_id": msg_id}
+        return {"status": "exitoso", "jid_destinatario": doc_jid, "message_id": msg_id, "mensaje_doctor_texto": mensaje_doctor}
     else:
         supabase.table("citas").update({"whatsapp_status": "fallido_envio"}).eq("id", cita_id).execute()
-        return {"status": "fallido", "error": "Falló el envío de la API"}
+        return {"status": "fallido", "error": "Falló el envío de la API", "mensaje_doctor_texto": mensaje_doctor}
 
 def agendar_cita_medica(
     telefono_jid: str, 
@@ -359,8 +341,6 @@ def agendar_cita_medica(
         centro_medico = "Consultorio Privado Autorizado"
         especialidad_medico = "Especialista Clínico"
         costo_consulta = 2500.00
-        metodo_pago = "Efectivo / Facturación en recepción"
-        reglas_llegada = "Orden de llegada. La recepción abre 30 mins antes de la tanda."
         doc_whatsapp = ""
 
         tokens_nombre = [t for t in remover_tildes(medico_nombre).split() if len(t) > 3]
@@ -380,41 +360,29 @@ def agendar_cita_medica(
             "doctor_whatsapp_jid": normalizar_jid(doc_whatsapp) if doc_whatsapp else None,
             "whatsapp_status": "pendiente",
             "costo_consulta": costo_consulta,
-            "metodo_pago": metodo_pago,
-            "reglas_llegada": reglas_llegada,
             "created_at": obtener_hora_rd_iso()
         }
 
         res_cita = supabase.table("citas").insert(datos_cita).execute()
         cita_creada = res_cita.data[0] if res_cita.data else {}
 
+        copia_notif = ""
         if cita_creada.get("id"):
             try:
-                despachar_notificacion_doctor(cita_creada["id"])
+                res_despacho = despachar_notificacion_doctor(cita_creada["id"])
+                copia_notif = res_despacho.get("mensaje_doctor_texto", "")
             except Exception as err_notif:
-                logger.error(f"⚠️ Error al despachar notificación al doctor: {err_notif}")
+                logger.error(f"⚠️ Error al despachar notificación: {err_notif}")
 
-        mensaje_final = (
-            "📋 *SOLICITUD DE CITA REGISTRADA*\n\n"
-            "👤 *DATOS DEL PACIENTE:*\n"
-            f"• *Nombre:* {nombre_paciente_final}\n"
-            f"• *Cédula Tutor:* {cedula_paciente}\n"
-            f"• *ARS:* {ars_paciente} ({plan_ars})\n\n"
-            "👨‍⚕️ *ESPECIALISTA Y CENTRO:*\n"
-            f"• *Doctor:* {medico_nombre}\n"
-            f"• *Especialidad:* {especialidad_medico}\n"
-            f"• *Centro Médico:* {centro_medico}\n\n"
-            "📅 *HORARIO Y LOGÍSTICA:*\n"
-            f"• *Fecha:* {fecha_formateada}\n"
-            f"• *Tanda:* {tanda_texto}\n"
-            f"• *Costo Estimado:* RD$ {costo_consulta:,.2f} ({metodo_pago})\n"
-            f"• *Atención:* {reglas_llegada}\n\n"
-            "⏳ *ESTADO:* Solicitud enviada al doctor/secretaría. Te notificaremos por aquí tan pronto sea confirmada."
+        mensaje_paciente = (
+            f"Estamos enviando tu solicitud de cita al {medico_nombre}. Tan pronto el doctor confirme recibirás una notificación.\n\n"
+            f"📩 *Copia del mensaje enviado al doctor:*\n"
+            f"```\n{copia_notif}\n```"
         )
 
         return json.dumps({
             "status": "exitoso",
-            "mensaje_formateado_final": mensaje_final,
+            "mensaje_formateado_final": mensaje_paciente,
             "cita_id": cita_creada.get("id")
         }, ensure_ascii=False)
 
@@ -422,26 +390,48 @@ def agendar_cita_medica(
         logger.error(f"❌ Error en agendar_cita_medica: {e}")
         return json.dumps({"error": str(e)})
 
+# ==========================================
+# SYSTEM PROMPT CON FLUJO PASO A PASO
+# ==========================================
+
 SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente inteligente para citas médicas de VitalMi en República Dominicana.
+Debes seguir ESTRICTAMENTE el siguiente flujo conversacional en cada interacción:
 
-### 📍 BÚSQUEDA DIRECTA EN EL DIRECTORIO:
-1. SIEMPRE debes invocar la herramienta `consultar_directorio_inteligente` extrayendo la especialidad, ubicación o nombre solicitados por el usuario.
-2. Presenta ÚNICAMENTE los médicos exactos que devuelva la herramienta (Nombre, Especialidad, Centro Médico, Dirección y Teléfono).
-3. Si el usuario ya dio los datos del niño (ej. "Juan Alonso de 11 años"), busca al pediatra de inmediato y presenta las opciones con la Tarjeta de Confirmación Previa.
-4. Si la herramienta devuelve 0 resultados, informa con transparencia: "No encontré médicos registrados para esa búsqueda específica. ¿Te gustaría intentar con otra especialidad o provincia?"
+### 📍 FLUJO CONVERSACIONAL PASO A PASO:
 
-### 📅 REGLA DE TARJETA DE CONFIRMACIÓN PREVIA:
-Cuando el usuario elija un médico y especifique la fecha/tanda, DEBES mostrar el resumen previo antes de agendar:
+1. **SOLICITUD INICIAL GENÉRICA:**
+   - Si el usuario dice que necesita un especialista PERO NO INDICA la ciudad o centro médico (ej. "Gema, necesito un urólogo"):
+     * NO invoques `consultar_directorio_inteligente`.
+     * Responde amablemente solicitando la ubicación: "Hola [Nombre], ¿puedes decirme para dónde necesitas el [especialista]?"
 
-"📌 *RESUMEN DE TU SOLICITUD DE CITA:*
-• *Paciente:* [Nombre del Niño/a + Edad si aplica] — Tutor: [Nombre del usuario Titular]
-• *Especialista:* [Nombre del Doctor exacto de la DB]
-• *Centro Médico:* [Nombre del Centro exacto de la DB]
-• *Fecha Solicitada:* [Fecha calculada legible con el día correcto de la semana, ej: Viernes 4 de septiembre de 2026]
-• *Tanda y Horario:* [Mañana (9:00 AM – 12:00 PM) / Tarde (3:00 PM – 6:00 PM) / Sábados (9:00 AM – 2:00 PM)]
+2. **RECEPCIÓN DE UBICACIÓN / CENTRO MÉDICO:**
+   - Cuando el usuario indique la provincia, municipio o centro médico (ej. "Lo necesito para San Cristóbal, Centro Médico Cemeco"):
+     * Invoca `consultar_directorio_inteligente` pasando la especialidad y el centro/ubicación.
+     * Presenta la lista de especialistas encontrados: "Bien [Nombre], aquí tienes una lista de [cantidad] [especialistas] de [Centro/Ubicación]:" (Lista los médicos con Nombre, Centro y Teléfono).
 
-Antes de enviar la solicitud al doctor, favor confirmarnos si los datos de la cita son correctos. ¿Son correctos?"
+3. **CORTESÍA / AGRADECIMIENTO DE LISTADO:**
+   - Si el usuario dice "ok, gracias" o similar tras ver la lista:
+     * Responde: "A tu orden [Nombre]. Si necesitas hacer una cita con uno de esos [especialistas], solo déjame saber."
+
+4. **SELECCIÓN DE MÉDICO:**
+   - Cuando el usuario indique con cuál doctor quiere la cita (ej. "Quiero hacer una cita con el Dr. Antonio Pérez"):
+     * Pregunta por la logística: "¿Puedes indicarme para cuándo la quieres, y si es para la tarde, la mañana, o sábado?"
+
+5. **REVISIÓN PREVIA (TARJETA DE REVISIÓN):**
+   - Cuando el usuario indique la fecha/tanda (ej. "para este miércoles en la tarde"):
+     * Presenta los detalles calculados para su revisión: "Bien [Nombre], aquí tienes los detalles de la cita para tu revisión:\n• Médico: [Doctor]\n• Centro: [Centro]\n• Fecha: [Fecha formateada con día de semana]\n• Tanda: [Tarde/Mañana]\n\n¿Está todo bien con estos datos?"
+
+6. **CONFIRMACIÓN FINAL Y ENVÍO:**
+   - Cuando el usuario confirme ("ok, está todo bien" / "sí"):
+     * Executa `agendar_cita_medica`.
+     * Entrega el mensaje final con la confirmación de envío y la copia del mensaje enviado al doctor.
+
+7. **DESPEDIDA Y CIERRE:**
+   - Si el usuario dice "Gracias Gema":
+     * Responde: "A tu orden [Nombre]. En lo que recibes la confirmación de tu cita, ¿hay algo más en lo que pueda ayudarte?"
+   - Si responde "No gracias":
+     * Cierra amablemente: "Que tengas un feliz día [Nombre]. Y recuerda que soy Gema, tu asistente inteligente para citas médicas."
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
@@ -470,13 +460,14 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             "type": "function",
             "function": {
                 "name": "consultar_directorio_inteligente",
-                "description": "Busca en el directorio médico pasando los filtros detectados.",
+                "description": "Busca especialistas en el directorio una vez definida la ubicación o centro médico.",
                 "parameters": {
                     "type": "object", 
                     "properties": {
-                        "especialidad": {"type": "string", "description": "Especialidad médica buscada (ej. Pediatría, Urología, Cardiología)."},
-                        "ubicacion": {"type": "string", "description": "Provincia, municipio o sector (ej. Santiago, San Juan, San Cristóbal)."},
-                        "nombre_o_clinica": {"type": "string", "description": "Nombre de un médico o centro médico."}
+                        "especialidad": {"type": "string"},
+                        "ubicacion": {"type": "string"},
+                        "centro_medico": {"type": "string"},
+                        "nombre_medico": {"type": "string"}
                     }, 
                     "required": []
                 }
@@ -527,7 +518,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 args = json.loads(tool_call.function.arguments)
 
                 if name == "consultar_directorio_inteligente":
-                    args["mensaje_raw"] = mensaje_usuario
                     res_tool = consultar_directorio_inteligente(**args)
                 elif name == "agendar_cita_medica":
                     args["telefono_jid"] = jid_normalizado
