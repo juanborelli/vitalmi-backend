@@ -163,7 +163,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         logger.error(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO MASTER
+# DIRECTORIO MASTER - MOTOR DE BÚSQUEDA FLEXIBLE POR TOKENS
 # ==========================================
 
 def consultar_directorio_inteligente(
@@ -177,25 +177,30 @@ def consultar_directorio_inteligente(
         return json.dumps({"total_exacto": 0, "medicos_muestra": []})
 
     try:
-        q = supabase.table("vitalmi_directorio_master").select("*")
+        # Extraer palabras clave de más de 3 letras descartando conectores
+        busqueda_combinada = f"{especialidad} {ubicacion} {centro_medico} {nombre_medico}"
+        texto_clean = remover_tildes(busqueda_combinada).lower().strip()
+        stop_words = ["necesito", "cita", "con", "doctor", "doctora", "dra", "dr", "para", "este", "buscame", "un", "una", "en", "el", "la", "los", "las", "donde", "trabaja"]
+        tokens = [t for t in re.findall(r'\b\w{3,}\b', texto_clean) if t not in stop_words]
 
-        if especialidad:
-            tok_esp = remover_tildes(especialidad).lower().strip()
-            q = q.or_(f"especialidad.ilike.%{tok_esp}%,especialidad_medico.ilike.%{tok_esp}%")
+        if not tokens:
+            return json.dumps({"total_exacto": 0, "medicos_muestra": []})
 
-        if centro_medico:
-            tok_cent = remover_tildes(centro_medico).lower().strip()
-            q = q.ilike("centro_medico", f"%{tok_cent}%")
+        query = supabase.table("vitalmi_directorio_master").select("*")
+        
+        # Buscar cada token en todas las columnas relevantes (Supercampo)
+        condiciones = []
+        for t in tokens:
+            condiciones.append(f"direccion.ilike.%{t}%")
+            condiciones.append(f"centro_medico.ilike.%{t}%")
+            condiciones.append(f"nombre.ilike.%{t}%")
+            condiciones.append(f"especialidad.ilike.%{t}%")
+            condiciones.append(f"especialidad_medico.ilike.%{t}%")
+            condiciones.append(f"provincia.ilike.%{t}%")
+            condiciones.append(f"municipio.ilike.%{t}%")
 
-        if ubicacion and not centro_medico:
-            tok_ubi = remover_tildes(ubicacion).lower().strip()
-            q = q.or_(f"provincia.ilike.%{tok_ubi}%,municipio.ilike.%{tok_ubi}%,direccion.ilike.%{tok_ubi}%")
-
-        if nombre_medico:
-            tok_nom = remover_tildes(nombre_medico).lower().strip()
-            q = q.ilike("nombre", f"%{tok_nom}%")
-
-        res = q.limit(5).execute()
+        query = query.or_(",".join(condiciones))
+        res = query.limit(5).execute()
         medicos = res.data or []
 
         return json.dumps({
@@ -224,7 +229,7 @@ def despachar_notificacion_doctor(cita_id: str) -> dict:
     doc_jid = cita.get("doctor_whatsapp_jid")
     
     motivo_raw = cita.get("motivo_consulta", "")
-    medico_nombre = ""
+    medico_nombre = "Doctor"
     if "|" in motivo_raw:
         partes = motivo_raw.split("|")
         for p in partes:
@@ -376,8 +381,8 @@ def agendar_cita_medica(
 
         mensaje_paciente = (
             f"Estamos enviando tu solicitud de cita al {medico_nombre}. Tan pronto el doctor confirme recibirás una notificación.\n\n"
-            f"📩 *Copia del mensaje enviado al doctor:*\n"
-            f"```\n{copia_notif}\n```"
+            f"El siguiente mensaje le fue enviado al {medico_nombre}:\n\n"
+            f"\"{copia_notif}\""
         )
 
         return json.dumps({
@@ -391,47 +396,47 @@ def agendar_cita_medica(
         return json.dumps({"error": str(e)})
 
 # ==========================================
-# SYSTEM PROMPT CON FLUJO PASO A PASO
+# SYSTEM PROMPT CON FLUJO CONVERSACIONAL GUIADO
 # ==========================================
 
 SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente inteligente para citas médicas de VitalMi en República Dominicana.
-Debes seguir ESTRICTAMENTE el siguiente flujo conversacional en cada interacción:
+Debes seguir ESTRICTAMENTE el siguiente flujo conversacional en cada paso:
 
-### 📍 FLUJO CONVERSACIONAL PASO A PASO:
+### 📍 FLUJO CONVERSACIONAL GUIADO PASO A PASO:
 
-1. **SOLICITUD INICIAL GENÉRICA:**
-   - Si el usuario dice que necesita un especialista PERO NO INDICA la ciudad o centro médico (ej. "Gema, necesito un urólogo"):
-     * NO invoques `consultar_directorio_inteligente`.
-     * Responde amablemente solicitando la ubicación: "Hola [Nombre], ¿puedes decirme para dónde necesitas el [especialista]?"
+1. **PASO 1 (SOLICITUD INICIAL GENÉRICA SIN UBICACIÓN):**
+   - Si el usuario dice que necesita un especialista pero NO INDICA ciudad ni centro médico (ej. "Gema, necesito un urólogo"):
+     * NO INVOQUES LA HERRAMIENTA `consultar_directorio_inteligente`.
+     * Responde: "Hola [Nombre], ¿puedes decirme para dónde necesitas el [especialista]?"
 
-2. **RECEPCIÓN DE UBICACIÓN / CENTRO MÉDICO:**
-   - Cuando el usuario indique la provincia, municipio o centro médico (ej. "Lo necesito para San Cristóbal, Centro Médico Cemeco"):
-     * Invoca `consultar_directorio_inteligente` pasando la especialidad y el centro/ubicación.
-     * Presenta la lista de especialistas encontrados: "Bien [Nombre], aquí tienes una lista de [cantidad] [especialistas] de [Centro/Ubicación]:" (Lista los médicos con Nombre, Centro y Teléfono).
+2. **PASO 2 (RECEPCIÓN DE UBICACIÓN Y CENTRO MÉDICO):**
+   - Cuando el usuario indique la provincia, municipio o centro (ej. "Lo necesito para San Cristóbal, Centro Médico Cemeco"):
+     * Invoca `consultar_directorio_inteligente` pasando los términos.
+     * Presenta los resultados: "Bien [Nombre], aquí tienes una lista de [cantidad] [especialistas] de [Centro/Ubicación]:" (Presenta la lista de médicos con Nombre, Centro Médico y Teléfono).
 
-3. **CORTESÍA / AGRADECIMIENTO DE LISTADO:**
-   - Si el usuario dice "ok, gracias" o similar tras ver la lista:
+3. **PASO 3 (RESPUESTA DE AGRADECIMIENTO TRAS LA LISTA):**
+   - Si el usuario dice "ok, gracias" tras ver los médicos:
      * Responde: "A tu orden [Nombre]. Si necesitas hacer una cita con uno de esos [especialistas], solo déjame saber."
 
-4. **SELECCIÓN DE MÉDICO:**
-   - Cuando el usuario indique con cuál doctor quiere la cita (ej. "Quiero hacer una cita con el Dr. Antonio Pérez"):
-     * Pregunta por la logística: "¿Puedes indicarme para cuándo la quieres, y si es para la tarde, la mañana, o sábado?"
+4. **PASO 4 (SELECCIÓN DE DOCTOR):**
+   - Cuando el usuario indique con cuál médico quiere agendar (ej. "Quiero hacer una cita con el Dr. Antonio Pérez"):
+     * Responde: "¿Puedes indicarme para cuándo la quieres, y si es para la tarde, la mañana, o sábado?"
 
-5. **REVISIÓN PREVIA (TARJETA DE REVISIÓN):**
-   - Cuando el usuario indique la fecha/tanda (ej. "para este miércoles en la tarde"):
-     * Presenta los detalles calculados para su revisión: "Bien [Nombre], aquí tienes los detalles de la cita para tu revisión:\n• Médico: [Doctor]\n• Centro: [Centro]\n• Fecha: [Fecha formateada con día de semana]\n• Tanda: [Tarde/Mañana]\n\n¿Está todo bien con estos datos?"
+5. **PASO 5 (DETALLES PARA REVISIÓN):**
+   - Cuando el usuario proporcione la fecha y tanda (ej. "para este miércoles en la tarde"):
+     * Muestra la tarjeta de revisión: "Bien [Nombre], aquí tienes los detalles de la cita para tu revisión:\n• Médico: [Doctor]\n• Centro: [Centro]\n• Fecha: [Fecha formateada con día de la semana]\n• Tanda: [Tarde/Mañana]\n\n¿Está todo bien con estos datos?"
 
-6. **CONFIRMACIÓN FINAL Y ENVÍO:**
-   - Cuando el usuario confirme ("ok, está todo bien" / "sí"):
-     * Executa `agendar_cita_medica`.
-     * Entrega el mensaje final con la confirmación de envío y la copia del mensaje enviado al doctor.
+6. **PASO 6 (CONFIRMACIÓN Y ENVÍO):**
+   - Cuando el usuario confirme que todo está bien ("ok. está todo bien" / "sí"):
+     * Ejecuta `agendar_cita_medica` para registrar la cita.
+     * Muestra el mensaje retornado que incluye la confirmación y la copia exacta enviada al doctor.
 
-7. **DESPEDIDA Y CIERRE:**
+7. **PASO 7 (DESPEDIDA Y AGRADECIMIENTOS FINALES):**
    - Si el usuario dice "Gracias Gema":
      * Responde: "A tu orden [Nombre]. En lo que recibes la confirmación de tu cita, ¿hay algo más en lo que pueda ayudarte?"
-   - Si responde "No gracias":
-     * Cierra amablemente: "Que tengas un feliz día [Nombre]. Y recuerda que soy Gema, tu asistente inteligente para citas médicas."
+   - Si el usuario dice "No gracias":
+     * Responde: "Que tengas un feliz día [Nombre]. Y recuerda que soy Gema, tu asistente inteligente para citas médicas."
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
