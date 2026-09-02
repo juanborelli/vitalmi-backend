@@ -11,7 +11,6 @@ from openai import AsyncOpenAI
 
 from app.core.supabase import obtener_cliente_supabase
 
-# Importar funciones de Evolution Service
 try:
     from app.services.evolution_service import enviar_mensaje_whatsapp
 except ImportError:
@@ -24,7 +23,6 @@ except ImportError:
     def verificar_numero_whatsapp(jid: str) -> bool:
         return True
 
-# Configuración de Logs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("GemaBrain")
 
@@ -165,7 +163,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         logger.error(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO MASTER - BÚSQUEDA Y FILTRADO RIGUROSO DE UBICACIÓN
+# DIRECTORIO MASTER - FILTRADO JERÁRQUICO
 # ==========================================
 
 def consultar_directorio_inteligente(
@@ -180,22 +178,17 @@ def consultar_directorio_inteligente(
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        # 1. Determinar Especialidad requerida
         texto_unificado = remover_tildes(f"{especialidad} {nombre_medico} {mensaje_raw}").lower()
         tok_esp = ""
-        for r in ["urol", "cardio", "pediat", "ginec", "derma", "oftalmo", "ortop", "odont", "interna", "neurol", "psiquia"]:
+        for r in ["urol", "cardio", "pediat", "ginec", "derma", "oftalmo", "ortop", "odont", "interna", "general", "neurol", "psiquia"]:
             if r in texto_unificado:
                 tok_esp = r
                 break
 
-        # 2. Extraer términos clave de ubicación solicitada (ej. "piantini", "san cristobal")
         raw_ubi = remover_tildes(f"{ubicacion} {centro_medico} {mensaje_raw}").lower()
-        ignore_words = ["hola", "gema", "necesito", "un", "una", "cardiologo", "urologo", "pediatra", "medico", "doctor", "doctora", "cerca", "de", "en", "para", "el", "la", "los", "las"]
+        ignore_words = ["hola", "gema", "necesito", "un", "una", "cardiologo", "urologo", "pediatra", "medico", "doctor", "doctora", "oftalmologo", "ortopeda", "internista", "cerca", "de", "en", "para", "el", "la", "los", "las"]
         tokens_ubi = [t for t in re.findall(r'\b\w{3,}\b', raw_ubi) if t not in ignore_words and t not in tok_esp]
 
-        logger.info(f"🔍 BÚSQUEDA DIRECTORIO: Especialidad='{tok_esp}' | Tokens Ubicación={tokens_ubi}")
-
-        # 3. Consulta inicial a Supabase por especialidad
         query = supabase.table("vitalmi_directorio_master").select("*")
         if tok_esp:
             query = query.ilike("especialidad", f"%{tok_esp}%")
@@ -206,10 +199,9 @@ def consultar_directorio_inteligente(
         if not registros:
             return json.dumps({"total_exacto": 0, "medicos_muestra": [], "mensaje": "No se encontraron especialistas en esa área."}, ensure_ascii=False)
 
-        # 4. FILTRADO RIGUROSO DE UBICACIÓN (Evaluación Estricta de Coincidencia)
         if tokens_ubi:
             coincidencias_exactas = []
-            coincidencias_generales = []
+            coincidencias_zona = []
 
             for r in registros:
                 p_str = remover_tildes(r.get('provincia', '')).lower()
@@ -219,30 +211,33 @@ def consultar_directorio_inteligente(
 
                 bloque_total = f"{p_str} {m_str} {d_str} {c_str}"
 
-                # Comprobar si los tokens de ubicación específicos (ej. "piantini") están en la dirección
-                match_especifico = all(t in bloque_total for t in tokens_ubi)
-                if match_especifico:
+                if all(t in bloque_total for t in tokens_ubi):
                     coincidencias_exactas.append(r)
                 elif any(t in bloque_total for t in tokens_ubi):
-                    coincidencias_generales.append(r)
+                    coincidencias_zona.append(r)
 
             if coincidencias_exactas:
                 medicos_finales = coincidencias_exactas[:5]
-                es_coincidencia_exacta = True
-            elif coincidencias_generales:
-                # Si no hay en el sector exacto, se muestran los generales aclarando que son de la zona amplia
-                medicos_finales = coincidencias_generales[:5]
-                es_coincidencia_exacta = False
+                zona_texto = tokens_ubi[0].title()
+                es_exacto = True
+            elif coincidencias_zona:
+                medicos_finales = coincidencias_zona[:5]
+                prov_encontrada = medicos_finales[0].get('provincia') or "la zona cercana"
+                zona_texto = prov_encontrada.title()
+                es_exacto = False
             else:
                 medicos_finales = []
-                es_coincidencia_exacta = False
+                zona_texto = ""
+                es_exacto = False
         else:
             medicos_finales = registros[:5]
-            es_coincidencia_exacta = True
+            zona_texto = "la zona"
+            es_exacto = True
 
         return json.dumps({
             "total_exacto": len(medicos_finales),
-            "coincidencia_exacta_sector": es_coincidencia_exacta,
+            "coincidencia_exacta_sector": es_exacto,
+            "zona_aclaracion": zona_texto,
             "medicos_muestra": medicos_finales
         }, ensure_ascii=False)
 
@@ -251,7 +246,7 @@ def consultar_directorio_inteligente(
         return json.dumps({"error": str(e)})
 
 # ==========================================
-# AGENDAMIENTO Y NOTIFICACIONES AL DOCTOR
+# AGENDAMIENTO Y NOTIFICACIONES
 # ==========================================
 
 def despachar_notificacion_doctor(cita_id: str) -> dict:
@@ -423,7 +418,7 @@ def agendar_cita_medica(
         return json.dumps({"error": str(e)})
 
 # ==========================================
-# SYSTEM PROMPT RIGUROSO Y SIN ALUCINACIONES GEOGRÁFICAS
+# SYSTEM PROMPT
 # ==========================================
 
 SYSTEM_PROMPT_GEMA = f"""
@@ -434,7 +429,7 @@ Cuando utilices la herramienta `consultar_directorio_inteligente`:
 1. Si `coincidencia_exacta_sector` es true:
    Presenta la lista diciendo: "Aquí tienes los [especialistas] disponibles en [Ubicación]:"
 2. Si `coincidencia_exacta_sector` es false y la lista NO está vacía:
-   Aclara transparentemente: "No encontré [especialistas] registrados exactamente en [Sector/Barrio], pero aquí tienes opciones disponibles en la zona cercana del Distrito Nacional:"
+   Aclara exactamente con la zona devuelta: "No encontré [especialistas] registrados exactamente en [Ubicación], pero aquí tienes opciones disponibles en [zona_aclaracion]:"
 3. Si la lista está VACÍA (0 resultados):
    Di transparentemente: "No encontré [especialistas] en [Ubicación] en nuestro directorio. ¿Te gustaría buscar en otro sector o provincia?"
 
@@ -448,7 +443,7 @@ CADA médico de la lista debe presentarse con esta estructura exacta:
 
 ### 📍 FLUJO CONVERSACIONAL PASO A PASO:
 1. **PASO 1 (Solicitud sin ubicación):** Pregunta por la ciudad/sector si el usuario solo pide la especialidad.
-2. **PASO 2 (Ubicación especificada):** Invoca `consultar_directorio_inteligente` y muestra los resultados siguiendo las reglas de coincidencia exacta arriba indicadas.
+2. **PASO 2 (Ubicación especificada):** Invoca `consultar_directorio_inteligente` y muestra los resultados siguiendo las reglas arriba indicadas.
 3. **PASO 3 (Selección de médico):** Pregunta la fecha y tanda deseada.
 4. **PASO 4 (Tarjeta de revisión):** Muestra el resumen y solicita confirmación ("¿Está todo bien con estos datos?").
 5. **PASO 5 (Confirmación y envío):** Ejecuta `agendar_cita_medica` y entrega el mensaje final con la copia exacta enviada al médico.
