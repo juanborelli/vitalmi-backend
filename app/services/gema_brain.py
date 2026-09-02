@@ -11,6 +11,7 @@ from openai import AsyncOpenAI
 
 from app.core.supabase import obtener_cliente_supabase
 
+# Importar funciones de Evolution Service
 try:
     from app.services.evolution_service import enviar_mensaje_whatsapp
 except ImportError:
@@ -23,6 +24,7 @@ except ImportError:
     def verificar_numero_whatsapp(jid: str) -> bool:
         return True
 
+# Configuración de Logs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("GemaBrain")
 
@@ -163,7 +165,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         logger.error(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO MASTER - FILTRADO JERÁRQUICO
+# DIRECTORIO MASTER - FILTRADO ESTRICTO GEOGRÁFICO
 # ==========================================
 
 def consultar_directorio_inteligente(
@@ -179,30 +181,39 @@ def consultar_directorio_inteligente(
 
     try:
         texto_unificado = remover_tildes(f"{especialidad} {nombre_medico} {mensaje_raw}").lower()
+        
+        # Mapeo de Especialidad
         tok_esp = ""
-        for r in ["urol", "cardio", "pediat", "ginec", "derma", "oftalmo", "ortop", "odont", "interna", "general", "neurol", "psiquia"]:
+        for r in ["urol", "cardio", "pediat", "ginec", "derma", "oftalmo", "ortop", "odont", "general", "interna", "neurol", "psiquia"]:
             if r in texto_unificado:
                 tok_esp = r
                 break
 
+        # Extraer tokens de ubicación solicitados por el usuario
         raw_ubi = remover_tildes(f"{ubicacion} {centro_medico} {mensaje_raw}").lower()
-        ignore_words = ["hola", "gema", "necesito", "un", "una", "cardiologo", "urologo", "pediatra", "medico", "doctor", "doctora", "oftalmologo", "ortopeda", "internista", "cerca", "de", "en", "para", "el", "la", "los", "las"]
+        ignore_words = [
+            "hola", "gema", "necesito", "un", "una", "cardiologo", "urologo", "pediatra", 
+            "medico", "doctor", "doctora", "oftalmologo", "ortopeda", "internista", "general", 
+            "cerca", "de", "en", "para", "el", "la", "los", "las", "distrito", "nacional"
+        ]
         tokens_ubi = [t for t in re.findall(r'\b\w{3,}\b', raw_ubi) if t not in ignore_words and t not in tok_esp]
 
+        logger.info(f"🔍 CONSULTA STRICTA: Especialidad='{tok_esp}' | Tokens Ubicación={tokens_ubi}")
+
+        # Consulta base en Supabase
         query = supabase.table("vitalmi_directorio_master").select("*")
         if tok_esp:
             query = query.ilike("especialidad", f"%{tok_esp}%")
 
-        res = query.limit(100).execute()
+        res = query.limit(150).execute()
         registros = res.data or []
 
         if not registros:
-            return json.dumps({"total_exacto": 0, "medicos_muestra": [], "mensaje": "No se encontraron especialistas en esa área."}, ensure_ascii=False)
+            return json.dumps({"total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
 
+        # FILTRADO DE HIERRO: Exigir que TODOS los tokens de la ciudad/sector estén en el registro
         if tokens_ubi:
-            coincidencias_exactas = []
-            coincidencias_zona = []
-
+            medicos_filtrados = []
             for r in registros:
                 p_str = remover_tildes(r.get('provincia', '')).lower()
                 m_str = remover_tildes(r.get('municipio', '')).lower()
@@ -211,33 +222,16 @@ def consultar_directorio_inteligente(
 
                 bloque_total = f"{p_str} {m_str} {d_str} {c_str}"
 
+                # Match ESTRICTO: Cada token de ubicación especificado debe existir en el registro
                 if all(t in bloque_total for t in tokens_ubi):
-                    coincidencias_exactas.append(r)
-                elif any(t in bloque_total for t in tokens_ubi):
-                    coincidencias_zona.append(r)
+                    medicos_filtrados.append(r)
 
-            if coincidencias_exactas:
-                medicos_finales = coincidencias_exactas[:5]
-                zona_texto = tokens_ubi[0].title()
-                es_exacto = True
-            elif coincidencias_zona:
-                medicos_finales = coincidencias_zona[:5]
-                prov_encontrada = medicos_finales[0].get('provincia') or "la zona cercana"
-                zona_texto = prov_encontrada.title()
-                es_exacto = False
-            else:
-                medicos_finales = []
-                zona_texto = ""
-                es_exacto = False
+            medicos_finales = medicos_filtrados[:5]
         else:
             medicos_finales = registros[:5]
-            zona_texto = "la zona"
-            es_exacto = True
 
         return json.dumps({
             "total_exacto": len(medicos_finales),
-            "coincidencia_exacta_sector": es_exacto,
-            "zona_aclaracion": zona_texto,
             "medicos_muestra": medicos_finales
         }, ensure_ascii=False)
 
@@ -418,22 +412,21 @@ def agendar_cita_medica(
         return json.dumps({"error": str(e)})
 
 # ==========================================
-# SYSTEM PROMPT
+# SYSTEM PROMPT - REGLA CERO ALUCINACIONES GEOGRÁFICAS
 # ==========================================
 
 SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente inteligente para citas médicas de VitalMi en República Dominicana.
 
-### 📍 FORMATO DE PRESENTACIÓN DE MÉDICOS (ESTRICTO):
-Cuando utilices la herramienta `consultar_directorio_inteligente`:
-1. Si `coincidencia_exacta_sector` es true:
-   Presenta la lista diciendo: "Aquí tienes los [especialistas] disponibles en [Ubicación]:"
-2. Si `coincidencia_exacta_sector` es false y la lista NO está vacía:
-   Aclara exactamente con la zona devuelta: "No encontré [especialistas] registrados exactamente en [Ubicación], pero aquí tienes opciones disponibles en [zona_aclaracion]:"
-3. Si la lista está VACÍA (0 resultados):
-   Di transparentemente: "No encontré [especialistas] en [Ubicación] en nuestro directorio. ¿Te gustaría buscar en otro sector o provincia?"
+### 📍 FORMATO DE PRESENTACIÓN Y REGLAS DE RESPUESTA:
+1. Cuando invoques la herramienta `consultar_directorio_inteligente`:
+   - Si `total_exacto` es MAYOR a 0:
+     Presenta los resultados con: "Aquí tienes los [especialistas] disponibles en [Ubicación]:"
+   - Si `total_exacto` es IGUAL a 0:
+     Responde ÚNICAMENTE: "No encontré [especialistas] registrados en [Ubicación] en nuestro directorio. ¿Te gustaría buscar en otro sector o provincia?"
+     *(NUNCA muestres médicos de Santo Domingo o de otra ciudad si no coinciden exactamente con la búsqueda).*
 
-CADA médico de la lista debe presentarse con esta estructura exacta:
+2. ESTRUCTURA ESTRICTA PARA CADA MÉDICO ENCONTRADO:
 1. *[Nombre del Médico]*
  - Especialidad: [Especialidad/Subespecialidad]
  - Centro Médico: [Centro Médico]
@@ -475,7 +468,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             "type": "function",
             "function": {
                 "name": "consultar_directorio_inteligente",
-                "description": "Busca especialistas en el directorio médico verificando la ubicación exacta.",
+                "description": "Busca especialistas en el directorio médico de la ubicación exacta.",
                 "parameters": {
                     "type": "object", 
                     "properties": {
