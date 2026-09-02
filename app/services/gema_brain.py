@@ -11,6 +11,7 @@ from openai import AsyncOpenAI
 
 from app.core.supabase import obtener_cliente_supabase
 
+# Importar funciones de Evolution Service con protección fallback contra ImportError
 try:
     from app.services.evolution_service import enviar_mensaje_whatsapp
 except ImportError:
@@ -23,6 +24,7 @@ except ImportError:
     def verificar_numero_whatsapp(jid: str) -> bool:
         return True
 
+# Configuración de Logs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("GemaBrain")
 
@@ -83,7 +85,8 @@ def resolver_fecha_relativa(texto_fecha: str) -> str:
         return texto_clean
 
     if "manana" in texto_clean or "mañana" in texto_clean:
-        return (ahora_rd + timedelta(days=1)).strftime("%Y-%m-%d")
+        fecha_calc = ahora_rd + timedelta(days=1)
+        return fecha_calc.strftime("%Y-%m-%d")
 
     if "hoy" in texto_clean:
         return ahora_rd.strftime("%Y-%m-%d")
@@ -95,13 +98,60 @@ def resolver_fecha_relativa(texto_fecha: str) -> str:
 
     for nombre_dia, idx_target in dias_semana_map.items():
         if nombre_dia in texto_clean:
-            dias_diferencia = idx_target - ahora_rd.weekday()
-            if dias_diferencia <= 0:
+            dias_diferencia = (idx_target - ahora_rd.weekday()) % 7
+            if dias_diferencia == 0 or "proximo" in texto_clean or "que viene" in texto_clean:
                 dias_diferencia += 7
             fecha_calculada = ahora_rd + timedelta(days=dias_diferencia)
             return fecha_calculada.strftime("%Y-%m-%d")
 
     return (ahora_rd + timedelta(days=1)).strftime("%Y-%m-%d")
+
+# ==========================================
+# MÓDULO DE RESOLUCIÓN GEOGRÁFICA (RD)
+# ==========================================
+
+def autodetectar_ubicacion(sector_usuario: str) -> Dict[str, str]:
+    supabase = obtener_cliente_supabase()
+    if not supabase or not sector_usuario:
+        return {}
+
+    sector_limpio = sector_usuario.strip()
+
+    # 1. Resolver mediante la Función RPC resolver_ubicacion_rd
+    try:
+        res_rpc = supabase.rpc("resolver_ubicacion_rd", {"texto_sector": sector_limpio}).execute()
+        if res_rpc.data and len(res_rpc.data) > 0:
+            data = res_rpc.data[0]
+            logger.info(f"📍 Ubicación resuelta vía RPC: {data}")
+            return {
+                "provincia": data.get("provincia", ""),
+                "municipio": data.get("municipio", ""),
+                "sector": data.get("sector", sector_limpio)
+            }
+    except Exception as e:
+        logger.warning(f"⚠️ Error o timeout en RPC resolver_ubicacion_rd: {e}")
+
+    # 2. Fallback sobre la Vista Consolidada vista_geo_rd
+    try:
+        res_vista = (
+            supabase.table("vista_geo_rd")
+            .select("provincia, municipio, barrio")
+            .ilike("busqueda_texto", f"%{remover_tildes(sector_limpio).lower()}%")
+            .limit(1)
+            .execute()
+        )
+        if res_vista.data and len(res_vista.data) > 0:
+            data = res_vista.data[0]
+            logger.info(f"📍 Ubicación resuelta vía vista_geo_rd: {data}")
+            return {
+                "provincia": data.get("provincia", ""),
+                "municipio": data.get("municipio", ""),
+                "sector": data.get("barrio", sector_limpio)
+            }
+    except Exception as e:
+        logger.error(f"❌ Error consultando vista_geo_rd: {e}")
+
+    return {"sector": sector_limpio}
 
 def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") -> dict:
     supabase = obtener_cliente_supabase()
@@ -110,21 +160,68 @@ def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") ->
 
     try:
         jid_normalizado = normalizar_jid(telefono_jid)
+        telefono_solo_numeros = re.sub(r"\D", "", telefono_jid)
+        ultimos_10_digitos = telefono_solo_numeros[-10:] if len(telefono_solo_numeros) >= 10 else telefono_solo_numeros
+        
+        nombre_guardar = nombre_push.strip() if (nombre_push and nombre_push.strip()) else "Usuario WhatsApp"
+        
         res = supabase.table("pacientes").select("*").eq("telefono_jid", jid_normalizado).execute()
+        
+        if not res.data and ultimos_10_digitos:
+            res = supabase.table("pacientes").select("*").ilike("telefono_jid", f"%{ultimos_10_digitos}%").execute()
+
+        if not res.data and nombre_guardar not in ["Usuario WhatsApp", "Paciente", "Trancrédito", ""]:
+            res = supabase.table("pacientes").select("*").ilike("nombre", nombre_guardar).execute()
+
         if res.data and len(res.data) > 0:
-            return res.data[0]
+            paciente_existente = res.data[0]
+            if paciente_existente.get("telefono_jid") != jid_normalizado:
+                supabase.table("pacientes").update({
+                    "telefono_jid": jid_normalizado,
+                    "updated_at": obtener_hora_rd_iso()
+                }).eq("id", paciente_existente["id"]).execute()
+                paciente_existente["telefono_jid"] = jid_normalizado
+            
+            return paciente_existente
 
         datos_nuevo = {
             "telefono_jid": jid_normalizado, 
-            "nombre": nombre_push.strip() or "Usuario WhatsApp", 
+            "nombre": nombre_guardar, 
             "perfil_completo": False,
             "created_at": obtener_hora_rd_iso()
         }
         res_insert = supabase.table("pacientes").insert(datos_nuevo).execute()
         return res_insert.data[0] if res_insert.data else {}
     except Exception as e:
-        logger.error(f"❌ Error registrando paciente: {e}")
+        print(f"❌ Error buscando o registrando paciente: {e}")
         return {}
+
+def verificar_registro_tercero(telefono_tercero: str) -> str:
+    supabase = obtener_cliente_supabase()
+    if not supabase or not telefono_tercero:
+        return json.dumps({"registrado": False, "mensaje": "Teléfono inválido o sin datos."})
+
+    jid_tercero = normalizar_jid(telefono_tercero)
+
+    try:
+        res = supabase.table("pacientes").select("id, nombre, perfil_completo, provincia, ars").eq("telefono_jid", jid_tercero).execute()
+        if res.data and len(res.data) > 0:
+            pac = res.data[0]
+            if pac.get("perfil_completo", False):
+                return json.dumps({
+                    "registrado": True, 
+                    "paciente": pac, 
+                    "mensaje": f"El paciente {pac.get('nombre')} está registrado y con perfil completo."
+                }, ensure_ascii=False)
+        
+        return json.dumps({
+            "registrado": False, 
+            "requiere_form": True,
+            "url_form": URL_FORM_OFICIAL,
+            "mensaje": f"El familiar con el número {telefono_tercero} NO está registrado. Indícale que para agendar debe llenar este enlace: {URL_FORM_OFICIAL}"
+        }, ensure_ascii=False)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 def obtener_historial_supabase(telefono_jid: str, limite: int = 10) -> List[Dict[str, str]]:
     supabase = obtener_cliente_supabase()
@@ -141,7 +238,8 @@ def obtener_historial_supabase(telefono_jid: str, limite: int = 10) -> List[Dict
             .limit(limite)
             .execute()
         )
-        return response.data[::-1] if response.data else []
+        registros = response.data[::-1] if response.data else []
+        return registros
     except Exception as e:
         return []
 
@@ -152,86 +250,140 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
 
     try:
         jid_norm = normalizar_jid(telefono_jid)
-        supabase.table("historial_chats").insert({
+        data = {
             "telefono_jid": jid_norm,
             "rol": rol,
             "contenido": contenido,
             "tipo_mensaje": tipo_mensaje,
             "created_at": obtener_hora_rd_iso()
-        }).execute()
+        }
+        supabase.table("historial_chats").insert(data).execute()
     except Exception as e:
-        logger.error(f"❌ Error guardando mensaje: {e}")
+        print(f"❌ Error guardando mensaje: {e}")
 
-# ==========================================
-# DIRECTORIO MASTER - SUPERCAMPO Y BÚSQUEDA DE TEXTO LIBRE
-# ==========================================
-
-def consultar_directorio_inteligente(busqueda_libre: str = "", historial_contexto: str = "") -> str:
+def consultar_directorio_inteligente(
+    provincia: str = "", 
+    municipio: str = "",
+    sector: str = "",
+    especialidad: str = "", 
+    nombre_medico: str = "", 
+    centro_medico_preferido: str = "",
+    mensaje_raw: str = ""
+) -> str:
     supabase = obtener_cliente_supabase()
     if not supabase:
-        return json.dumps({"total_exacto": 0, "medicos_muestra": []})
+        return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        texto_evaluar = busqueda_libre
-        if len(busqueda_libre.strip()) <= 3 or busqueda_libre.lower().strip() in ["si", "no", "ok", "confirmado", "correcto"]:
-            texto_evaluar = f"{historial_contexto} {busqueda_libre}"
+        if sector and (not provincia or not municipio):
+            geo_info = autodetectar_ubicacion(sector)
+            provincia = provincia or geo_info.get("provincia", "")
+            municipio = municipio or geo_info.get("municipio", "")
 
-        texto_clean = remover_tildes(texto_evaluar).lower().strip()
-        stop_words = ["necesito", "cita", "con", "doctor", "doctora", "dra", "dr", "para", "este", "buscame", "un", "una", "en", "el", "la", "los", "las", "donde", "trabaja", "quiero", "hacer", "si", "no", "ok"]
-        tokens = [t for t in re.findall(r'\b\w{3,}\b', texto_clean) if t not in stop_words]
+        stop_words = [
+            "manana", "tarde", "noche", "hoy", "lunes", "martes", "miercoles", "jueves", "viernes", 
+            "sabado", "domingo", "doctor", "doctora", "cita", "quiero", "necesito", "con", "del", 
+            "esta", "para", "una", "este", "por", "favor", "dame", "ninguno", "ellos", "clinica", "centro"
+        ]
 
-        if not tokens:
-            return json.dumps({"total_exacto": 0, "medicos_muestra": []})
+        texto_limpio = remover_tildes(f"{nombre_medico} {especialidad} {mensaje_raw}").lower()
+        
+        if "urol" in texto_limpio:
+            token_especialidad = "urol"
+        elif "cardio" in texto_limpio:
+            token_especialidad = "cardio"
+        elif "pediat" in texto_limpio:
+            token_especialidad = "pediat"
+        elif "ginec" in texto_limpio:
+            token_especialidad = "ginec"
+        elif "derma" in texto_limpio:
+            token_especialidad = "derma"
+        else:
+            tokens = [t for t in re.findall(r'\b\w{3,}\b', texto_limpio) if t not in stop_words]
+            token_especialidad = tokens[0] if tokens else ""
+
+        prov_clean = remover_tildes(provincia).strip()
+        muni_clean = remover_tildes(municipio).strip()
+        centro_clean = remover_tildes(centro_medico_preferido).strip()
 
         query = supabase.table("vitalmi_directorio_master").select("*")
-        
-        condiciones = []
-        for t in tokens:
-            condiciones.append(f"direccion.ilike.%{t}%")
-            condiciones.append(f"centro_medico.ilike.%{t}%")
-            condiciones.append(f"nombre.ilike.%{t}%")
-            condiciones.append(f"especialidad.ilike.%{t}%")
-            condiciones.append(f"especialidad_medico.ilike.%{t}%")
-            condiciones.append(f"provincia.ilike.%{t}%")
-            condiciones.append(f"municipio.ilike.%{t}%")
 
-        query = query.or_(",".join(condiciones))
-        res = query.limit(5).execute()
-        
-        medicos = res.data or []
-        return json.dumps({
-            "total_exacto": len(medicos),
-            "medicos_muestra": medicos
-        }, ensure_ascii=False)
+        if prov_clean:
+            query = query.or_(f"provincia.ilike.%{prov_clean}%,direccion.ilike.%{prov_clean}%")
+
+        if muni_clean:
+            query = query.or_(f"municipio.ilike.%{muni_clean}%,direccion.ilike.%{muni_clean}%")
+
+        if centro_clean:
+            query = query.or_(f"centro_medico.ilike.%{centro_clean}%,direccion.ilike.%{centro_clean}%")
+
+        if token_especialidad:
+            query = query.or_(
+                f"nombre.ilike.%{token_especialidad}%,"
+                f"especialidad.ilike.%{token_especialidad}%,"
+                f"especialidad_medico.ilike.%{token_especialidad}%,"
+                f"subespecialidades_medico.ilike.%{token_especialidad}%"
+            )
+
+        res1 = query.limit(10).execute()
+        medicos = res1.data or []
+
+        if not medicos and prov_clean and token_especialidad:
+            q2 = supabase.table("vitalmi_directorio_master").select("*")
+            q2 = q2.or_(f"provincia.ilike.%{prov_clean}%,direccion.ilike.%{prov_clean}%")
+            if token_especialidad:
+                q2 = q2.or_(
+                    f"nombre.ilike.%{token_especialidad}%,"
+                    f"especialidad.ilike.%{token_especialidad}%,"
+                    f"especialidad_medico.ilike.%{token_especialidad}%"
+                )
+            res2 = q2.limit(10).execute()
+            medicos = res2.data or []
+
+        if not medicos:
+            return json.dumps({
+                "total_exacto": 0, 
+                "mensaje": f"No se encontraron especialistas en los criterios especificados.",
+                "medicos_muestra": []
+            }, ensure_ascii=False)
+
+        return json.dumps({"total_exacto": len(medicos), "medicos_muestra": medicos}, ensure_ascii=False)
 
     except Exception as e:
-        logger.error(f"❌ Error en consultar_directorio_inteligente: {e}")
-        return json.dumps({"total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
+        print(f"❌ Error en consultar_directorio_inteligente: {e}")
+        return json.dumps({"error": str(e)})
 
 # ==========================================
-# NOTIFICACIÓN Y AGENDAMIENTO DE CITAS
+# NOTIFICACIÓN AL DOCTOR / SECRETARÍA
 # ==========================================
 
 def despachar_notificacion_doctor(cita_id: str) -> dict:
+    """
+    1. Obtiene los datos de la cita desde Supabase.
+    2. Valida si el número del doctor posee WhatsApp activo mediante evolution_service.
+    3. Si falla, hace fallback al número del centro médico/secretaría.
+    4. Despacha el mensaje y actualiza la trazabilidad en Supabase.
+    """
     supabase = obtener_cliente_supabase()
     if not supabase:
-        return {"status": "error", "mensaje": "Sin conexión a base de datos", "mensaje_doctor_texto": ""}
+        return {"status": "error", "mensaje": "Sin conexión a base de datos"}
 
     res_cita = supabase.table("citas").select("*").eq("id", cita_id).execute()
     if not res_cita.data:
-        return {"status": "error", "mensaje": "Cita no encontrada", "mensaje_doctor_texto": ""}
+        return {"status": "error", "mensaje": "Cita no encontrada"}
 
     cita = res_cita.data[0]
     doc_jid = cita.get("doctor_whatsapp_jid")
     
     motivo_raw = cita.get("motivo_consulta", "")
-    medico_nombre = "Doctor"
+    medico_nombre = ""
     if "|" in motivo_raw:
         partes = motivo_raw.split("|")
         for p in partes:
             if "Médico:" in p:
                 medico_nombre = p.replace("Médico:", "").strip()
 
+    # Verificar si el número tiene WhatsApp
     whatsapp_valido = False
     if doc_jid:
         try:
@@ -240,29 +392,35 @@ def despachar_notificacion_doctor(cita_id: str) -> dict:
             logger.warning(f"⚠️ Error verificando WhatsApp del doctor: {e}")
             whatsapp_valido = False
 
-    if not whatsapp_valido and medico_nombre:
-        res_doc = supabase.table("vitalmi_directorio_master").select("telefono, whatsapp, centro_medico").ilike("nombre", f"%{medico_nombre.split()[0]}%").limit(1).execute()
-        if res_doc.data:
-            sec_phone = res_doc.data[0].get("whatsapp") or res_doc.data[0].get("telefono")
-            if sec_phone:
-                doc_jid = normalizar_jid(sec_phone)
+    # Fallback a Secretaría / Centro Médico si el doctor no tiene WhatsApp activo
+    if not whatsapp_valido:
+        logger.warning(f"⚠️ WhatsApp del médico ({doc_jid}) no activo. Conmutando a secretaría...")
+        if medico_nombre:
+            res_doc = supabase.table("vitalmi_directorio_master").select("telefono, whatsapp, centro_medico").ilike("nombre", f"%{medico_nombre}%").limit(1).execute()
+            if res_doc.data:
+                sec_phone = res_doc.data[0].get("whatsapp") or res_doc.data[0].get("telefono")
+                if sec_phone:
+                    doc_jid = normalizar_jid(sec_phone)
+                    logger.info(f"📍 Redirigido a WhatsApp de Secretaría: {doc_jid}")
 
+    if not doc_jid:
+        logger.error(f"❌ No se encontró número de WhatsApp válido para la cita #{cita_id}")
+        supabase.table("citas").update({"whatsapp_status": "fallido_sin_numero"}).eq("id", cita_id).execute()
+        return {"status": "fallido", "error": "Sin número de WhatsApp válido"}
+
+    # Plantilla interactiva para el Doctor / Secretaría
     mensaje_doctor = (
-        f"Estimado(a) {medico_nombre},\n\n"
-        "Soy Gema, la asistente inteligente para citas médicas de VitalMi.\n\n"
-        f"📝 *NUEVA SOLICITUD DE CITA:*\n"
-        f"• *Paciente:* {cita.get('motivo_consulta')}\n"
+        "🏥 *NUEVA SOLICITUD DE CITA - VITALMI*\n\n"
+        f"📝 *Detalles de la Cita #{str(cita_id)[:8]}:*\n"
+        f"• *Datos del Paciente:* {cita.get('motivo_consulta')}\n"
         f"• *Costo Estimado:* RD$ {cita.get('costo_consulta', 2500):,.2f}\n"
-        f"• *Reglas de Atención:* {cita.get('reglas_llegada')}\n\n"
-        "Por favor responda a este mensaje con:\n"
-        "✅ *CONFIRMAR* - Para aceptar la cita.\n"
+        f"• *Atención:* {cita.get('reglas_llegada')}\n\n"
+        "Por favor responda a este mensaje con una de estas opciones:\n"
+        "✅ *CONFIRMAR* - Para aceptar la cita en el horario solicitado.\n"
         "❌ *RECHAZAR* - Para indicar que no hay disponibilidad."
     )
 
-    if not doc_jid:
-        supabase.table("citas").update({"whatsapp_status": "fallido_sin_numero"}).eq("id", cita_id).execute()
-        return {"status": "fallido", "error": "Sin número de WhatsApp válido", "mensaje_doctor_texto": mensaje_doctor}
-
+    # Enviar mensaje usando evolution_service
     try:
         res_envio = enviar_mensaje_whatsapp(doc_jid, mensaje_doctor)
     except Exception as err_api:
@@ -278,10 +436,10 @@ def despachar_notificacion_doctor(cita_id: str) -> dict:
             "updated_at": obtener_hora_rd_iso()
         }).eq("id", cita_id).execute()
         
-        return {"status": "exitoso", "jid_destinatario": doc_jid, "message_id": msg_id, "mensaje_doctor_texto": mensaje_doctor}
+        return {"status": "exitoso", "jid_destinatario": doc_jid, "message_id": msg_id}
     else:
         supabase.table("citas").update({"whatsapp_status": "fallido_envio"}).eq("id", cita_id).execute()
-        return {"status": "fallido", "error": "Falló el envío de la API", "mensaje_doctor_texto": mensaje_doctor}
+        return {"status": "fallido", "error": "Falló el envío de la API"}
 
 def agendar_cita_medica(
     telefono_jid: str, 
@@ -290,7 +448,6 @@ def agendar_cita_medica(
     tanda: str = "Mañana", 
     es_para_tercero: bool = False,
     telefono_tercero: str = "",
-    nombre_menor_paciente: str = "",
     motivo_consulta: str = "Consulta General"
 ) -> str:
     supabase = obtener_cliente_supabase()
@@ -298,6 +455,13 @@ def agendar_cita_medica(
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
+        palabras_invalidas = ["chequeo", "rutina", "consulta", "general", "cita", "revision"]
+        nombre_clean = remover_tildes(medico_nombre).lower()
+        if any(w in nombre_clean for w in palabras_invalidas) and len(medico_nombre.split()) < 4:
+            res_last = supabase.table("vitalmi_directorio_master").select("*").order("created_at", desc=True).limit(1).execute()
+            if res_last.data:
+                medico_nombre = res_last.data[0].get("nombre")
+
         jid_objetivo = normalizar_jid(telefono_jid)
         if es_para_tercero and telefono_tercero:
             jid_objetivo = normalizar_jid(telefono_tercero)
@@ -311,13 +475,7 @@ def agendar_cita_medica(
 
         paciente = res_pac.data[0]
         paciente_id = paciente.get("id")
-        nombre_tutor = paciente.get("nombre", "Paciente Titular")
-        
-        if nombre_menor_paciente:
-            nombre_paciente_final = f"{nombre_menor_paciente.strip()} (Tutor: {nombre_tutor})"
-        else:
-            nombre_paciente_final = nombre_tutor
-
+        nombre_paciente = paciente.get("nombre", "Paciente")
         cedula_paciente = paciente.get("cedula", "No registrada")
         ars_paciente = paciente.get("ars", "Privado")
         plan_ars = paciente.get("tipo_plan", "Básico")
@@ -332,7 +490,7 @@ def agendar_cita_medica(
             fecha_formateada = fecha_cita
 
         tanda_clean = remover_tildes(tanda).lower()
-        if "sabado" in tanda_clean or "sábado" in tanda_clean or (fecha_dt and fecha_dt.weekday() == 5):
+        if "sabado" in tanda_clean or "sábado" in tanda_clean:
             tanda_texto = "Sábados (9:00 AM – 2:00 PM)"
         elif "tarde" in tanda_clean:
             tanda_texto = "Tarde (3:00 PM – 6:00 PM)"
@@ -342,6 +500,8 @@ def agendar_cita_medica(
         centro_medico = "Consultorio Privado Autorizado"
         especialidad_medico = "Especialista Clínico"
         costo_consulta = 2500.00
+        metodo_pago = "Efectivo / Facturación en recepción"
+        reglas_llegada = "Orden de llegada. La recepción abre 30 mins antes de la tanda."
         doc_whatsapp = ""
 
         tokens_nombre = [t for t in remover_tildes(medico_nombre).split() if len(t) > 3]
@@ -354,90 +514,86 @@ def agendar_cita_medica(
                 especialidad_medico = doc_data.get("especialidad") or doc_data.get("especialidad_medico") or especialidad_medico
                 doc_whatsapp = doc_data.get("telefono") or doc_data.get("whatsapp") or ""
 
-        motivo_completo = f"Paciente: {nombre_paciente_final} | Cédula Tutor: {cedula_paciente} | ARS: {ars_paciente} ({plan_ars}) | Médico: {medico_nombre} | Centro: {centro_medico} | Motivo: {motivo_consulta}"
-
-        mensaje_doctor_texto = (
-            f"Estimado(a) {medico_nombre},\n\n"
-            "Soy Gema, la asistente inteligente para citas médicas de VitalMi.\n\n"
-            f"📝 *NUEVA SOLICITUD DE CITA:*\n"
-            f"• *Paciente:* {nombre_paciente_final}\n"
-            f"• *ARS:* {ars_paciente} ({plan_ars})\n"
-            f"• *Fecha y Horario:* {fecha_formateada} ({tanda_texto})\n"
-            f"• *Centro Médico:* {centro_medico}\n"
-            f"• *Costo Estimado:* RD$ {costo_consulta:,.2f}\n\n"
-            "Por favor responda a este mensaje con:\n"
-            "✅ *CONFIRMAR* - Para aceptar la cita.\n"
-            "❌ *RECHAZAR* - Para indicar que no hay disponibilidad."
-        )
-
         datos_cita = {
             "paciente_id": paciente_id,
-            "motivo_consulta": motivo_completo,
+            "motivo_consulta": f"Paciente: {nombre_paciente} | Cédula: {cedula_paciente} | ARS: {ars_paciente} ({plan_ars}) | Médico: {medico_nombre} | Centro: {centro_medico} | Motivo: {motivo_consulta}",
             "estado": "pendiente_aprobacion",
             "doctor_whatsapp_jid": normalizar_jid(doc_whatsapp) if doc_whatsapp else None,
             "whatsapp_status": "pendiente",
             "costo_consulta": costo_consulta,
+            "metodo_pago": metodo_pago,
+            "reglas_llegada": reglas_llegada,
             "created_at": obtener_hora_rd_iso()
         }
 
         res_cita = supabase.table("citas").insert(datos_cita).execute()
         cita_creada = res_cita.data[0] if res_cita.data else {}
 
-        if cita_creada.get("id") and doc_whatsapp:
+        # Despachar notificación automática al doctor/secretaría
+        if cita_creada.get("id"):
             try:
-                doc_jid = normalizar_jid(doc_whatsapp)
-                enviar_mensaje_whatsapp(doc_jid, mensaje_doctor_texto)
-                supabase.table("citas").update({"whatsapp_status": "enviado"}).eq("id", cita_creada["id"]).execute()
+                despachar_notificacion_doctor(cita_creada["id"])
             except Exception as err_notif:
-                logger.error(f"⚠️ Error enviando WhatsApp al doctor: {err_notif}")
+                logger.error(f"⚠️ Error al despachar notificación al doctor: {err_notif}")
 
-        mensaje_paciente = (
-            f"Estamos enviando tu solicitud de cita al {medico_nombre}. Tan pronto el doctor confirme recibirás una notificación.\n\n"
-            f"El siguiente mensaje le fue enviado al {medico_nombre}:\n\n"
-            f"\"{mensaje_doctor_texto}\""
+        mensaje_final = (
+            "📋 *SOLICITUD DE CITA REGISTRADA*\n\n"
+            "👤 *DATOS DEL PACIENTE:*\n"
+            f"• *Nombre:* {nombre_paciente}\n"
+            f"• *Cédula:* {cedula_paciente}\n"
+            f"• *ARS:* {ars_paciente} ({plan_ars})\n\n"
+            "👨‍⚕️ *ESPECIALISTA Y CENTRO:*\n"
+            f"• *Doctor:* {medico_nombre}\n"
+            f"• *Especialidad:* {especialidad_medico}\n"
+            f"• *Centro Médico:* {centro_medico}\n\n"
+            "📅 *HORARIO Y LOGÍSTICA:*\n"
+            f"• *Fecha:* {fecha_formateada}\n"
+            f"• *Tanda:* {tanda_texto}\n"
+            f"• *Costo Estimado:* RD$ {costo_consulta:,.2f} ({metodo_pago})\n"
+            f"• *Atención:* {reglas_llegada}\n\n"
+            "⏳ *ESTADO:* Solicitud enviada al doctor/secretaría. Te notificaremos por aquí tan pronto sea confirmada."
         )
 
         return json.dumps({
             "status": "exitoso",
-            "mensaje_formateado_final": mensaje_paciente,
+            "mensaje_formateado_final": mensaje_final,
             "cita_id": cita_creada.get("id")
         }, ensure_ascii=False)
 
     except Exception as e:
-        logger.error(f"❌ Error en agendar_cita_medica: {e}")
+        print(f"❌ Error en agendar_cita_medica: {e}")
         return json.dumps({"error": str(e)})
-
-# ==========================================
-# SYSTEM PROMPT CON FLUJO CONVERSACIONAL Y PROTOCOLO COMPLETO
-# ==========================================
 
 SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente inteligente para citas médicas de VitalMi en República Dominicana.
+Cuentas con un directorio de casi 10,000 médicos especialistas en todo el país.
 
-### 📍 MANEJO DE BÚSQUEDAS Y BUSQUEDA LIBRE:
-1. SIEMPRE debes invocar la herramienta `consultar_directorio_inteligente` enviando la frase o requerimiento médico en `busqueda_libre`.
-2. Presenta ÚNICAMENTE los médicos exactos devueltos por la herramienta (Nombre, Especialidad, Centro Médico, Dirección completa y Teléfono).
-3. Si la herramienta devuelve 0 resultados, sé transparente y di: "No encontré médicos en nuestra base de datos para esa búsqueda específica. ¿Te gustaría intentar con otra especialidad o provincia?"
-4. NUNCA inventes médicos ni cambies la ubicación que devuelve la herramienta.
+### 📍 MANEJO INTELIGENTE DE UBICACIONES Y SECTORES:
+1. Ya posees el mapa territorial completo de República Dominicana integrado en la base de datos (vista_geo_rd y resolver_ubicacion_rd).
+2. Si el usuario menciona un barrio, sector o comunidad (ej: "Piantini", "Madre Vieja", "Bella Vista", "Los Ríos"), invoca la herramienta `resolver_ubicacion_rd` o pasa el sector a `consultar_directorio_inteligente`.
+3. NUNCA le preguntes al usuario en qué provincia o municipio queda un sector si el sistema ya logró autodetectarlo.
 
-### 👶 REGLA ESPECIAL PARA CONSULTAS PEDIÁTRICAS:
-- Si la especialidad solicitada es PEDIATRÍA:
-  1. Si el usuario dio el nombre del menor en su primer mensaje (ej. "Juan Alonso de 11 años"), asumelo directamente sin repetir la pregunta.
-  2. Si no lo dio, pregunta amablemente: "¿Cuál es el nombre completo y edad del niño o niña que asistirá a la consulta?"
+### 💬 REGLA DE SALUDO INICIAL Y DESPEDIDA DE CORTESÍA:
+- Al INICIO de la conversación (saludo inicial como "Hola", "Buenas"):
+  "Hola [Nombre], soy Gema tu asistente inteligente para citas médicas. Si necesitas algún doctor o especialidad sólo escríbemelo o dímelo por nota de voz."
+- Cuando el usuario finalice o agradezca (ej. "Ok gracias", "Gracias", "Muchas gracias"):
+  "De nada [Nombre]. Favor de estar pendiente a la confirmación de tu cita. Si hay algo más en lo que pueda asistirte no dudes en decírmelo, ya sea por texto o por voz."
 
-### 📅 REGLA DE TARJETA DE CONFIRMACIÓN PREVIA:
-Antes de invocar `agendar_cita_medica`, DEBES mostrar los detalles para la revisión del usuario:
+### 🧠 BÚSQUEDA INTELIGENTE Y CONTEXTUALIZACIÓN PROGRESIVA:
+1. Si el usuario dice "necesito un doctor": "¿Para cuál especialidad necesitas el doctor?"
+2. Con la especialidad confirmada:
+   - Pregunta por el Sector, Municipio o Provincia (si no lo ha mencionado aún).
+   - Utiliza las herramientas de autodetección para deducir la jerarquía completa.
 
-"Bien [Nombre], aquí tienes los detalles de la cita para tu revisión:
-
-• Médico: [Nombre del Doctor exacto de la DB]
-• Centro: [Nombre del Centro exacto de la DB]
-• Fecha: [Fecha formateada legible con día de la semana]
-• Tanda: [Tarde/Mañana/Sábados]
-
-¿Está todo bien con estos datos?"
-
-- SOLO cuando el usuario responda afirmativamente ("ok. está todo bien" / "sí"), procederás a ejecutar `agendar_cita_medica`.
+### 📅 REGLA DE AGENDAMIENTO SECUENCIAL (UNA PREGUNTA A LA VEZ):
+Cuando el usuario confirme agendar una cita:
+- NUNCA repitas preguntas ya respondidas en el historial.
+- Pide los datos faltantes uno por uno:
+  1. Beneficiario (Titular o Tercero). Si es tercero no registrado: {URL_FORM_OFICIAL}
+  2. Fecha deseada.
+  3. Tanda ('Mañana', 'Tarde' o 'Sábados').
+  4. Motivo de consulta.
+  5. Invoca 'agendar_cita_medica'.
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
@@ -451,15 +607,40 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     nombre_raw = paciente.get("nombre", nombre_usuario) if paciente.get("nombre") else nombre_usuario
     nombre_contacto = extraer_primer_nombre_valido(nombre_raw)
 
+    provincia_paciente = paciente.get("provincia", "")
+    municipio_paciente = paciente.get("municipio", "")
+    sector_paciente = paciente.get("sector", "")
+
+    geo_auto = {}
+    if mensaje_usuario:
+        geo_auto = autodetectar_ubicacion(mensaje_usuario)
+        if geo_auto.get("provincia"):
+            provincia_paciente = geo_auto.get("provincia")
+            municipio_paciente = geo_auto.get("municipio")
+            sector_paciente = geo_auto.get("sector")
+
     guardar_mensaje_supabase(jid_normalizado, "user", mensaje_usuario)
     historial_raw = obtener_historial_supabase(jid_normalizado, limite=10)
     historial_limpio = [{"role": m["rol"] if "rol" in m else m["role"], "content": m["contenido"] if "contenido" in m else m["content"]} for m in historial_raw]
 
-    contexto_acumulado = " ".join([m["content"] for m in historial_limpio if m["role"] == "user"])
+    texto_historial = " ".join([m["content"] for m in historial_limpio]).lower()
+    provincia_detectada = provincia_paciente
+    if not provincia_detectada:
+        provincias_rd = [
+            "san cristobal", "santo domingo", "distrito nacional", "santiago", "la vega", 
+            "puerto plata", "la altagracia", "san pedro de macoris", "la romana", "duarte", "espaillat"
+        ]
+        for p in provincias_rd:
+            if p in texto_historial:
+                provincia_detectada = p.title()
+                break
 
     ahora_rd = datetime.now(TZ_RD)
     contexto_temporal = f"\nHoy es {ahora_rd.strftime('%Y-%m-%d %H:%M:%S')} AST en República Dominicana."
-    contexto_paciente = f"\nUSUARIO EN CHAT: '{nombre_contacto}' | WhatsApp: {jid_normalizado}."
+    contexto_paciente = (
+        f"\nUSUARIO EN CHAT: '{nombre_contacto}' | WhatsApp: {jid_normalizado}\n"
+        f"UBICACIÓN CONTEXTUAL: Provincia: '{provincia_detectada}', Municipio: '{municipio_paciente}', Sector: '{sector_paciente}'."
+    )
     
     system_prompt = SYSTEM_PROMPT_GEMA + contexto_temporal + contexto_paciente
 
@@ -467,14 +648,43 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         {
             "type": "function",
             "function": {
+                "name": "resolver_ubicacion_rd",
+                "description": "Resuelve la Provincia y Municipio exacto a partir del nombre de un barrio o sector de República Dominicana.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"texto_sector": {"type": "string"}},
+                    "required": ["texto_sector"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "verificar_registro_tercero",
+                "description": "Verifica si el número de WhatsApp de un tercero/familiar está registrado en Supabase.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"telefono_tercero": {"type": "string"}},
+                    "required": ["telefono_tercero"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "consultar_directorio_inteligente",
-                "description": "Busca en el directorio médico utilizando el texto libre de la consulta.",
+                "description": "Busca especialistas en el directorio según ubicación, sector y centro médico deseado.",
                 "parameters": {
                     "type": "object", 
                     "properties": {
-                        "busqueda_libre": {"type": "string", "description": "Texto de búsqueda del usuario."}
+                        "especialidad": {"type": "string"},
+                        "nombre_medico": {"type": "string"},
+                        "provincia": {"type": "string"},
+                        "municipio": {"type": "string"},
+                        "sector": {"type": "string"},
+                        "centro_medico_preferido": {"type": "string"}
                     }, 
-                    "required": ["busqueda_libre"]
+                    "required": []
                 }
             }
         },
@@ -491,7 +701,6 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                         "tanda": {"type": "string"},
                         "es_para_tercero": {"type": "boolean"},
                         "telefono_tercero": {"type": "string"},
-                        "nombre_menor_paciente": {"type": "string"},
                         "motivo_consulta": {"type": "string"}
                     },
                     "required": ["medico_nombre", "fecha_cita", "tanda"]
@@ -522,11 +731,20 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 name = tool_call.function.name
                 args = json.loads(tool_call.function.arguments)
 
-                if name == "consultar_directorio_inteligente":
-                    res_tool = consultar_directorio_inteligente(
-                        busqueda_libre=args.get("busqueda_libre", mensaje_usuario),
-                        historial_contexto=contexto_acumulado
-                    )
+                if name == "resolver_ubicacion_rd":
+                    res_geo = autodetectar_ubicacion(args.get("texto_sector", ""))
+                    res_tool = json.dumps(res_geo, ensure_ascii=False)
+                elif name == "verificar_registro_tercero":
+                    res_tool = verificar_registro_tercero(**args)
+                elif name == "consultar_directorio_inteligente":
+                    args["mensaje_raw"] = mensaje_usuario
+                    if ("provincia" not in args or not args["provincia"]) and provincia_detectada:
+                        args["provincia"] = provincia_detectada
+                    if ("municipio" not in args or not args["municipio"]) and municipio_paciente:
+                        args["municipio"] = municipio_paciente
+                    if ("sector" not in args or not args["sector"]) and sector_paciente:
+                        args["sector"] = sector_paciente
+                    res_tool = consultar_directorio_inteligente(**args)
                 elif name == "agendar_cita_medica":
                     args["telefono_jid"] = jid_normalizado
                     res_tool = agendar_cita_medica(**args)
@@ -555,7 +773,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         return respuesta_texto
 
     except Exception as e:
-        logger.error(f"❌ Error en gema_brain: {e}")
+        print(f"❌ Error en gema_brain: {e}")
         return "Tuve un inconveniente técnico procesando tu solicitud. Por favor indícame la especialidad o doctor que buscas."
 
 async def procesar_mensaje_gema(usuario_jid: str, mensaje: str) -> str:
