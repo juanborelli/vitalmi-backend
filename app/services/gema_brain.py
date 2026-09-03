@@ -11,7 +11,7 @@ from openai import AsyncOpenAI
 
 from app.core.supabase import obtener_cliente_supabase
 
-# Importar funciones de Evolution Service con protección fallback contra ImportError
+# Importar funciones de Evolution Service
 try:
     from app.services.evolution_service import enviar_mensaje_whatsapp
 except ImportError:
@@ -35,7 +35,7 @@ load_dotenv(dotenv_path=env_path, override=True)
 TZ_RD = zoneinfo.ZoneInfo("America/Santo_Domingo")
 URL_FORM_OFICIAL = "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
 
-# Diccionario de mapeo territorial para conectar municipios con sus provincias en RD
+# Diccionario de mapeo territorial para RD
 MAPEO_TERRITORIAL_RD = {
     "moca": "espaillat",
     "san francisco": "duarte",
@@ -180,7 +180,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         logger.error(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO MASTER - BÚSQUEDA TERRITORIAL COMPLETA Y UNIFICADA
+# DIRECTORIO MASTER - BUSCADOR ROBUSTO
 # ==========================================
 
 def consultar_directorio_inteligente(
@@ -197,17 +197,17 @@ def consultar_directorio_inteligente(
     try:
         texto_unificado = remover_tildes(f"{especialidad} {nombre_medico} {mensaje_raw}").lower()
         
-        # 1. Identificar especialidad solicitada
+        # 1. Identificar especialidad solicitada (si la hay)
         tok_esp = ""
         for r in ["urol", "cardio", "pediat", "ginec", "derma", "oftalmo", "ortop", "odont", "general", "interna", "neurol", "psiquia"]:
             if r in texto_unificado:
                 tok_esp = r
                 break
 
-        # 2. Extraer y mapear la ubicación solicitada
+        # 2. Extraer y mapear la ubicación
         raw_ubi = remover_tildes(f"{ubicacion} {centro_medico} {mensaje_raw}").lower()
         
-        # Aplicar mapeo territorial de municipios a provincias para ampliar la coincidencia
+        # Ampliar mapeo territorial de municipios a provincias
         for clave, valor in MAPEO_TERRITORIAL_RD.items():
             if clave in raw_ubi:
                 raw_ubi += f" {valor}"
@@ -219,9 +219,9 @@ def consultar_directorio_inteligente(
         ]
         tokens_ubi = [t for t in re.findall(r'\b\w{3,}\b', raw_ubi) if t not in ignore_words and t not in tok_esp]
 
-        logger.info(f"🔍 BUSCADOR TERRITORIAL: Especialidad='{tok_esp}' | Tokens Ubicación={tokens_ubi}")
+        logger.info(f"🔍 BUSCADOR DIRECTORIO: Especialidad='{tok_esp}' | Tokens Ubicación={tokens_ubi}")
 
-        # 3. Consulta base en Supabase
+        # 3. Consulta Base en Supabase
         query = supabase.table("vitalmi_directorio_master").select("*")
         if tok_esp:
             query = query.ilike("especialidad", f"%{tok_esp}%")
@@ -232,7 +232,7 @@ def consultar_directorio_inteligente(
         if not registros:
             return json.dumps({"total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
 
-        # 4. Filtrado por Coincidencia Territorial
+        # 4. Filtrado por Coincidencia Territorial Flexible
         if tokens_ubi:
             medicos_filtrados = []
             for r in registros:
@@ -243,7 +243,7 @@ def consultar_directorio_inteligente(
 
                 bloque_total = f"{p_str} {m_str} {d_str} {c_str}"
 
-                # Si al menos un token clave de la ubicación solicitada coincide en el bloque
+                # Si al menos un token clave de la ubicación solicitada coincide en la fila
                 if any(t in bloque_total for t in tokens_ubi):
                     medicos_filtrados.append(r)
 
@@ -261,7 +261,7 @@ def consultar_directorio_inteligente(
         return json.dumps({"error": str(e)})
 
 # ==========================================
-# AGENDAMIENTO Y NOTIFICACIONES AL DOCTOR
+# AGENDAMIENTO Y NOTIFICACIONES
 # ==========================================
 
 def despachar_notificacion_doctor(cita_id: str) -> dict:
@@ -433,11 +433,15 @@ def agendar_cita_medica(
         return json.dumps({"error": str(e)})
 
 # ==========================================
-# SYSTEM PROMPT RIGUROSO
+# SYSTEM PROMPT - INVOCACIÓN DIRECTA SIN DETENERSE
 # ==========================================
 
 SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente inteligente para citas médicas de VitalMi en República Dominicana.
+
+### 📍 REGLAS DE BÚSQUEDA DIRECTA (MUY IMPORTANTE):
+1. Siempre que el usuario mencione una ciudad, municipio, sector o provincia (ej. "necesito un médico de Santo Domingo", "necesito un médico de Moca", "necesito un médico de Samaná"), DEBES INVOCAR INMEDIATAMENTE la herramienta `consultar_directorio_inteligente` pasando la ubicación.
+2. NO le preguntes al usuario qué especialidad busca si solo te dio la ubicación. Invoca el directorio de inmediato y muestra los médicos disponibles.
 
 ### 📍 FORMATO DE PRESENTACIÓN Y REGLAS DE RESPUESTA:
 1. Cuando invoques la herramienta `consultar_directorio_inteligente`:
@@ -455,11 +459,10 @@ Eres Gema, la asistente inteligente para citas médicas de VitalMi en República
  - WhatsApp: [WhatsApp o 'No disponible']
 
 ### 📍 FLUJO CONVERSACIONAL PASO A PASO:
-1. **PASO 1 (Solicitud sin ubicación):** Pregunta por la ciudad/sector si el usuario solo pide la especialidad.
-2. **PASO 2 (Ubicación especificada):** Invoca `consultar_directorio_inteligente` y muestra los resultados siguiendo las reglas arriba indicadas.
-3. **PASO 3 (Selección de médico):** Pregunta la fecha y tanda deseada.
-4. **PASO 4 (Tarjeta de revisión):** Muestra el resumen y solicita confirmación ("¿Está todo bien con estos datos?").
-5. **PASO 5 (Confirmación y envío):** Ejecuta `agendar_cita_medica` y entrega el mensaje final con la copia exacta enviada al médico.
+1. **PASO 1 (Ubicación especificada):** Invoca `consultar_directorio_inteligente` directamente y muestra la lista de médicos.
+2. **PASO 2 (Selección de médico):** Pregunta la fecha y tanda deseada.
+3. **PASO 3 (Tarjeta de revisión):** Muestra el resumen y solicita confirmación ("¿Está todo bien con estos datos?").
+4. **PASO 4 (Confirmación y envío):** Ejecuta `agendar_cita_medica` y entrega el mensaje final con la copia exacta enviada al médico.
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
