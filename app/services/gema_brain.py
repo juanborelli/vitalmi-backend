@@ -35,24 +35,6 @@ load_dotenv(dotenv_path=env_path, override=True)
 TZ_RD = zoneinfo.ZoneInfo("America/Santo_Domingo")
 URL_FORM_OFICIAL = "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
 
-# Tabla de Alias Territoriales de República Dominicana (Mapeo de Municipios y Provincias)
-MAPEO_ALIAS_RD = {
-    "santo domingo este": ["santo domingo este", "ensanche ozama", "alma rosa", "sabana larga", "zona oriental", "villa duarte", "autopista de san isidro"],
-    "santo domingo": ["santo domingo", "distrito nacional", "ensanche ozama", "gazcue", "naco", "piantini", "la esperilla"],
-    "moca": ["moca", "espaillat"],
-    "san francisco": ["san francisco de macoris", "san francisco", "duarte"],
-    "san francisco de macoris": ["san francisco de macoris", "san francisco", "duarte"],
-    "cotui": ["cotui", "sanchez ramirez"],
-    "mao": ["mao", "valverde"],
-    "salcedo": ["salcedo", "hermanas mirabal"],
-    "sabaneta": ["sabaneta", "santiago rodriguez"],
-    "santiago rodriguez": ["santiago rodriguez", "sabaneta"],
-    "nagua": ["nagua", "maria trinidad sanchez"],
-    "bani": ["bani", "peravia"],
-    "samana": ["samana", "santa barbara de samana", "las terrenas"],
-    "monte plata": ["monte plata", "yamasa", "bayaguana"]
-}
-
 def obtener_cliente_openai() -> Optional[AsyncOpenAI]:
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key and env_path.exists():
@@ -183,7 +165,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         logger.error(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO MASTER - MOTOR DE BÚSQUEDA GLOBAL INFALIBLE
+# DIRECTORIO MASTER - BUSCADOR TERRITORIAL AISLADO (SIN MEZCLAR NOMBRES)
 # ==========================================
 
 def consultar_directorio_inteligente(
@@ -198,29 +180,27 @@ def consultar_directorio_inteligente(
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        # 1. Unificar y limpiar el texto ingresado por el usuario
+        # 1. Unificar entradas para detectar especialidad y ubicación solicitada
         raw_full = remover_tildes(f"{especialidad} {nombre_medico} {ubicacion} {centro_medico} {mensaje_raw}")
         
-        # Identificar especialidad médica si existe en el mensaje
         tok_esp = ""
         for r in ["urol", "cardio", "pediat", "ginec", "derma", "oftalmo", "ortop", "odont", "general", "interna", "neurol", "psiquia", "cirug", "anestes"]:
             if r in raw_full:
                 tok_esp = r
                 break
 
-        # Limpieza de palabras no informativas (stopwords)
         stopwords = [
             "hola", "gema", "necesito", "un", "una", "cardiologo", "urologo", "pediatra", 
             "medico", "doctor", "doctora", "oftalmologo", "ortopeda", "internista", "general", 
             "cerca", "de", "en", "para", "el", "la", "los", "las", "por", "favor"
         ]
         
-        tokens_limpios = [t for t in re.findall(r'\b\w{3,}\b', raw_full) if t not in stopwords and t not in tok_esp]
-        frase_ubicacion = " ".join(tokens_limpios)
+        tokens_ubi = [t for t in re.findall(r'\b\w{3,}\b', raw_full) if t not in stopwords and t not in tok_esp]
+        frase_ubi = " ".join(tokens_ubi)
 
-        logger.info(f"🔍 BÚSQUEDA MASTER: Especialidad='{tok_esp}' | Frase Ubicación='{frase_ubicacion}' | Tokens={tokens_limpios}")
+        logger.info(f"🔍 BUSCADOR DEFINITIVO V5: Especialidad='{tok_esp}' | Frase Ubicación='{frase_ubi}'")
 
-        # 2. Obtener los registros de la base de datos de Supabase
+        # 2. Consultar registros en Supabase
         query = supabase.table("vitalmi_directorio_master").select("*")
         if tok_esp:
             query = query.ilike("especialidad", f"%{tok_esp}%")
@@ -231,51 +211,48 @@ def consultar_directorio_inteligente(
         if not registros:
             return json.dumps({"total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
 
-        # 3. Motor de Coincidencia Directa (Estilo Filtro 'Contains' de Excel)
-        if frase_ubicacion:
+        # 3. Filtrado Geográfico Estricto (SÓLO SOBRE COLUMNAS GEOGRÁFICAS)
+        if frase_ubi:
             medicos_filtrados = []
 
-            # Obtener lista de alias o equivalencias para la ubicación
-            terminos_a_buscar = [frase_ubicacion]
-            for clave_alias, lista_alias in MAPEO_ALIAS_RD.items():
-                if clave_alias in frase_ubicacion or frase_ubicacion in clave_alias:
-                    terminos_a_buscar.extend(lista_alias)
-                    break
-
             for r in registros:
-                # Construcción del bloque de texto completo unificado de la fila del médico
                 prov = remover_tildes(r.get('provincia', ''))
                 muni = remover_tildes(r.get('municipio', ''))
                 dire = remover_tildes(r.get('direccion', ''))
                 cent = remover_tildes(r.get('centro_medico', ''))
-                espe = remover_tildes(r.get('especialidad', ''))
-                nomb = remover_tildes(r.get('nombre', ''))
 
-                bloque_full = f"{prov} {muni} {dire} {cent} {espe} {nomb}"
+                # BLOQUE GEOGRÁFICO EXCLUSIVO (NO incluye el nombre del médico para evitar falsos positivos con apellidos)
+                bloque_geo = f"{prov} {muni} {dire} {cent}"
 
-                # Regla de Exclusión A: Monte Plata vs Puerto Plata
-                if "monte plata" in frase_ubicacion and "puerto plata" in bloque_full:
-                    continue
+                # REGLAS ESPECÍFICAS DE VALIDACIÓN TERRITORIAL
+                if "santo domingo este" in frase_ubi:
+                    if ("santo domingo este" in bloque_geo or "ensanche ozama" in bloque_geo or "alma rosa" in bloque_geo or "sabana larga" in bloque_geo or "zona oriental" in bloque_geo) and "bani" not in bloque_geo:
+                        medicos_filtrados.append(r)
 
-                # Regla de Exclusión B: Santo Domingo Este vs Distrito Nacional
-                if "santo domingo este" in frase_ubicacion and ("gazcue" in bloque_full or "esperilla" in bloque_full or "naco" in bloque_full or "piantini" in bloque_full):
-                    continue
+                elif "monte plata" in frase_ubi:
+                    if "monte plata" in bloque_geo and "puerto plata" not in bloque_geo and "monte cristi" not in bloque_geo:
+                        medicos_filtrados.append(r)
 
-                # Verificación de coincidencia: ¿Existe alguno de los términos buscados o tokens clave en el bloque del médico?
-                coincide = False
-                for term in terminos_a_buscar:
-                    if term in bloque_full:
-                        coincide = True
-                        break
+                elif "santiago rodriguez" in frase_ubi or "sabaneta" in frase_ubi:
+                    if "santiago rodriguez" in bloque_geo or "sabaneta" in bloque_geo:
+                        medicos_filtrados.append(r)
 
-                if not coincide:
-                    for tok in tokens_limpios:
-                        if len(tok) >= 4 and tok in bloque_full:
-                            coincide = True
-                            break
+                elif "moca" in frase_ubi:
+                    if "moca" in bloque_geo or "espaillat" in bloque_geo:
+                        medicos_filtrados.append(r)
 
-                if coincide:
-                    medicos_filtrados.append(r)
+                elif "mao" in frase_ubi:
+                    if "mao" in bloque_geo or "valverde" in bloque_geo:
+                        medicos_filtrados.append(r)
+
+                elif "santo domingo" in frase_ubi:
+                    if ("santo domingo" in bloque_geo or "distrito nacional" in bloque_geo) and "barahona" not in bloque_geo and "bani" not in bloque_geo:
+                        medicos_filtrados.append(r)
+
+                else:
+                    # Búsqueda abierta por subcadena exacta en la geografía
+                    if frase_ubi in bloque_geo or any(t in bloque_geo for t in tokens_ubi if len(t) >= 4):
+                        medicos_filtrados.append(r)
 
             medicos_finales = medicos_filtrados[:5]
         else:
@@ -291,7 +268,7 @@ def consultar_directorio_inteligente(
         return json.dumps({"error": str(e)})
 
 # ==========================================
-# AGENDAMIENTO Y NOTIFICACIONES AL DOCTOR
+# AGENDAMIENTO Y NOTIFICACIONES
 # ==========================================
 
 def despachar_notificacion_doctor(cita_id: str) -> dict:
