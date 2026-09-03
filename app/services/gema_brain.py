@@ -24,7 +24,6 @@ except ImportError:
     def verificar_numero_whatsapp(jid: str) -> bool:
         return True
 
-# Configuración de Logs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("GemaBrain")
 
@@ -165,7 +164,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         logger.error(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO MASTER - FILTRADO RIGUROSO POR PALABRAS DELIMITADAS
+# DIRECTORIO MASTER - FILTRADO DE PRECISIÓN V4
 # ==========================================
 
 def consultar_directorio_inteligente(
@@ -184,12 +183,12 @@ def consultar_directorio_inteligente(
         
         # 1. Identificar Especialidad
         tok_esp = ""
-        for r in ["urol", "cardio", "pediat", "ginec", "derma", "oftalmo", "ortop", "odont", "general", "interna", "neurol", "psiquia"]:
+        for r in ["urol", "cardio", "pediat", "ginec", "derma", "oftalmo", "ortop", "odont", "general", "interna", "neurol", "psiquia", "cirug"]:
             if r in texto_unificado:
                 tok_esp = r
                 break
 
-        # 2. Extraer ubicación objetivo limpia
+        # 2. Extraer términos de ubicación
         raw_ubi = remover_tildes(f"{ubicacion} {centro_medico} {mensaje_raw}").lower()
         ignore_words = [
             "hola", "gema", "necesito", "un", "una", "cardiologo", "urologo", "pediatra", 
@@ -198,52 +197,50 @@ def consultar_directorio_inteligente(
         ]
         tokens_ubi = [t for t in re.findall(r'\b\w{3,}\b', raw_ubi) if t not in ignore_words and t not in tok_esp]
 
-        logger.info(f"🔍 BÚSQUEDA RIGUROSA V3: Especialidad='{tok_esp}' | Tokens Ubicación={tokens_ubi}")
+        logger.info(f"🔍 CONSULTA V4: Especialidad='{tok_esp}' | Tokens Ubicación={tokens_ubi}")
 
-        # 3. Consulta Base a Supabase
+        # 3. Descargar registros de Supabase
         query = supabase.table("vitalmi_directorio_master").select("*")
         if tok_esp:
             query = query.ilike("especialidad", f"%{tok_esp}%")
 
-        res = query.limit(1000).execute()
+        res = query.limit(2000).execute()
         registros = res.data or []
 
         if not registros:
             return json.dumps({"total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
 
-        # 4. Filtrado Estricto de Coincidencia de Ubicación
+        # 4. Lógica de Filtrado Fina
         if tokens_ubi:
             medicos_filtrados = []
-            
-            # Caso Santo Domingo / Distrito Nacional
-            if "santo" in tokens_ubi or "domingo" in tokens_ubi or "distrito" in tokens_ubi:
+
+            # CASO A: SANTO DOMINGO ESTE (Estricto)
+            if "este" in tokens_ubi and ("santo" in tokens_ubi or "domingo" in tokens_ubi):
                 for r in registros:
                     bloque = remover_tildes(f"{r.get('provincia','')} {r.get('municipio','')} {r.get('direccion','')}").lower()
-                    if "santo domingo" in bloque or "distrito nacional" in bloque or "ensanche ozama" in bloque or "gazcue" in bloque:
-                        # Excluir falsos positivos de Barahona o Baní
-                        if "barahona" not in bloque and "bani" not in bloque:
-                            medicos_filtrados.append(r)
+                    if "santo domingo este" in bloque or "ensanche ozama" in bloque or "zona oriental" in bloque or "alma rosa" in bloque or "sabana larga" in bloque:
+                        medicos_filtrados.append(r)
 
-            # Caso Monte Plata (Excluir Puerto Plata)
+            # CASO B: MONTE PLATA (Excluir Puerto Plata)
             elif "monte" in tokens_ubi and "plata" in tokens_ubi:
                 for r in registros:
                     bloque = remover_tildes(f"{r.get('provincia','')} {r.get('municipio','')} {r.get('direccion','')}").lower()
                     if "monte plata" in bloque and "puerto plata" not in bloque:
                         medicos_filtrados.append(r)
 
-            # Caso Moca / Espaillat
-            elif "moca" in tokens_ubi:
+            # CASO C: SANTO DOMINGO / DISTRITO NACIONAL GENERAL
+            elif "santo" in tokens_ubi or "domingo" in tokens_ubi or "distrito" in tokens_ubi:
                 for r in registros:
-                    bloque = remover_tildes(f"{r.get('provincia','')} {r.get('municipio','')} {r.get('direccion','')} {r.get('centro_medico','')}").lower()
-                    if "moca" in bloque or "espaillat" in bloque:
+                    bloque = remover_tildes(f"{r.get('provincia','')} {r.get('municipio','')} {r.get('direccion','')}").lower()
+                    if ("santo domingo" in bloque or "distrito nacional" in bloque) and "barahona" not in bloque and "bani" not in bloque:
                         medicos_filtrados.append(r)
 
-            # Caso General
+            # CASO D: SAMANÁ, DAJABÓN, MOCA, AZUA Y DEMÁS PROVINCIAS
             else:
                 for r in registros:
                     bloque = remover_tildes(f"{r.get('provincia','')} {r.get('municipio','')} {r.get('direccion','')} {r.get('centro_medico','')}").lower()
-                    # Exigir que TODOS los tokens de la ubicación estén presentes usando palabras delimitadas
-                    if all(re.search(r'\b' + re.escape(t) + r'\b', bloque) for t in tokens_ubi):
+                    # Coincidencia si cualquier token clave de ubicación existe en el bloque de dirección del médico
+                    if any(t in bloque for t in tokens_ubi):
                         medicos_filtrados.append(r)
 
             medicos_finales = medicos_filtrados[:5]
@@ -439,7 +436,7 @@ SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente inteligente para citas médicas de VitalMi en República Dominicana.
 
 ### 📍 REGLAS DE BÚSQUEDA DIRECTA Y PRESENTACIÓN:
-1. Siempre que el usuario mencione una ubicación (ej. "Santo Domingo", "Monte Plata", "Moca"), DEBES INVOCAR INMEDIATAMENTE `consultar_directorio_inteligente` con esa ubicación.
+1. Siempre que el usuario mencione una ubicación (ej. "Santo Domingo Este", "Monte Plata", "Samaná", "Dajabón"), DEBES INVOCAR INMEDIATAMENTE `consultar_directorio_inteligente` pasando dicha ubicación.
 2. Si `total_exacto` es MAYOR a 0:
    Presenta los resultados diciendo: "Aquí tienes los médicos disponibles en [Ubicación]:"
 3. Si `total_exacto` es IGUAL a 0:
