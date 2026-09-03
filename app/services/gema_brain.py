@@ -11,7 +11,7 @@ from openai import AsyncOpenAI
 
 from app.core.supabase import obtener_cliente_supabase
 
-# Importar funciones de Evolution Service
+# Importar funciones de Evolution Service con protección fallback contra ImportError
 try:
     from app.services.evolution_service import enviar_mensaje_whatsapp
 except ImportError:
@@ -34,6 +34,21 @@ load_dotenv(dotenv_path=env_path, override=True)
 
 TZ_RD = zoneinfo.ZoneInfo("America/Santo_Domingo")
 URL_FORM_OFICIAL = "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
+
+# Diccionario de mapeo territorial para conectar municipios con sus provincias en RD
+MAPEO_TERRITORIAL_RD = {
+    "moca": "espaillat",
+    "san francisco": "duarte",
+    "san francisco de macoris": "duarte",
+    "santo domingo": "distrito nacional",
+    "salcedo": "hermanas mirabal",
+    "cotui": "sanchez ramirez",
+    "nagua": "maria trinidad sanchez",
+    "mao": "valverde",
+    "sabaneta": "santiago rodriguez",
+    "montecristi": "monte cristi",
+    "bani": "peravia"
+}
 
 def obtener_cliente_openai() -> Optional[AsyncOpenAI]:
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
@@ -165,7 +180,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         logger.error(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO MASTER - FILTRADO ESTRICTO JERÁRQUICO
+# DIRECTORIO MASTER - BÚSQUEDA TERRITORIAL COMPLETA Y UNIFICADA
 # ==========================================
 
 def consultar_directorio_inteligente(
@@ -182,29 +197,31 @@ def consultar_directorio_inteligente(
     try:
         texto_unificado = remover_tildes(f"{especialidad} {nombre_medico} {mensaje_raw}").lower()
         
-        # 1. Identificar Especialidad
+        # 1. Identificar especialidad solicitada
         tok_esp = ""
         for r in ["urol", "cardio", "pediat", "ginec", "derma", "oftalmo", "ortop", "odont", "general", "interna", "neurol", "psiquia"]:
             if r in texto_unificado:
                 tok_esp = r
                 break
 
-        # 2. Aislar término exacto de Ubicación solicitada por el usuario
-        ubi_target = remover_tildes(ubicacion or mensaje_raw).lower()
-        stopwords = [
+        # 2. Extraer y mapear la ubicación solicitada
+        raw_ubi = remover_tildes(f"{ubicacion} {centro_medico} {mensaje_raw}").lower()
+        
+        # Aplicar mapeo territorial de municipios a provincias para ampliar la coincidencia
+        for clave, valor in MAPEO_TERRITORIAL_RD.items():
+            if clave in raw_ubi:
+                raw_ubi += f" {valor}"
+
+        ignore_words = [
             "hola", "gema", "necesito", "un", "una", "cardiologo", "urologo", "pediatra", 
             "medico", "doctor", "doctora", "oftalmologo", "ortopeda", "internista", "general", 
             "cerca", "de", "en", "para", "el", "la", "los", "las"
         ]
-        
-        tokens_ubi = [t for t in re.findall(r'\b\w{3,}\b', ubi_target) if t not in stopwords and t not in tok_esp]
+        tokens_ubi = [t for t in re.findall(r'\b\w{3,}\b', raw_ubi) if t not in ignore_words and t not in tok_esp]
 
-        logger.info(f"🔍 BUSCADOR ESTRICTO V2: Especialidad='{tok_esp}' | Tokens Ubicación={tokens_ubi}")
+        logger.info(f"🔍 BUSCADOR TERRITORIAL: Especialidad='{tok_esp}' | Tokens Ubicación={tokens_ubi}")
 
-        if not tokens_ubi:
-            return json.dumps({"total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
-
-        # 3. Consulta Base en Supabase
+        # 3. Consulta base en Supabase
         query = supabase.table("vitalmi_directorio_master").select("*")
         if tok_esp:
             query = query.ilike("especialidad", f"%{tok_esp}%")
@@ -215,31 +232,24 @@ def consultar_directorio_inteligente(
         if not registros:
             return json.dumps({"total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
 
-        # 4. Filtrado Estricto de Ubicación Local
-        medicos_filtrados = []
-        
-        # Caso Especial Santo Domingo / Distrito Nacional
-        if "santo" in tokens_ubi or "domingo" in tokens_ubi:
+        # 4. Filtrado por Coincidencia Territorial
+        if tokens_ubi:
+            medicos_filtrados = []
             for r in registros:
-                bloque = remover_tildes(f"{r.get('provincia','')} {r.get('municipio','')} {r.get('direccion','')}").lower()
-                if "santo domingo" in bloque or "distrito nacional" in bloque:
+                p_str = remover_tildes(r.get('provincia', '')).lower()
+                m_str = remover_tildes(r.get('municipio', '')).lower()
+                d_str = remover_tildes(r.get('direccion', '')).lower()
+                c_str = remover_tildes(r.get('centro_medico', '')).lower()
+
+                bloque_total = f"{p_str} {m_str} {d_str} {c_str}"
+
+                # Si al menos un token clave de la ubicación solicitada coincide en el bloque
+                if any(t in bloque_total for t in tokens_ubi):
                     medicos_filtrados.append(r)
-        
-        # Caso General (Sabaneta, Cotuí, Mao, Santiago Rodríguez, San Pedro, etc.)
+
+            medicos_finales = medicos_filtrados[:5]
         else:
-            for r in registros:
-                prov = remover_tildes(r.get('provincia', '')).lower()
-                muni = remover_tildes(r.get('municipio', '')).lower()
-                dire = remover_tildes(r.get('direccion', '')).lower()
-                cent = remover_tildes(r.get('centro_medico', '')).lower()
-
-                bloque_total = f"{prov} {muni} {dire} {cent}"
-
-                # Todos los tokens de la ciudad buscada deben estar presentes en el registro del médico
-                if all(token in bloque_total for token in tokens_ubi):
-                    medicos_filtrados.append(r)
-
-        medicos_finales = medicos_filtrados[:5]
+            medicos_finales = registros[:5]
 
         return json.dumps({
             "total_exacto": len(medicos_finales),
@@ -251,7 +261,7 @@ def consultar_directorio_inteligente(
         return json.dumps({"error": str(e)})
 
 # ==========================================
-# AGENDAMIENTO Y NOTIFICACIONES
+# AGENDAMIENTO Y NOTIFICACIONES AL DOCTOR
 # ==========================================
 
 def despachar_notificacion_doctor(cita_id: str) -> dict:
@@ -423,7 +433,7 @@ def agendar_cita_medica(
         return json.dumps({"error": str(e)})
 
 # ==========================================
-# SYSTEM PROMPT
+# SYSTEM PROMPT RIGUROSO
 # ==========================================
 
 SYSTEM_PROMPT_GEMA = f"""
