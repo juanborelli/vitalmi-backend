@@ -34,6 +34,19 @@ load_dotenv(dotenv_path=env_path, override=True)
 TZ_RD = zoneinfo.ZoneInfo("America/Santo_Domingo")
 URL_FORM_OFICIAL = "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
 
+# Tabla de Alias para Conectar Municipios/Sectores con sus Provincias en RD
+MAPEO_ALIAS_RD = {
+    "santo domingo": ["santo domingo", "distrito nacional", "ensanche ozama", "gazcue", "naco", "piantini"],
+    "santo domingo este": ["santo domingo este", "ensanche ozama", "alma rosa", "sabana larga", "zona oriental"],
+    "moca": ["moca", "espaillat"],
+    "san francisco": ["san francisco", "duarte", "san francisco de macoris"],
+    "cotui": ["cotui", "sanchez ramirez"],
+    "salcedo": ["salcedo", "hermanas mirabal"],
+    "sabaneta": ["sabaneta", "santiago rodriguez"],
+    "nagua": ["nagua", "maria trinidad sanchez"],
+    "mao": ["mao", "valverde"]
+}
+
 def obtener_cliente_openai() -> Optional[AsyncOpenAI]:
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key and env_path.exists():
@@ -58,7 +71,7 @@ def remover_tildes(texto: str) -> str:
     )
     for a, b in replacements:
         texto = texto.replace(a, b)
-    return texto.strip()
+    return texto.strip().lower()
 
 def extraer_primer_nombre_valido(nombre_raw: str) -> str:
     if not nombre_raw:
@@ -78,7 +91,7 @@ def normalizar_jid(telefono_raw: str) -> str:
 
 def resolver_fecha_relativa(texto_fecha: str) -> str:
     ahora_rd = datetime.now(TZ_RD)
-    texto_clean = remover_tildes(str(texto_fecha)).lower().strip()
+    texto_clean = remover_tildes(str(texto_fecha))
 
     if re.match(r"^\d{4}-\d{2}-\d{2}$", texto_clean):
         return texto_clean
@@ -164,7 +177,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         logger.error(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO MASTER - FILTRADO DE PRECISIÓN V4
+# DIRECTORIO MASTER - MOTOR DE BÚSQUEDA GLOBAL (CONTAINS EXCEL)
 # ==========================================
 
 def consultar_directorio_inteligente(
@@ -179,68 +192,80 @@ def consultar_directorio_inteligente(
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        texto_unificado = remover_tildes(f"{especialidad} {nombre_medico} {mensaje_raw}").lower()
+        # 1. Normalización total de entradas del usuario
+        texto_unificado = remover_tildes(f"{especialidad} {nombre_medico} {ubicacion} {centro_medico} {mensaje_raw}")
         
-        # 1. Identificar Especialidad
+        # Identificar especialidad si existe
         tok_esp = ""
-        for r in ["urol", "cardio", "pediat", "ginec", "derma", "oftalmo", "ortop", "odont", "general", "interna", "neurol", "psiquia", "cirug"]:
+        for r in ["urol", "cardio", "pediat", "ginec", "derma", "oftalmo", "ortop", "odont", "general", "interna", "neurol", "psiquia", "cirug", "anestes"]:
             if r in texto_unificado:
                 tok_esp = r
                 break
 
-        # 2. Extraer términos de ubicación
-        raw_ubi = remover_tildes(f"{ubicacion} {centro_medico} {mensaje_raw}").lower()
-        ignore_words = [
+        # Limpiar palabras vacías (stopwords)
+        stopwords = [
             "hola", "gema", "necesito", "un", "una", "cardiologo", "urologo", "pediatra", 
             "medico", "doctor", "doctora", "oftalmologo", "ortopeda", "internista", "general", 
-            "cerca", "de", "en", "para", "el", "la", "los", "las"
+            "cerca", "de", "en", "para", "el", "la", "los", "las", "por", "favor"
         ]
-        tokens_ubi = [t for t in re.findall(r'\b\w{3,}\b', raw_ubi) if t not in ignore_words and t not in tok_esp]
+        
+        tokens_busqueda = [t for t in re.findall(r'\b\w{3,}\b', texto_unificado) if t not in stopwords and t not in tok_esp]
 
-        logger.info(f"🔍 CONSULTA V4: Especialidad='{tok_esp}' | Tokens Ubicación={tokens_ubi}")
+        logger.info(f"🔍 MOTOR DE BÚSQUEDA GLOBAL: Especialidad='{tok_esp}' | Tokens Ubicación={tokens_busqueda}")
 
-        # 3. Descargar registros de Supabase
+        # 2. Descarga de registros de Supabase
         query = supabase.table("vitalmi_directorio_master").select("*")
         if tok_esp:
             query = query.ilike("especialidad", f"%{tok_esp}%")
 
-        res = query.limit(2000).execute()
+        res = query.limit(3000).execute()
         registros = res.data or []
 
         if not registros:
             return json.dumps({"total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
 
-        # 4. Lógica de Filtrado Fina
-        if tokens_ubi:
+        # 3. Filtrado "Estilo Excel" (Abarca Provincias, Municipios, Sectores, Barrios y Direcciones)
+        if tokens_busqueda:
             medicos_filtrados = []
+            
+            # Formar el término clave (ej. "monte plata", "santo domingo este", "samaná")
+            termino_clave = " ".join(tokens_busqueda)
 
-            # CASO A: SANTO DOMINGO ESTE (Estricto)
-            if "este" in tokens_ubi and ("santo" in tokens_ubi or "domingo" in tokens_ubi):
-                for r in registros:
-                    bloque = remover_tildes(f"{r.get('provincia','')} {r.get('municipio','')} {r.get('direccion','')}").lower()
-                    if "santo domingo este" in bloque or "ensanche ozama" in bloque or "zona oriental" in bloque or "alma rosa" in bloque or "sabana larga" in bloque:
+            # Verificar si existe regla de alias
+            alias_coincidencias = None
+            for key_alias, lista_alias in MAPEO_ALIAS_RD.items():
+                if key_alias in termino_clave:
+                    alias_coincidencias = lista_alias
+                    break
+
+            for r in registros:
+                # Construir el Bloque Completo de Texto Unificado de la Fila del Médico
+                prov = remover_tildes(r.get('provincia', ''))
+                muni = remover_tildes(r.get('municipio', ''))
+                dire = remover_tildes(r.get('direccion', ''))
+                cent = remover_tildes(r.get('centro_medico', ''))
+                espe = remover_tildes(r.get('especialidad', ''))
+                nomb = remover_tildes(r.get('nombre', ''))
+
+                # Texto completo donde se hace la búsqueda global estilo "Ctrl + B"
+                bloque_medico_full = f"{prov} {muni} {dire} {cent} {espe} {nomb}"
+
+                # CASO A: Coincidencia por Tabla de Alias
+                if alias_coincidencias:
+                    if any(alias in bloque_medico_full for alias in alias_coincidencias):
+                        # Validación de exclusión de falsos positivos (ej. Monte Plata vs Puerto Plata)
+                        if "monte plata" in termino_clave and "puerto plata" in bloque_medico_full:
+                            continue
                         medicos_filtrados.append(r)
 
-            # CASO B: MONTE PLATA (Excluir Puerto Plata)
-            elif "monte" in tokens_ubi and "plata" in tokens_ubi:
-                for r in registros:
-                    bloque = remover_tildes(f"{r.get('provincia','')} {r.get('municipio','')} {r.get('direccion','')}").lower()
-                    if "monte plata" in bloque and "puerto plata" not in bloque:
-                        medicos_filtrados.append(r)
+                # CASO B: Coincidencia por Palabras Clave Libres (Provincias, Sectores, Barrios, Calles)
+                else:
+                    # Regla Monte Plata Estricta
+                    if "monte" in tokens_busqueda and "plata" in tokens_busqueda and "puerto plata" in bloque_medico_full:
+                        continue
 
-            # CASO C: SANTO DOMINGO / DISTRITO NACIONAL GENERAL
-            elif "santo" in tokens_ubi or "domingo" in tokens_ubi or "distrito" in tokens_ubi:
-                for r in registros:
-                    bloque = remover_tildes(f"{r.get('provincia','')} {r.get('municipio','')} {r.get('direccion','')}").lower()
-                    if ("santo domingo" in bloque or "distrito nacional" in bloque) and "barahona" not in bloque and "bani" not in bloque:
-                        medicos_filtrados.append(r)
-
-            # CASO D: SAMANÁ, DAJABÓN, MOCA, AZUA Y DEMÁS PROVINCIAS
-            else:
-                for r in registros:
-                    bloque = remover_tildes(f"{r.get('provincia','')} {r.get('municipio','')} {r.get('direccion','')} {r.get('centro_medico','')}").lower()
-                    # Coincidencia si cualquier token clave de ubicación existe en el bloque de dirección del médico
-                    if any(t in bloque for t in tokens_ubi):
+                    # Si TODAS las palabras ingresadas existen en cualquier parte de la fila del médico
+                    if all(token in bloque_medico_full for token in tokens_busqueda):
                         medicos_filtrados.append(r)
 
             medicos_finales = medicos_filtrados[:5]
@@ -257,7 +282,7 @@ def consultar_directorio_inteligente(
         return json.dumps({"error": str(e)})
 
 # ==========================================
-# AGENDAMIENTO Y NOTIFICACIONES
+# AGENDAMIENTO Y NOTIFICACIONES AL DOCTOR
 # ==========================================
 
 def despachar_notificacion_doctor(cita_id: str) -> dict:
@@ -370,7 +395,7 @@ def agendar_cita_medica(
         except Exception:
             fecha_formateada = fecha_cita
 
-        tanda_clean = remover_tildes(tanda).lower()
+        tanda_clean = remover_tildes(tanda)
         if "sabado" in tanda_clean or "sábado" in tanda_clean:
             tanda_texto = "Sábados (9:00 AM – 2:00 PM)"
         elif "tarde" in tanda_clean:
@@ -436,7 +461,7 @@ SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente inteligente para citas médicas de VitalMi en República Dominicana.
 
 ### 📍 REGLAS DE BÚSQUEDA DIRECTA Y PRESENTACIÓN:
-1. Siempre que el usuario mencione una ubicación (ej. "Santo Domingo Este", "Monte Plata", "Samaná", "Dajabón"), DEBES INVOCAR INMEDIATAMENTE `consultar_directorio_inteligente` pasando dicha ubicación.
+1. Siempre que el usuario mencione una ubicación o especialidad (ej. "Santo Domingo Este", "Monte Plata", "Samaná", "Dajabón", "Moca"), DEBES INVOCAR INMEDIATAMENTE `consultar_directorio_inteligente` con esa ubicación.
 2. Si `total_exacto` es MAYOR a 0:
    Presenta los resultados diciendo: "Aquí tienes los médicos disponibles en [Ubicación]:"
 3. Si `total_exacto` es IGUAL a 0:
