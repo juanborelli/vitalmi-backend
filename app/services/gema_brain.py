@@ -35,25 +35,6 @@ load_dotenv(dotenv_path=env_path, override=True)
 TZ_RD = zoneinfo.ZoneInfo("America/Santo_Domingo")
 URL_FORM_OFICIAL = "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
 
-# Diccionario territorial de mapeo directo para República Dominicana
-MAPEO_TERRITORIAL_RD = {
-    "moca": "espaillat",
-    "san francisco": "duarte",
-    "san francisco de macoris": "duarte",
-    "macoris": "duarte",
-    "santo domingo": "distrito nacional",
-    "salcedo": "hermanas mirabal",
-    "cotui": "sanchez ramirez",
-    "nagua": "maria trinidad sanchez",
-    "jimani": "independencia",
-    "comendador": "elias pina",
-    "mao": "valverde",
-    "sabaneta": "santiago rodriguez",
-    "montecristi": "monte cristi",
-    "baní": "peravia",
-    "bani": "peravia"
-}
-
 def obtener_cliente_openai() -> Optional[AsyncOpenAI]:
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key and env_path.exists():
@@ -184,7 +165,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         logger.error(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO MASTER - BÚSQUEDA TERRITORIAL COMPLETA
+# DIRECTORIO MASTER - FILTRADO ESTRICTO JERÁRQUICO
 # ==========================================
 
 def consultar_directorio_inteligente(
@@ -201,59 +182,64 @@ def consultar_directorio_inteligente(
     try:
         texto_unificado = remover_tildes(f"{especialidad} {nombre_medico} {mensaje_raw}").lower()
         
-        # 1. Identificar especialidad solicitada
+        # 1. Identificar Especialidad
         tok_esp = ""
         for r in ["urol", "cardio", "pediat", "ginec", "derma", "oftalmo", "ortop", "odont", "general", "interna", "neurol", "psiquia"]:
             if r in texto_unificado:
                 tok_esp = r
                 break
 
-        # 2. Extraer y mapear la ubicación solicitada
-        raw_ubi = remover_tildes(f"{ubicacion} {centro_medico} {mensaje_raw}").lower()
-        
-        # Aplicar mapeo territorial de municipios a provincias
-        for clave, valor in MAPEO_TERRITORIAL_RD.items():
-            if clave in raw_ubi:
-                raw_ubi += f" {valor}"
-
-        ignore_words = [
+        # 2. Aislar término exacto de Ubicación solicitada por el usuario
+        ubi_target = remover_tildes(ubicacion or mensaje_raw).lower()
+        stopwords = [
             "hola", "gema", "necesito", "un", "una", "cardiologo", "urologo", "pediatra", 
             "medico", "doctor", "doctora", "oftalmologo", "ortopeda", "internista", "general", 
             "cerca", "de", "en", "para", "el", "la", "los", "las"
         ]
-        tokens_ubi = [t for t in re.findall(r'\b\w{3,}\b', raw_ubi) if t not in ignore_words and t not in tok_esp]
+        
+        tokens_ubi = [t for t in re.findall(r'\b\w{3,}\b', ubi_target) if t not in stopwords and t not in tok_esp]
 
-        logger.info(f"🔍 BUSCADOR TERRITORIAL: Especialidad='{tok_esp}' | Tokens Ubicación={tokens_ubi}")
+        logger.info(f"🔍 BUSCADOR ESTRICTO V2: Especialidad='{tok_esp}' | Tokens Ubicación={tokens_ubi}")
 
-        # 3. Consulta base en Supabase
+        if not tokens_ubi:
+            return json.dumps({"total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
+
+        # 3. Consulta Base en Supabase
         query = supabase.table("vitalmi_directorio_master").select("*")
         if tok_esp:
             query = query.ilike("especialidad", f"%{tok_esp}%")
 
-        res = query.limit(300).execute()
+        res = query.limit(500).execute()
         registros = res.data or []
 
         if not registros:
             return json.dumps({"total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
 
-        # 4. Filtrado por Coincidencia Territorial Flexible
-        if tokens_ubi:
-            medicos_filtrados = []
+        # 4. Filtrado Estricto de Ubicación Local
+        medicos_filtrados = []
+        
+        # Caso Especial Santo Domingo / Distrito Nacional
+        if "santo" in tokens_ubi or "domingo" in tokens_ubi:
             for r in registros:
-                p_str = remover_tildes(r.get('provincia', '')).lower()
-                m_str = remover_tildes(r.get('municipio', '')).lower()
-                d_str = remover_tildes(r.get('direccion', '')).lower()
-                c_str = remover_tildes(r.get('centro_medico', '')).lower()
+                bloque = remover_tildes(f"{r.get('provincia','')} {r.get('municipio','')} {r.get('direccion','')}").lower()
+                if "santo domingo" in bloque or "distrito nacional" in bloque:
+                    medicos_filtrados.append(r)
+        
+        # Caso General (Sabaneta, Cotuí, Mao, Santiago Rodríguez, San Pedro, etc.)
+        else:
+            for r in registros:
+                prov = remover_tildes(r.get('provincia', '')).lower()
+                muni = remover_tildes(r.get('municipio', '')).lower()
+                dire = remover_tildes(r.get('direccion', '')).lower()
+                cent = remover_tildes(r.get('centro_medico', '')).lower()
 
-                bloque_total = f"{p_str} {m_str} {d_str} {c_str}"
+                bloque_total = f"{prov} {muni} {dire} {cent}"
 
-                # Si al menos un token clave de ubicación coincide (ej: "samana", "moca", "espaillat", "duarte")
-                if any(t in bloque_total for t in tokens_ubi):
+                # Todos los tokens de la ciudad buscada deben estar presentes en el registro del médico
+                if all(token in bloque_total for token in tokens_ubi):
                     medicos_filtrados.append(r)
 
-            medicos_finales = medicos_filtrados[:5]
-        else:
-            medicos_finales = registros[:5]
+        medicos_finales = medicos_filtrados[:5]
 
         return json.dumps({
             "total_exacto": len(medicos_finales),
