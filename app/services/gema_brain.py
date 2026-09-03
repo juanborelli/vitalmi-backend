@@ -11,7 +11,7 @@ from openai import AsyncOpenAI
 
 from app.core.supabase import obtener_cliente_supabase
 
-# Importar funciones de Evolution Service
+# Importar funciones de Evolution Service con protección fallback
 try:
     from app.services.evolution_service import enviar_mensaje_whatsapp
 except ImportError:
@@ -24,6 +24,7 @@ except ImportError:
     def verificar_numero_whatsapp(jid: str) -> bool:
         return True
 
+# Configuración de Logs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("GemaBrain")
 
@@ -34,17 +35,22 @@ load_dotenv(dotenv_path=env_path, override=True)
 TZ_RD = zoneinfo.ZoneInfo("America/Santo_Domingo")
 URL_FORM_OFICIAL = "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
 
-# Tabla de Alias para Conectar Municipios/Sectores con sus Provincias en RD
+# Tabla de Alias Territoriales de República Dominicana (Mapeo de Municipios y Provincias)
 MAPEO_ALIAS_RD = {
-    "santo domingo": ["santo domingo", "distrito nacional", "ensanche ozama", "gazcue", "naco", "piantini"],
-    "santo domingo este": ["santo domingo este", "ensanche ozama", "alma rosa", "sabana larga", "zona oriental"],
+    "santo domingo este": ["santo domingo este", "ensanche ozama", "alma rosa", "sabana larga", "zona oriental", "villa duarte", "autopista de san isidro"],
+    "santo domingo": ["santo domingo", "distrito nacional", "ensanche ozama", "gazcue", "naco", "piantini", "la esperilla"],
     "moca": ["moca", "espaillat"],
-    "san francisco": ["san francisco", "duarte", "san francisco de macoris"],
+    "san francisco": ["san francisco de macoris", "san francisco", "duarte"],
+    "san francisco de macoris": ["san francisco de macoris", "san francisco", "duarte"],
     "cotui": ["cotui", "sanchez ramirez"],
+    "mao": ["mao", "valverde"],
     "salcedo": ["salcedo", "hermanas mirabal"],
     "sabaneta": ["sabaneta", "santiago rodriguez"],
+    "santiago rodriguez": ["santiago rodriguez", "sabaneta"],
     "nagua": ["nagua", "maria trinidad sanchez"],
-    "mao": ["mao", "valverde"]
+    "bani": ["bani", "peravia"],
+    "samana": ["samana", "santa barbara de samana", "las terrenas"],
+    "monte plata": ["monte plata", "yamasa", "bayaguana"]
 }
 
 def obtener_cliente_openai() -> Optional[AsyncOpenAI]:
@@ -177,7 +183,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         logger.error(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO MASTER - MOTOR DE BÚSQUEDA GLOBAL (CONTAINS EXCEL)
+# DIRECTORIO MASTER - MOTOR DE BÚSQUEDA GLOBAL INFALIBLE
 # ==========================================
 
 def consultar_directorio_inteligente(
@@ -192,28 +198,29 @@ def consultar_directorio_inteligente(
         return json.dumps({"error": "Sin conexión a base de datos"})
 
     try:
-        # 1. Normalización total de entradas del usuario
-        texto_unificado = remover_tildes(f"{especialidad} {nombre_medico} {ubicacion} {centro_medico} {mensaje_raw}")
+        # 1. Unificar y limpiar el texto ingresado por el usuario
+        raw_full = remover_tildes(f"{especialidad} {nombre_medico} {ubicacion} {centro_medico} {mensaje_raw}")
         
-        # Identificar especialidad si existe
+        # Identificar especialidad médica si existe en el mensaje
         tok_esp = ""
         for r in ["urol", "cardio", "pediat", "ginec", "derma", "oftalmo", "ortop", "odont", "general", "interna", "neurol", "psiquia", "cirug", "anestes"]:
-            if r in texto_unificado:
+            if r in raw_full:
                 tok_esp = r
                 break
 
-        # Limpiar palabras vacías (stopwords)
+        # Limpieza de palabras no informativas (stopwords)
         stopwords = [
             "hola", "gema", "necesito", "un", "una", "cardiologo", "urologo", "pediatra", 
             "medico", "doctor", "doctora", "oftalmologo", "ortopeda", "internista", "general", 
             "cerca", "de", "en", "para", "el", "la", "los", "las", "por", "favor"
         ]
         
-        tokens_busqueda = [t for t in re.findall(r'\b\w{3,}\b', texto_unificado) if t not in stopwords and t not in tok_esp]
+        tokens_limpios = [t for t in re.findall(r'\b\w{3,}\b', raw_full) if t not in stopwords and t not in tok_esp]
+        frase_ubicacion = " ".join(tokens_limpios)
 
-        logger.info(f"🔍 MOTOR DE BÚSQUEDA GLOBAL: Especialidad='{tok_esp}' | Tokens Ubicación={tokens_busqueda}")
+        logger.info(f"🔍 BÚSQUEDA MASTER: Especialidad='{tok_esp}' | Frase Ubicación='{frase_ubicacion}' | Tokens={tokens_limpios}")
 
-        # 2. Descarga de registros de Supabase
+        # 2. Obtener los registros de la base de datos de Supabase
         query = supabase.table("vitalmi_directorio_master").select("*")
         if tok_esp:
             query = query.ilike("especialidad", f"%{tok_esp}%")
@@ -224,22 +231,19 @@ def consultar_directorio_inteligente(
         if not registros:
             return json.dumps({"total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
 
-        # 3. Filtrado "Estilo Excel" (Abarca Provincias, Municipios, Sectores, Barrios y Direcciones)
-        if tokens_busqueda:
+        # 3. Motor de Coincidencia Directa (Estilo Filtro 'Contains' de Excel)
+        if frase_ubicacion:
             medicos_filtrados = []
-            
-            # Formar el término clave (ej. "monte plata", "santo domingo este", "samaná")
-            termino_clave = " ".join(tokens_busqueda)
 
-            # Verificar si existe regla de alias
-            alias_coincidencias = None
-            for key_alias, lista_alias in MAPEO_ALIAS_RD.items():
-                if key_alias in termino_clave:
-                    alias_coincidencias = lista_alias
+            # Obtener lista de alias o equivalencias para la ubicación
+            terminos_a_buscar = [frase_ubicacion]
+            for clave_alias, lista_alias in MAPEO_ALIAS_RD.items():
+                if clave_alias in frase_ubicacion or frase_ubicacion in clave_alias:
+                    terminos_a_buscar.extend(lista_alias)
                     break
 
             for r in registros:
-                # Construir el Bloque Completo de Texto Unificado de la Fila del Médico
+                # Construcción del bloque de texto completo unificado de la fila del médico
                 prov = remover_tildes(r.get('provincia', ''))
                 muni = remover_tildes(r.get('municipio', ''))
                 dire = remover_tildes(r.get('direccion', ''))
@@ -247,26 +251,31 @@ def consultar_directorio_inteligente(
                 espe = remover_tildes(r.get('especialidad', ''))
                 nomb = remover_tildes(r.get('nombre', ''))
 
-                # Texto completo donde se hace la búsqueda global estilo "Ctrl + B"
-                bloque_medico_full = f"{prov} {muni} {dire} {cent} {espe} {nomb}"
+                bloque_full = f"{prov} {muni} {dire} {cent} {espe} {nomb}"
 
-                # CASO A: Coincidencia por Tabla de Alias
-                if alias_coincidencias:
-                    if any(alias in bloque_medico_full for alias in alias_coincidencias):
-                        # Validación de exclusión de falsos positivos (ej. Monte Plata vs Puerto Plata)
-                        if "monte plata" in termino_clave and "puerto plata" in bloque_medico_full:
-                            continue
-                        medicos_filtrados.append(r)
+                # Regla de Exclusión A: Monte Plata vs Puerto Plata
+                if "monte plata" in frase_ubicacion and "puerto plata" in bloque_full:
+                    continue
 
-                # CASO B: Coincidencia por Palabras Clave Libres (Provincias, Sectores, Barrios, Calles)
-                else:
-                    # Regla Monte Plata Estricta
-                    if "monte" in tokens_busqueda and "plata" in tokens_busqueda and "puerto plata" in bloque_medico_full:
-                        continue
+                # Regla de Exclusión B: Santo Domingo Este vs Distrito Nacional
+                if "santo domingo este" in frase_ubicacion and ("gazcue" in bloque_full or "esperilla" in bloque_full or "naco" in bloque_full or "piantini" in bloque_full):
+                    continue
 
-                    # Si TODAS las palabras ingresadas existen en cualquier parte de la fila del médico
-                    if all(token in bloque_medico_full for token in tokens_busqueda):
-                        medicos_filtrados.append(r)
+                # Verificación de coincidencia: ¿Existe alguno de los términos buscados o tokens clave en el bloque del médico?
+                coincide = False
+                for term in terminos_a_buscar:
+                    if term in bloque_full:
+                        coincide = True
+                        break
+
+                if not coincide:
+                    for tok in tokens_limpios:
+                        if len(tok) >= 4 and tok in bloque_full:
+                            coincide = True
+                            break
+
+                if coincide:
+                    medicos_filtrados.append(r)
 
             medicos_finales = medicos_filtrados[:5]
         else:
@@ -461,7 +470,7 @@ SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente inteligente para citas médicas de VitalMi en República Dominicana.
 
 ### 📍 REGLAS DE BÚSQUEDA DIRECTA Y PRESENTACIÓN:
-1. Siempre que el usuario mencione una ubicación o especialidad (ej. "Santo Domingo Este", "Monte Plata", "Samaná", "Dajabón", "Moca"), DEBES INVOCAR INMEDIATAMENTE `consultar_directorio_inteligente` con esa ubicación.
+1. Siempre que el usuario mencione una ubicación o especialidad (ej. "Santo Domingo Este", "Monte Plata", "Samaná", "Dajabón", "Moca", "Mao", "Santiago Rodríguez"), DEBES INVOCAR INMEDIATAMENTE `consultar_directorio_inteligente` con esa ubicación.
 2. Si `total_exacto` es MAYOR a 0:
    Presenta los resultados diciendo: "Aquí tienes los médicos disponibles en [Ubicación]:"
 3. Si `total_exacto` es IGUAL a 0:
