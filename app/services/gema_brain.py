@@ -63,9 +63,9 @@ def remover_tildes(texto: str) -> str:
 
 def extraer_primer_nombre_valido(nombre_raw: str) -> str:
     if not nombre_raw:
-        return "Usuario"
-    palabras = [p.capitalize() for p in nombre_raw.split() if len(p) > 2 and p.lower() not in ["del", "las", "los", "san", "santa"]]
-    return palabras[0] if palabras else "Usuario"
+        return ""
+    palabras = [p.capitalize() for p in nombre_raw.split() if len(p) > 2 and p.lower() not in ["del", "las", "los", "san", "santa", "usuario", "whatsapp"]]
+    return palabras[0] if palabras else ""
 
 def normalizar_jid(telefono_raw: str) -> str:
     if not telefono_raw:
@@ -105,7 +105,12 @@ def resolver_fecha_relativa(texto_fecha: str) -> str:
 
     return (ahora_rd + timedelta(days=1)).strftime("%Y-%m-%d")
 
-def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") -> dict:
+def obtener_o_registrar_paciente_por_whatsapp(telefono_jid: str, nombre_push: str = "") -> dict:
+    """
+    Identifica de inmediato al usuario por su número de WhatsApp (JID).
+    Si ya existe en la base de datos, devuelve sus datos guardados.
+    Si es la primera vez que escribe, crea el registro básico con su nombre de WhatsApp.
+    """
     supabase = obtener_cliente_supabase()
     if not supabase:
         return {}
@@ -113,19 +118,28 @@ def registrar_o_actualizar_paciente(telefono_jid: str, nombre_push: str = "") ->
     try:
         jid_normalizado = normalizar_jid(telefono_jid)
         res = supabase.table("pacientes").select("*").eq("telefono_jid", jid_normalizado).execute()
+        
+        # Si ya existe el paciente registrado previamente en la tabla
         if res.data and len(res.data) > 0:
-            return res.data[0]
+            paciente_existente = res.data[0]
+            # Si enviaron un nuevo nombre_push válido y el actual era genérico, actualizamos el nombre
+            if nombre_push and (paciente_existente.get("nombre") in ["", "Usuario WhatsApp", None]):
+                supabase.table("pacientes").update({"nombre": nombre_push.strip()}).eq("id", paciente_existente["id"]).execute()
+                paciente_existente["nombre"] = nombre_push.strip()
+            return paciente_existente
 
+        # Si es un usuario completamente nuevo, lo creamos de inmediato con su número de WhatsApp
+        nombre_inicial = nombre_push.strip() or "Usuario WhatsApp"
         datos_nuevo = {
             "telefono_jid": jid_normalizado, 
-            "nombre": nombre_push.strip() or "Usuario WhatsApp", 
+            "nombre": nombre_inicial, 
             "perfil_completo": False,
             "created_at": obtener_hora_rd_iso()
         }
         res_insert = supabase.table("pacientes").insert(datos_nuevo).execute()
         return res_insert.data[0] if res_insert.data else {}
     except Exception as e:
-        logger.error(f"❌ Error registrando paciente: {e}")
+        logger.error(f"❌ Error identificando/registrando paciente por WhatsApp: {e}")
         return {}
 
 def obtener_historial_supabase(telefono_jid: str, limite: int = 10) -> List[Dict[str, str]]:
@@ -168,11 +182,7 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
 # MOTOR UNIVERSAL: BÚSQUEDA SEMÁNTICA VECTORIAL (RPC)
 # ==========================================
 
-async def buscar_directorio_semantico_rpc(consulta_texto: str, limite: int = 5) -> str:
-    """
-    Convierte la consulta del usuario en un embedding vectorial y realiza 
-    una búsqueda por similitud de coseno en Supabase vía la función RPC.
-    """
+async def buscar_directorio_semantico_rpc(consulta_texto: str, limite: int = 6) -> str:
     supabase = obtener_cliente_supabase()
     client = obtener_cliente_openai()
     
@@ -182,28 +192,25 @@ async def buscar_directorio_semantico_rpc(consulta_texto: str, limite: int = 5) 
     try:
         logger.info(f"🧠 BÚSQUEDA SEMÁNTICA VECTORIAL: '{consulta_texto}'")
 
-        # 1. Generar embedding para la consulta del usuario
         emb_response = await client.embeddings.create(
             model="text-embedding-3-small",
             input=consulta_texto
         )
         query_vector = emb_response.data[0].embedding
 
-        # 2. Llamar a la función RPC en Supabase
         res = supabase.rpc("buscar_directorio_semantico", {
             "query_embedding": query_vector,
-            "match_threshold": 0.25,
+            "match_threshold": 0.18,
             "match_count": limite
         }).execute()
 
         resultados = res.data or []
 
-        # Formateo estandarizado de la respuesta
         prestadores_procesados = []
         for r in resultados:
             item = dict(r)
             item['tipo_prestador'] = item.get('tipo_prestador') or 'PRESTADOR'
-            item['especialidad_final'] = item.get('especialidad') or item.get('especialidad_medico') or item.get('especialidad_clinica') or 'General / No especificada'
+            item['especialidad_final'] = item.get('especialidad') or item.get('especialidad_medico') or item.get('especialidad_clinica') or 'General'
             item['telefono_final'] = item.get('telefono_institucional') or item.get('telefono_alterno') or 'No disponible'
             item['whatsapp_final'] = item.get('whatsapp') or item.get('telefono_institucional') or 'No disponible'
             prestadores_procesados.append(item)
@@ -309,10 +316,12 @@ def agendar_cita_medica(
             jid_objetivo = normalizar_jid(telefono_tercero)
 
         res_pac = supabase.table("pacientes").select("*").eq("telefono_jid", jid_objetivo).execute()
+        
+        # SI EL PERFIL NO ESTÁ COMPLETO EN LA BASE DE DATOS -> PEDIR FORMULARIO DE REGISTRO
         if not res_pac.data or not res_pac.data[0].get("perfil_completo", False):
             return json.dumps({
                 "error": "perfil_incompleto",
-                "mensaje": f"Para confirmar esta cita, la persona requiere estar registrada. Favor de completar el formulario en este enlace: {URL_FORM_OFICIAL}"
+                "mensaje": f"Para poder agendar y confirmar formalmente tu cita médica con el doctor, necesitamos que completes tus datos en nuestro formulario oficial de registro: {URL_FORM_OFICIAL}\n\nUna vez completado el formulario, confírmame por aquí y con gusto agendamos tu cita."
             }, ensure_ascii=False)
 
         paciente = res_pac.data[0]
@@ -382,33 +391,31 @@ def agendar_cita_medica(
         return json.dumps({"error": str(e)})
 
 # ==========================================
-# SYSTEM PROMPT BÚSQUEDA INTELIGENTE
+# SYSTEM PROMPT PERFECCIONADO
 # ==========================================
 
 SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente inteligente para citas médicas y servicios de salud de VitalMi en República Dominicana.
 
-### 📍 BÚSQUEDA Y PRESENTACIÓN DE RESULTADOS:
-1. Para responder cualquier consulta sobre disponibilidad de servicios de salud (médicos, especialidades, clínicas, farmacias, laboratorios, odontólogos, seguros/ARS, lugares o ciudades), DEBES INVOCAR SIEMPRE la herramienta `buscar_directorio_semantico_rpc`.
-2. Pasa en el parámetro `consulta_texto` la frase completa o la intención expresada por el usuario (ej. "cardiólogo en La Vega", "farmacia 24 horas en Naco", "laboratorio para análisis de sangre en Santiago", "odontologo en san cristobal").
-3. Si la búsqueda devuelve prestadores:
-   Presenta los resultados organizados claramente: "Aquí tienes los prestadores disponibles:"
-4. Si la búsqueda no devuelve resultados:
-   Responde de forma empática: "No encontré registros que coincidan con esa búsqueda en nuestro directorio. ¿Te gustaría buscar en otra especialidad, provincia o sector?"
+### 👤 RECONOCIMIENTO DE USUARIO POR WHATSAPP:
+- Cuentas con la identidad del usuario extraída de su número de WhatsApp en el contexto (`Nombre identificado`).
+- Si el usuario te saluda o pregunta quién habla o si sabes quién te escribe, salúdalo amablemente por su nombre (ej: "¡Hola Juan! Te habla Gema, tu asistente de salud en VitalMi.").
+- **IMPORTANTE:** Proporciona libremente TODA la información solicitada sobre médicos, especialidades, clínicas, farmacias, laboratorios y odontólogos sin exigir ningún registro previo.
+- El registro a través del formulario de Google (`URL_FORM_OFICIAL`) es un proceso posterior que solo se requiere cuando el usuario decida formalmente AGENDAR una cita médica.
 
-### 📍 ESTRUCTURA DE CADA PRESTADOR:
-- *[Nombre del Prestador / Médico]*
-  - Tipo: [tipo_prestador]
-  - Especialidad: [especialidad_final]
-  - Centro / Ubicación: [centro_medico]
-  - Dirección: [direccion], [sector], [municipio_cabecera], [provincia]
-  - Teléfono: [telefono_final]
-  - WhatsApp: [whatsapp_final]
+### 📍 CONSTRUCCIÓN DE CONSULTAS VECTORIALES:
+1. Para responder sobre disponibilidad de servicios de salud, DEBES INVOCAR SIEMPRE la herramienta `buscar_directorio_semantico_rpc`.
+2. **Filtrado por Tipo de Prestador:**
+   - Si el usuario pide un **médico / doctor / especialista**, incluye la palabra "Médico" en `consulta_texto` (ej: "Médico Cardiólogo en Santo Domingo", "Médico consulta en Madre Vieja").
+   - Si el usuario pide una **farmacia**, incluye explícitamente "Tipo de Prestador: FARMACIA" (ej: "Tipo de Prestador: FARMACIA en San Cristóbal").
+   - Si el usuario pide una **clínica / centro médico**, incluye "Tipo de Prestador: CLINICA centro medico hospital" (ej: "Tipo de Prestador: CLINICA en San Cristóbal").
+   - Si el usuario pide un **laboratorio**, incluye "Tipo de Prestador: LABORATORIO".
+   - Si el usuario pide un **odontólogo / dentista**, incluye "Tipo de Prestador: ODONTOLOGO dentista".
 
-### 📍 FLUJO CONVERSACIONAL PASO A PASO:
-1. **Búsqueda:** Ejecuta `buscar_directorio_semantico_rpc` y muestra las opciones.
-2. **Selección:** Si el usuario elige un médico o prestador, solicita fecha y tanda deseada.
-3. **Agendamiento:** Ejecuta `agendar_cita_medica`.
+3. **Presentación de Resultados:**
+   - Filtra y presenta ÚNICAMENTE los prestadores que correspondan al tipo solicitado.
+   - Estructura cada opción de forma clara con Nombre, Tipo, Especialidad, Centro/Ubicación, Dirección y Teléfonos.
+   - Si no hay resultados, responde con empatía ofreciendo buscar en otra zona o especialidad.
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
@@ -417,10 +424,12 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         return "Hola, en este momento estamos actualizando el sistema. Escríbeme en un minuto y con gusto te ayudo."
 
     jid_normalizado = normalizar_jid(numero_usuario)
-    paciente = registrar_o_actualizar_paciente(jid_normalizado, nombre_usuario)
     
-    nombre_raw = paciente.get("nombre", nombre_usuario) if paciente.get("nombre") else nombre_usuario
-    nombre_contacto = extraer_primer_nombre_valido(nombre_raw)
+    # IDENTIFICACIÓN INMEDIATA POR NÚMERO DE WHATSAPP
+    paciente = obtener_o_registrar_paciente_por_whatsapp(jid_normalizado, nombre_usuario)
+    
+    nombre_db = paciente.get("nombre") or nombre_usuario
+    nombre_contacto = extraer_primer_nombre_valido(nombre_db)
 
     guardar_mensaje_supabase(jid_normalizado, "user", mensaje_usuario)
     historial_raw = obtener_historial_supabase(jid_normalizado, limite=10)
@@ -428,7 +437,9 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     ahora_rd = datetime.now(TZ_RD)
     contexto_temporal = f"\nHoy es {ahora_rd.strftime('%Y-%m-%d %H:%M:%S')} AST en República Dominicana."
-    contexto_paciente = f"\nUSUARIO EN CHAT: '{nombre_contacto}' | WhatsApp: {jid_normalizado}."
+    
+    # INYECCIÓN DEL NOMBRE DEL PACIENTE DETECTADO POR SU WHATSAPP
+    contexto_paciente = f"\nUSUARIO EN CHAT: Nombre identificado = '{nombre_contacto or 'Usuario'}' | WhatsApp JID = {jid_normalizado}."
     
     system_prompt = SYSTEM_PROMPT_GEMA + contexto_temporal + contexto_paciente
 
@@ -437,17 +448,17 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             "type": "function",
             "function": {
                 "name": "buscar_directorio_semantico_rpc",
-                "description": "Realiza una búsqueda inteligente por vector semántico en todo el directorio de salud (médicos, clínicas, farmacias, laboratorios, odontólogos).",
+                "description": "Realiza una búsqueda inteligente por vector semántico en todo el directorio (médicos, clínicas, farmacias, laboratorios, odontólogos).",
                 "parameters": {
                     "type": "object", 
                     "properties": {
                         "consulta_texto": {
                             "type": "string",
-                            "description": "Texto descriptivo de la búsqueda del usuario (ej: 'ginecologo en bonao', 'farmacia en naco', 'laboratorio en santiago')"
+                            "description": "Texto optimizado de búsqueda (ej: 'Médico ginecólogo en bonao', 'Tipo de Prestador: FARMACIA en San Cristóbal', 'Tipo de Prestador: CLINICA en San Cristóbal')"
                         },
                         "limite": {
                             "type": "integer",
-                            "description": "Número máximo de resultados a devolver (default 5)"
+                            "description": "Número máximo de resultados a devolver (default 6)"
                         }
                     }, 
                     "required": ["consulta_texto"]
@@ -516,7 +527,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 model="gpt-4o-mini",
                 messages=messages_tool,
                 temperature=0.0,
-                max_tokens=600
+                max_tokens=650
             )
             
             respuesta_texto = second_response.choices[0].message.content.strip()
