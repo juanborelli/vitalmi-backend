@@ -165,107 +165,57 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         logger.error(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# DIRECTORIO MASTER - BUSCADOR TERRITORIAL AISLADO (SIN MEZCLAR NOMBRES)
+# MOTOR UNIVERSAL: BÚSQUEDA SEMÁNTICA VECTORIAL (RPC)
 # ==========================================
 
-def consultar_directorio_inteligente(
-    especialidad: str = "", 
-    ubicacion: str = "", 
-    centro_medico: str = "",
-    nombre_medico: str = "",
-    mensaje_raw: str = ""
-) -> str:
+async def buscar_directorio_semantico_rpc(consulta_texto: str, limite: int = 5) -> str:
+    """
+    Convierte la consulta del usuario en un embedding vectorial y realiza 
+    una búsqueda por similitud de coseno en Supabase vía la función RPC.
+    """
     supabase = obtener_cliente_supabase()
-    if not supabase:
-        return json.dumps({"error": "Sin conexión a base de datos"})
+    client = obtener_cliente_openai()
+    
+    if not supabase or not client:
+        return json.dumps({"error": "Sin conexión a base de datos o API de OpenAI"})
 
     try:
-        # 1. Unificar entradas para detectar especialidad y ubicación solicitada
-        raw_full = remover_tildes(f"{especialidad} {nombre_medico} {ubicacion} {centro_medico} {mensaje_raw}")
-        
-        tok_esp = ""
-        for r in ["urol", "cardio", "pediat", "ginec", "derma", "oftalmo", "ortop", "odont", "general", "interna", "neurol", "psiquia", "cirug", "anestes"]:
-            if r in raw_full:
-                tok_esp = r
-                break
+        logger.info(f"🧠 BÚSQUEDA SEMÁNTICA VECTORIAL: '{consulta_texto}'")
 
-        stopwords = [
-            "hola", "gema", "necesito", "un", "una", "cardiologo", "urologo", "pediatra", 
-            "medico", "doctor", "doctora", "oftalmologo", "ortopeda", "internista", "general", 
-            "cerca", "de", "en", "para", "el", "la", "los", "las", "por", "favor"
-        ]
-        
-        tokens_ubi = [t for t in re.findall(r'\b\w{3,}\b', raw_full) if t not in stopwords and t not in tok_esp]
-        frase_ubi = " ".join(tokens_ubi)
+        # 1. Generar embedding para la consulta del usuario
+        emb_response = await client.embeddings.create(
+            model="text-embedding-3-small",
+            input=consulta_texto
+        )
+        query_vector = emb_response.data[0].embedding
 
-        logger.info(f"🔍 BUSCADOR DEFINITIVO V5: Especialidad='{tok_esp}' | Frase Ubicación='{frase_ubi}'")
+        # 2. Llamar a la función RPC en Supabase
+        res = supabase.rpc("buscar_directorio_semantico", {
+            "query_embedding": query_vector,
+            "match_threshold": 0.25,
+            "match_count": limite
+        }).execute()
 
-        # 2. Consultar registros en Supabase
-        query = supabase.table("vitalmi_directorio_master").select("*")
-        if tok_esp:
-            query = query.ilike("especialidad", f"%{tok_esp}%")
+        resultados = res.data or []
 
-        res = query.limit(3000).execute()
-        registros = res.data or []
-
-        if not registros:
-            return json.dumps({"total_exacto": 0, "medicos_muestra": []}, ensure_ascii=False)
-
-        # 3. Filtrado Geográfico Estricto (SÓLO SOBRE COLUMNAS GEOGRÁFICAS)
-        if frase_ubi:
-            medicos_filtrados = []
-
-            for r in registros:
-                prov = remover_tildes(r.get('provincia', ''))
-                muni = remover_tildes(r.get('municipio', ''))
-                dire = remover_tildes(r.get('direccion', ''))
-                cent = remover_tildes(r.get('centro_medico', ''))
-
-                # BLOQUE GEOGRÁFICO EXCLUSIVO (NO incluye el nombre del médico para evitar falsos positivos con apellidos)
-                bloque_geo = f"{prov} {muni} {dire} {cent}"
-
-                # REGLAS ESPECÍFICAS DE VALIDACIÓN TERRITORIAL
-                if "santo domingo este" in frase_ubi:
-                    if ("santo domingo este" in bloque_geo or "ensanche ozama" in bloque_geo or "alma rosa" in bloque_geo or "sabana larga" in bloque_geo or "zona oriental" in bloque_geo) and "bani" not in bloque_geo:
-                        medicos_filtrados.append(r)
-
-                elif "monte plata" in frase_ubi:
-                    if "monte plata" in bloque_geo and "puerto plata" not in bloque_geo and "monte cristi" not in bloque_geo:
-                        medicos_filtrados.append(r)
-
-                elif "santiago rodriguez" in frase_ubi or "sabaneta" in frase_ubi:
-                    if "santiago rodriguez" in bloque_geo or "sabaneta" in bloque_geo:
-                        medicos_filtrados.append(r)
-
-                elif "moca" in frase_ubi:
-                    if "moca" in bloque_geo or "espaillat" in bloque_geo:
-                        medicos_filtrados.append(r)
-
-                elif "mao" in frase_ubi:
-                    if "mao" in bloque_geo or "valverde" in bloque_geo:
-                        medicos_filtrados.append(r)
-
-                elif "santo domingo" in frase_ubi:
-                    if ("santo domingo" in bloque_geo or "distrito nacional" in bloque_geo) and "barahona" not in bloque_geo and "bani" not in bloque_geo:
-                        medicos_filtrados.append(r)
-
-                else:
-                    # Búsqueda abierta por subcadena exacta en la geografía
-                    if frase_ubi in bloque_geo or any(t in bloque_geo for t in tokens_ubi if len(t) >= 4):
-                        medicos_filtrados.append(r)
-
-            medicos_finales = medicos_filtrados[:5]
-        else:
-            medicos_finales = registros[:5]
+        # Formateo estandarizado de la respuesta
+        prestadores_procesados = []
+        for r in resultados:
+            item = dict(r)
+            item['tipo_prestador'] = item.get('tipo_prestador') or 'PRESTADOR'
+            item['especialidad_final'] = item.get('especialidad') or item.get('especialidad_medico') or item.get('especialidad_clinica') or 'General / No especificada'
+            item['telefono_final'] = item.get('telefono_institucional') or item.get('telefono_alterno') or 'No disponible'
+            item['whatsapp_final'] = item.get('whatsapp') or item.get('telefono_institucional') or 'No disponible'
+            prestadores_procesados.append(item)
 
         return json.dumps({
-            "total_exacto": len(medicos_finales),
-            "medicos_muestra": medicos_finales
+            "total_encontrados": len(prestadores_procesados),
+            "prestadores": prestadores_procesados
         }, ensure_ascii=False)
 
     except Exception as e:
-        logger.error(f"❌ Error en consultar_directorio_inteligente: {e}")
-        return json.dumps({"error": str(e)})
+        logger.error(f"❌ Error en búsqueda semántica: {e}")
+        return json.dumps({"error": str(e), "total_encontrados": 0, "prestadores": []})
 
 # ==========================================
 # AGENDAMIENTO Y NOTIFICACIONES
@@ -299,9 +249,9 @@ def despachar_notificacion_doctor(cita_id: str) -> dict:
             logger.warning(f"⚠️ Error verificando WhatsApp del doctor: {e}")
 
     if not whatsapp_valido and medico_nombre:
-        res_doc = supabase.table("vitalmi_directorio_master").select("telefono, whatsapp").ilike("nombre", f"%{medico_nombre.split()[0]}%").limit(1).execute()
+        res_doc = supabase.table("vitalmi_directorio_master").select("telefono_institucional, whatsapp").ilike("nombre", f"%{medico_nombre.split()[0]}%").limit(1).execute()
         if res_doc.data:
-            sec_phone = res_doc.data[0].get("whatsapp") or res_doc.data[0].get("telefono")
+            sec_phone = res_doc.data[0].get("whatsapp") or res_doc.data[0].get("telefono_institucional")
             if sec_phone:
                 doc_jid = normalizar_jid(sec_phone)
 
@@ -381,14 +331,6 @@ def agendar_cita_medica(
         except Exception:
             fecha_formateada = fecha_cita
 
-        tanda_clean = remover_tildes(tanda)
-        if "sabado" in tanda_clean or "sábado" in tanda_clean:
-            tanda_texto = "Sábados (9:00 AM – 2:00 PM)"
-        elif "tarde" in tanda_clean:
-            tanda_texto = "Tarde (3:00 PM – 6:00 PM)"
-        else:
-            tanda_texto = "Mañana (9:00 AM – 12:00 PM)"
-
         centro_medico = "Consultorio Privado Autorizado"
         costo_consulta = 2500.00
         doc_whatsapp = ""
@@ -400,7 +342,7 @@ def agendar_cita_medica(
                 doc_data = res_doc.data[0]
                 centro_medico = doc_data.get("centro_medico") or centro_medico
                 medico_nombre = doc_data.get("nombre") or medico_nombre
-                doc_whatsapp = doc_data.get("telefono") or doc_data.get("whatsapp") or ""
+                doc_whatsapp = doc_data.get("whatsapp") or doc_data.get("telefono_institucional") or ""
 
         datos_cita = {
             "paciente_id": paciente_id,
@@ -440,32 +382,33 @@ def agendar_cita_medica(
         return json.dumps({"error": str(e)})
 
 # ==========================================
-# SYSTEM PROMPT
+# SYSTEM PROMPT BÚSQUEDA INTELIGENTE
 # ==========================================
 
 SYSTEM_PROMPT_GEMA = f"""
-Eres Gema, la asistente inteligente para citas médicas de VitalMi en República Dominicana.
+Eres Gema, la asistente inteligente para citas médicas y servicios de salud de VitalMi en República Dominicana.
 
-### 📍 REGLAS DE BÚSQUEDA DIRECTA Y PRESENTACIÓN:
-1. Siempre que el usuario mencione una ubicación o especialidad (ej. "Santo Domingo Este", "Monte Plata", "Samaná", "Dajabón", "Moca", "Mao", "Santiago Rodríguez"), DEBES INVOCAR INMEDIATAMENTE `consultar_directorio_inteligente` con esa ubicación.
-2. Si `total_exacto` es MAYOR a 0:
-   Presenta los resultados diciendo: "Aquí tienes los médicos disponibles en [Ubicación]:"
-3. Si `total_exacto` es IGUAL a 0:
-   Responde ÚNICAMENTE: "No encontré médicos registrados en [Ubicación] en nuestro directorio. ¿Te gustaría buscar en otro sector o provincia?"
+### 📍 BÚSQUEDA Y PRESENTACIÓN DE RESULTADOS:
+1. Para responder cualquier consulta sobre disponibilidad de servicios de salud (médicos, especialidades, clínicas, farmacias, laboratorios, odontólogos, seguros/ARS, lugares o ciudades), DEBES INVOCAR SIEMPRE la herramienta `buscar_directorio_semantico_rpc`.
+2. Pasa en el parámetro `consulta_texto` la frase completa o la intención expresada por el usuario (ej. "cardiólogo en La Vega", "farmacia 24 horas en Naco", "laboratorio para análisis de sangre en Santiago", "odontologo en san cristobal").
+3. Si la búsqueda devuelve prestadores:
+   Presenta los resultados organizados claramente: "Aquí tienes los prestadores disponibles:"
+4. Si la búsqueda no devuelve resultados:
+   Responde de forma empática: "No encontré registros que coincidan con esa búsqueda en nuestro directorio. ¿Te gustaría buscar en otra especialidad, provincia o sector?"
 
-### 📍 ESTRUCTURA ESTRICTA PARA CADA MÉDICO ENCONTRADO:
-1. *[Nombre del Médico]*
- - Especialidad: [Especialidad/Subespecialidad]
- - Centro Médico: [Centro Médico]
- - Dirección: [Dirección exacta de la base de datos]
- - Teléfono: [Teléfono]
- - WhatsApp: [WhatsApp o 'No disponible']
+### 📍 ESTRUCTURA DE CADA PRESTADOR:
+- *[Nombre del Prestador / Médico]*
+  - Tipo: [tipo_prestador]
+  - Especialidad: [especialidad_final]
+  - Centro / Ubicación: [centro_medico]
+  - Dirección: [direccion], [sector], [municipio_cabecera], [provincia]
+  - Teléfono: [telefono_final]
+  - WhatsApp: [whatsapp_final]
 
 ### 📍 FLUJO CONVERSACIONAL PASO A PASO:
-1. **PASO 1 (Ubicación especificada):** Invoca `consultar_directorio_inteligente` directamente y muestra la lista de médicos.
-2. **PASO 2 (Selección de médico):** Pregunta la fecha y tanda deseada.
-3. **PASO 3 (Tarjeta de revisión):** Muestra el resumen y solicita confirmación ("¿Está todo bien con estos datos?").
-4. **PASO 4 (Confirmación y envío):** Ejecuta `agendar_cita_medica` y entrega el mensaje final con la copia exacta enviada al médico.
+1. **Búsqueda:** Ejecuta `buscar_directorio_semantico_rpc` y muestra las opciones.
+2. **Selección:** Si el usuario elige un médico o prestador, solicita fecha y tanda deseada.
+3. **Agendamiento:** Ejecuta `agendar_cita_medica`.
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
@@ -493,17 +436,21 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         {
             "type": "function",
             "function": {
-                "name": "consultar_directorio_inteligente",
-                "description": "Busca especialistas en el directorio médico de la ubicación exacta.",
+                "name": "buscar_directorio_semantico_rpc",
+                "description": "Realiza una búsqueda inteligente por vector semántico en todo el directorio de salud (médicos, clínicas, farmacias, laboratorios, odontólogos).",
                 "parameters": {
                     "type": "object", 
                     "properties": {
-                        "especialidad": {"type": "string"},
-                        "ubicacion": {"type": "string"},
-                        "centro_medico": {"type": "string"},
-                        "nombre_medico": {"type": "string"}
+                        "consulta_texto": {
+                            "type": "string",
+                            "description": "Texto descriptivo de la búsqueda del usuario (ej: 'ginecologo en bonao', 'farmacia en naco', 'laboratorio en santiago')"
+                        },
+                        "limite": {
+                            "type": "integer",
+                            "description": "Número máximo de resultados a devolver (default 5)"
+                        }
                     }, 
-                    "required": []
+                    "required": ["consulta_texto"]
                 }
             }
         },
@@ -550,9 +497,8 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 name = tool_call.function.name
                 args = json.loads(tool_call.function.arguments)
 
-                if name == "consultar_directorio_inteligente":
-                    args["mensaje_raw"] = mensaje_usuario
-                    res_tool = consultar_directorio_inteligente(**args)
+                if name == "buscar_directorio_semantico_rpc":
+                    res_tool = await buscar_directorio_semantico_rpc(**args)
                 elif name == "agendar_cita_medica":
                     args["telefono_jid"] = jid_normalizado
                     res_tool = agendar_cita_medica(**args)
@@ -570,7 +516,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 model="gpt-4o-mini",
                 messages=messages_tool,
                 temperature=0.0,
-                max_tokens=500
+                max_tokens=600
             )
             
             respuesta_texto = second_response.choices[0].message.content.strip()
@@ -582,7 +528,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     except Exception as e:
         logger.error(f"❌ Error en gema_brain: {e}")
-        return "Tuve un inconveniente técnico procesando tu solicitud. Por favor indícame la especialidad o doctor que buscas."
+        return "Tuve un inconveniente técnico procesando tu solicitud. Por favor indícame la especialidad o servicio médico que buscas."
 
 async def procesar_mensaje_gema(usuario_jid: str, mensaje: str) -> str:
     return await obtener_respuesta_gema(mensaje_usuario=mensaje, numero_usuario=usuario_jid)
