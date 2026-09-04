@@ -106,11 +106,6 @@ def resolver_fecha_relativa(texto_fecha: str) -> str:
     return (ahora_rd + timedelta(days=1)).strftime("%Y-%m-%d")
 
 def obtener_o_registrar_paciente_por_whatsapp(telefono_jid: str, nombre_push: str = "") -> dict:
-    """
-    Identifica de inmediato al usuario por su número de WhatsApp (JID).
-    Si ya existe en la base de datos, devuelve sus datos guardados.
-    Si es la primera vez que escribe, crea el registro básico con su nombre de WhatsApp.
-    """
     supabase = obtener_cliente_supabase()
     if not supabase:
         return {}
@@ -119,16 +114,13 @@ def obtener_o_registrar_paciente_por_whatsapp(telefono_jid: str, nombre_push: st
         jid_normalizado = normalizar_jid(telefono_jid)
         res = supabase.table("pacientes").select("*").eq("telefono_jid", jid_normalizado).execute()
         
-        # Si ya existe el paciente registrado previamente en la tabla
         if res.data and len(res.data) > 0:
             paciente_existente = res.data[0]
-            # Si enviaron un nuevo nombre_push válido y el actual era genérico, actualizamos el nombre
             if nombre_push and (paciente_existente.get("nombre") in ["", "Usuario WhatsApp", None]):
                 supabase.table("pacientes").update({"nombre": nombre_push.strip()}).eq("id", paciente_existente["id"]).execute()
                 paciente_existente["nombre"] = nombre_push.strip()
             return paciente_existente
 
-        # Si es un usuario completamente nuevo, lo creamos de inmediato con su número de WhatsApp
         nombre_inicial = nombre_push.strip() or "Usuario WhatsApp"
         datos_nuevo = {
             "telefono_jid": jid_normalizado, 
@@ -317,7 +309,6 @@ def agendar_cita_medica(
 
         res_pac = supabase.table("pacientes").select("*").eq("telefono_jid", jid_objetivo).execute()
         
-        # SI EL PERFIL NO ESTÁ COMPLETO EN LA BASE DE DATOS -> PEDIR FORMULARIO DE REGISTRO
         if not res_pac.data or not res_pac.data[0].get("perfil_completo", False):
             return json.dumps({
                 "error": "perfil_incompleto",
@@ -391,31 +382,30 @@ def agendar_cita_medica(
         return json.dumps({"error": str(e)})
 
 # ==========================================
-# SYSTEM PROMPT PERFECCIONADO
+# SYSTEM PROMPT PERFECCIONADO CON UBICACIÓN
 # ==========================================
 
 SYSTEM_PROMPT_GEMA = f"""
 Eres Gema, la asistente inteligente para citas médicas y servicios de salud de VitalMi en República Dominicana.
 
-### 👤 RECONOCIMIENTO DE USUARIO POR WHATSAPP:
-- Cuentas con la identidad del usuario extraída de su número de WhatsApp en el contexto (`Nombre identificado`).
-- Si el usuario te saluda o pregunta quién habla o si sabes quién te escribe, salúdalo amablemente por su nombre (ej: "¡Hola Juan! Te habla Gema, tu asistente de salud en VitalMi.").
-- **IMPORTANTE:** Proporciona libremente TODA la información solicitada sobre médicos, especialidades, clínicas, farmacias, laboratorios y odontólogos sin exigir ningún registro previo.
-- El registro a través del formulario de Google (`URL_FORM_OFICIAL`) es un proceso posterior que solo se requiere cuando el usuario decida formalmente AGENDAR una cita médica.
+### 👤 RECONOCIMIENTO Y UBICACIÓN DEL USUARIO:
+- Cuentas con la identidad y ubicación guardada del usuario en el contexto (`Nombre identificado` y `Ubicación Habitual`).
+- Si el usuario pregunta quién le escribe o si lo conoces, salúdalo personalmente (ej: "¡Hola Juan! Te habla Gema, tu asistente de salud en VitalMi.").
+- **Uso de la Ubicación:** Si el usuario solicita un servicio sin especificar ciudad o sector (ej: "necesito una farmacia", "busco un cardiólogo"), UTILIZA su `Ubicación Habitual` por defecto en la búsqueda para ofrecerle respuestas inmediatas de su zona.
+- Si el usuario te indica que está en otra ciudad o te comparte su ubicación GPS por WhatsApp, busca en la nueva ubicación.
+- Proporciona libremente TODA la información solicitada sin pedir registros. El registro en Google Form (`URL_FORM_OFICIAL`) solo es necesario si decide AGENDAR una cita.
 
 ### 📍 CONSTRUCCIÓN DE CONSULTAS VECTORIALES:
-1. Para responder sobre disponibilidad de servicios de salud, DEBES INVOCAR SIEMPRE la herramienta `buscar_directorio_semantico_rpc`.
+1. Para responder sobre disponibilidad, DEBES INVOCAR SIEMPRE la herramienta `buscar_directorio_semantico_rpc`.
 2. **Filtrado por Tipo de Prestador:**
-   - Si el usuario pide un **médico / doctor / especialista**, incluye la palabra "Médico" en `consulta_texto` (ej: "Médico Cardiólogo en Santo Domingo", "Médico consulta en Madre Vieja").
-   - Si el usuario pide una **farmacia**, incluye explícitamente "Tipo de Prestador: FARMACIA" (ej: "Tipo de Prestador: FARMACIA en San Cristóbal").
-   - Si el usuario pide una **clínica / centro médico**, incluye "Tipo de Prestador: CLINICA centro medico hospital" (ej: "Tipo de Prestador: CLINICA en San Cristóbal").
-   - Si el usuario pide un **laboratorio**, incluye "Tipo de Prestador: LABORATORIO".
-   - Si el usuario pide un **odontólogo / dentista**, incluye "Tipo de Prestador: ODONTOLOGO dentista".
+   - Si pide **médico / doctor / especialista**, incluye "Médico" en `consulta_texto` (ej: "Médico Cardiólogo en San Cristóbal").
+   - Si pide **farmacia**, incluye "Tipo de Prestador: FARMACIA" (ej: "Tipo de Prestador: FARMACIA en San Cristóbal").
+   - Si pide **clínica / centro médico**, incluye "Tipo de Prestador: CLINICA centro medico hospital" (ej: "Tipo de Prestador: CLINICA en San Cristóbal").
+   - Si pide **laboratorio**, incluye "Tipo de Prestador: LABORATORIO".
+   - Si pide **odontólogo / dentista**, incluye "Tipo de Prestador: ODONTOLOGO dentista".
 
 3. **Presentación de Resultados:**
-   - Filtra y presenta ÚNICAMENTE los prestadores que correspondan al tipo solicitado.
-   - Estructura cada opción de forma clara con Nombre, Tipo, Especialidad, Centro/Ubicación, Dirección y Teléfonos.
-   - Si no hay resultados, responde con empatía ofreciendo buscar en otra zona o especialidad.
+   - Presenta únicamente prestadores del tipo solicitado con Nombre, Especialidad, Centro, Dirección y Teléfonos.
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
@@ -424,12 +414,20 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         return "Hola, en este momento estamos actualizando el sistema. Escríbeme en un minuto y con gusto te ayudo."
 
     jid_normalizado = normalizar_jid(numero_usuario)
-    
-    # IDENTIFICACIÓN INMEDIATA POR NÚMERO DE WHATSAPP
     paciente = obtener_o_registrar_paciente_por_whatsapp(jid_normalizado, nombre_usuario)
     
     nombre_db = paciente.get("nombre") or nombre_usuario
     nombre_contacto = extraer_primer_nombre_valido(nombre_db)
+
+    # Extracción de Ubicación Habitual si existe en el perfil
+    provincia_user = paciente.get("provincia") or ""
+    municipio_user = paciente.get("municipio") or paciente.get("sector") or ""
+    
+    ubicacion_str = ""
+    if provincia_user or municipio_user:
+        ubicacion_str = f"{municipio_user}, {provincia_user}".strip(", ")
+    else:
+        ubicacion_str = "No especificada (República Dominicana)"
 
     guardar_mensaje_supabase(jid_normalizado, "user", mensaje_usuario)
     historial_raw = obtener_historial_supabase(jid_normalizado, limite=10)
@@ -437,9 +435,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     ahora_rd = datetime.now(TZ_RD)
     contexto_temporal = f"\nHoy es {ahora_rd.strftime('%Y-%m-%d %H:%M:%S')} AST en República Dominicana."
-    
-    # INYECCIÓN DEL NOMBRE DEL PACIENTE DETECTADO POR SU WHATSAPP
-    contexto_paciente = f"\nUSUARIO EN CHAT: Nombre identificado = '{nombre_contacto or 'Usuario'}' | WhatsApp JID = {jid_normalizado}."
+    contexto_paciente = f"\nUSUARIO EN CHAT: Nombre identificado = '{nombre_contacto or 'Usuario'}' | WhatsApp JID = {jid_normalizado} | Ubicación Habitual = '{ubicacion_str}'."
     
     system_prompt = SYSTEM_PROMPT_GEMA + contexto_temporal + contexto_paciente
 
@@ -454,7 +450,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                     "properties": {
                         "consulta_texto": {
                             "type": "string",
-                            "description": "Texto optimizado de búsqueda (ej: 'Médico ginecólogo en bonao', 'Tipo de Prestador: FARMACIA en San Cristóbal', 'Tipo de Prestador: CLINICA en San Cristóbal')"
+                            "description": "Texto optimizado de búsqueda (ej: 'Médico ginecólogo en San Cristóbal', 'Tipo de Prestador: FARMACIA en San Cristóbal')"
                         },
                         "limite": {
                             "type": "integer",
