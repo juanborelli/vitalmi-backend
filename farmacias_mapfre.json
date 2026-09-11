@@ -1,0 +1,4582 @@
+[
+    {
+        "nombre": "FARMACIA SAONA",
+        "detail_path": "2/8260972",
+        "telefono": "DIRECTO:  (809) 695-2555, CELULAR:  (809) 769-6019"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - SIRENA VENEZUELA",
+        "detail_path": "2/8261483",
+        "telefono": "DIRECTO:  (809) 273-7474"
+    },
+    {
+        "nombre": "FARMACIA EUROPA SAN VICENTE DE PAÚL",
+        "detail_path": "2/8262247",
+        "telefono": "DIRECTO:  (809) 594-4939"
+    },
+    {
+        "nombre": "FARMACIA EUROPA OZAMA",
+        "detail_path": "2/8262250",
+        "telefono": "DIRECTO:  (809) 594-2127"
+    },
+    {
+        "nombre": "FARMACIA RACHELL",
+        "detail_path": "2/8273148",
+        "telefono": "DIRECTO:  (809) 599-5760, DIRECTO:  (809) 599-5694"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC-  MENDOZA",
+        "detail_path": "2/8273687",
+        "telefono": "RESIDENCIA:  (809) 363-0990, LAB:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA SALIM II",
+        "detail_path": "2/8273624",
+        "telefono": "DIRECTO:  (809) 598-6008, DIRECTO:  (809) 595-2484"
+    },
+    {
+        "nombre": "FARMACIA VIP  SABANA PERDIDA",
+        "detail_path": "2/8275423",
+        "telefono": "TRABAJO:  (809) 590-5540"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - CANCINO",
+        "detail_path": "2/8272745",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC-  SAN ISIDRO",
+        "detail_path": "2/8273688",
+        "telefono": "LAB:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA VIP  VILLA DUARTE",
+        "detail_path": "2/8277235",
+        "telefono": "TRABAJO:  (809) 591-0040, DIRECTO:  (809) 699-4302"
+    },
+    {
+        "nombre": "2B FARMA - SANTO DOMINGO",
+        "detail_path": "2/8279055",
+        "telefono": "TRABAJO:  (809) 556-5000"
+    },
+    {
+        "nombre": "FARMACIA CAROL -  JUMBO SAN ISIDRO",
+        "detail_path": "2/8279477",
+        "telefono": "RESIDENCIA:  (809) 563-6060"
+    },
+    {
+        "nombre": "FARMACIA CAROL - LOS MINAS",
+        "detail_path": "2/8279868",
+        "telefono": "DIRECTO:  (809) 563-6060"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SAN ISIDRO II",
+        "detail_path": "2/8280208",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C - SAN ISIDRO III",
+        "detail_path": "2/8283884",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA CAROL - MANOGUAYABO",
+        "detail_path": "2/8262326",
+        "telefono": "DIRECTO:  (809) 807-8201"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - OLE LOS ALCARRIZOS",
+        "detail_path": "2/8261486",
+        "telefono": "DIRECTO:  (809) 621-6400"
+    },
+    {
+        "nombre": "FARMACIA CHARINA",
+        "detail_path": "2/8273566",
+        "telefono": "DIRECTO:  (809) 561-9951, CELULAR:  (829) 989-2853"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC -  LOS BEIBOLISTA",
+        "detail_path": "2/8273603",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - BRAVO LUPERON",
+        "detail_path": "2/8282686",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA YASIL",
+        "detail_path": "2/8272954",
+        "telefono": "DIRECTO:  (809) 364-0036"
+    },
+    {
+        "nombre": "FARMACIA EL SIGLO",
+        "detail_path": "2/8277434",
+        "telefono": "TRABAJO:  (809) 569-0769"
+    },
+    {
+        "nombre": "FARMACIA CAROL - COLINAS CENTRO",
+        "detail_path": "2/8279871",
+        "telefono": "DIRECTO:  (809) 563-6060"
+    },
+    {
+        "nombre": "FARMA EXTRA - MIRADOR ISABELA",
+        "detail_path": "2/8281400",
+        "telefono": "TRABAJO:  (809) 725-2141, RESIDENCIA:  (829) 850-3383"
+    },
+    {
+        "nombre": "FARMACIA BARBARA MARIA - LOS JARDINES",
+        "detail_path": "2/8281225",
+        "telefono": "TRABAJO:  (809) 523-4446"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - PEDRO BRAND",
+        "detail_path": "2/8279725",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA CARMINA",
+        "detail_path": "2/10131085",
+        "telefono": "DIRECTO:  (809) 688-2866, TRABAJO:  (809) 688-6866"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - QUISQUEYA",
+        "detail_path": "2/1551",
+        "telefono": "CELULAR:  (809) 436-1296, DIRECTO:  (809) 363-0991, DIRECTO:  (809) 475-4444, DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA RITA",
+        "detail_path": "2/1565",
+        "telefono": "TRABAJO:  (809) 688-4291, CELULAR:  (809) 871-7111"
+    },
+    {
+        "nombre": "FARMACIA CAROL - MELGEN",
+        "detail_path": "2/8261080",
+        "telefono": "DIRECTO:  (809) 482-0000"
+    },
+    {
+        "nombre": "FARMACIA CAROL - NOVOCENTRO",
+        "detail_path": "2/8261085",
+        "telefono": "DIRECTO:  (809) 563-6060"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - OLE NICOLAS DE OVANDO",
+        "detail_path": "2/8261485",
+        "telefono": "DIRECTO:  (809) 338-3311"
+    },
+    {
+        "nombre": "FARMACIA CAROL  - POLA  INDEPENDENCIA",
+        "detail_path": "2/8262017",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA CIVIL CENTER",
+        "detail_path": "2/8262015",
+        "telefono": "DIRECTO:  (809) 412-8144, DIRECTO:  (809) 364-9434"
+    },
+    {
+        "nombre": "FARMA VALUE - EL VERGEL",
+        "detail_path": "2/8272876",
+        "telefono": "CELULAR:  (829) 797-5690, DIRECTO:  (809) 289-1515"
+    },
+    {
+        "nombre": "SUPER FARMACIA CRISTIANA",
+        "detail_path": "2/8262338",
+        "telefono": "CELULAR:  (809) 860-5160, DIRECTO:  (809) 684-6263"
+    },
+    {
+        "nombre": "FARMA VALUE - NACO",
+        "detail_path": "2/8262373",
+        "telefono": "CELULAR:  (849) 318-7171, CELULAR:  (809) 434-8427, DIRECTO:  (809) 289-1515, CELULAR:  (849) 451-0194, LAB:  (849) 318-7171"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - PLAZA LAMA BELLA VISTA",
+        "detail_path": "2/1570",
+        "telefono": "TRABAJO:  (809) 286-0021"
+    },
+    {
+        "nombre": "LOS PRADOS I",
+        "detail_path": "2/8260784",
+        "telefono": "DIRECTO:  (809) 701-6655, CELULAR:  (809) 258-8166"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LOS RIOS",
+        "detail_path": "2/8275344",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA TANIA - LOS RIOS",
+        "detail_path": "2/8275624",
+        "telefono": "TRABAJO:  (809) 560-0196"
+    },
+    {
+        "nombre": "FARMACIA TANIA - LOS PRADOS",
+        "detail_path": "2/8275625",
+        "telefono": "TRABAJO:  (809) 535-2572, DIRECTO:  (809) 540-8003"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - RENACIMIENTO",
+        "detail_path": "2/8262096",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - ENSANCHE LUPERON",
+        "detail_path": "2/8272918",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - DEFILLO",
+        "detail_path": "2/8272921",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - ZONA UNIVERSITARIA",
+        "detail_path": "2/8273311",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA VIP MENDO PIANTINI",
+        "detail_path": "2/8278707",
+        "telefono": "LAB:  (809) 616-2013, DIRECTO:  (809) 234-4486"
+    },
+    {
+        "nombre": "FARMA XTRA - FARMACIA  ALICIA II",
+        "detail_path": "2/8276379",
+        "telefono": "LAB:  (809) 482-9040"
+    },
+    {
+        "nombre": "FARMACIA VIP MENDO - CASTELLANO",
+        "detail_path": "2/8279795",
+        "telefono": "TRABAJO:  (829) 263-2264, RESIDENCIA:  (809) 388-0002"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - MARIA AUXILIADORA",
+        "detail_path": "2/8280007",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - VILLA JUANA",
+        "detail_path": "2/8280006",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - 30 DE MAYO",
+        "detail_path": "2/8280941",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA VIP PIANTINI II",
+        "detail_path": "2/8282404",
+        "telefono": "TRABAJO:  (809) 947-1200"
+    },
+    {
+        "nombre": "PHARMA CENTRO NFQ",
+        "detail_path": "2/8274207",
+        "telefono": "TRABAJO:  (809) 733-2899, CELULAR:  (829) 808-0868"
+    },
+    {
+        "nombre": "FARMACIA NACIONAL",
+        "detail_path": "2/1464",
+        "telefono": "DIRECTO:  (809) 588-2670, CELULAR:  (809) 481-5353"
+    },
+    {
+        "nombre": "FARMACIA SAN RAFAEL - SAN FRANCISCO",
+        "detail_path": "2/8262056",
+        "telefono": "DIRECTO:  (809) 588-2520"
+    },
+    {
+        "nombre": "FARMACIA NEOMEDICAL",
+        "detail_path": "2/1535",
+        "telefono": "DIRECTO:  (809) 588-0222"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC-- SAN FRANCISCO",
+        "detail_path": "2/8275215",
+        "telefono": "TRABAJO:  (809) 363-0990, CELULAR:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA NORTE",
+        "detail_path": "2/8275784",
+        "telefono": "TRABAJO:  (809) 588-2341, CELULAR:  (829) 637-7717"
+    },
+    {
+        "nombre": "FARMACIA SAN MIGUEL SAN FRANCISCO",
+        "detail_path": "2/8277131",
+        "telefono": "RESIDENCIA:  (809) 588-6468"
+    },
+    {
+        "nombre": "FARMACIA SANTA ANA FERNANDEZ",
+        "detail_path": "2/1576",
+        "telefono": "DIRECTO:  (809) 578-2965"
+    },
+    {
+        "nombre": "FARMA MATER",
+        "detail_path": "2/8277136",
+        "telefono": "TRABAJO:  (809) 841-7214, CELULAR:  (829) 648-8228"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - MOCA",
+        "detail_path": "2/8282261",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA EL SOL",
+        "detail_path": "2/573676701",
+        "telefono": "DIRECTO:  (809) 573-8866, TRABAJO:  (809) 573-3910, CELULAR:  (809) 753-0789"
+    },
+    {
+        "nombre": "FARMACIA SAN MIGUEL II",
+        "detail_path": "2/8260822",
+        "telefono": "DIRECTO:  (809) 574-2040, DIRECTO:  (809) 574-6852, DIRECTO:  (809) 574-6639"
+    },
+    {
+        "nombre": "FARMACIA SAN JUDAS TADEO - JARABACOA",
+        "detail_path": "2/1581",
+        "telefono": "DIRECTO:  (809) 574-2220, TRABAJO:  (809) 574-2544"
+    },
+    {
+        "nombre": "FARMACIA JCM",
+        "detail_path": "2/8276552",
+        "telefono": "TRABAJO:  (809) 690-1242"
+    },
+    {
+        "nombre": "FARMACIA NIURKA ALTAGRACIA",
+        "detail_path": "2/8273695",
+        "telefono": "RESIDENCIA:  (809) 584-2476, DIRECTO:  (809) 584-2476"
+    },
+    {
+        "nombre": "FARMACIA AURA CANANO",
+        "detail_path": "2/8281768",
+        "telefono": "TRABAJO:  (809) 584-3093"
+    },
+    {
+        "nombre": "FARMACIA LAMPLE SUAREZ",
+        "detail_path": "2/8261702",
+        "telefono": "DIRECTO:  (809) 525-3677, CELULAR:  (809) 525-5699"
+    },
+    {
+        "nombre": "FARMACIA CAROL - BONAO",
+        "detail_path": "2/8279476",
+        "telefono": "RESIDENCIA:  (809) 563-6060"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - MIGUELINA",
+        "detail_path": "2/8281805",
+        "telefono": "DIRECTO:  (809) 620-5050"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - MONTECRISTI",
+        "detail_path": "2/8277222",
+        "telefono": "TRABAJO:  (809) 475-4444, RESIDENCIA:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - VILLA VASQUEZ",
+        "detail_path": "2/8283426",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA EL PUENTE DE LA GUINEA",
+        "detail_path": "2/8277518",
+        "telefono": "LAB:  (809) 261-0878"
+    },
+    {
+        "nombre": "FARMACIA POPULAR V  PLAZA JUAN BRUGAL",
+        "detail_path": "2/8279910",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA DONA YIYA",
+        "detail_path": "2/8282525",
+        "telefono": "DIRECTO:  (809) 581-2296"
+    },
+    {
+        "nombre": "FARMACIA WECARE",
+        "detail_path": "2/1676",
+        "telefono": "DIRECTO:  (809) 571-0045"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SALCEDO",
+        "detail_path": "2/8282461",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SANCHEZ",
+        "detail_path": "2/8280935",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA CAROL - SAN PEDRO DE MACORIS",
+        "detail_path": "2/8272537",
+        "telefono": "DIRECTO:  (809) 339-9779, CELULAR:  (809) 972-7501"
+    },
+    {
+        "nombre": "FARMACIA MIMA CASSO",
+        "detail_path": "2/8260941",
+        "telefono": "DIRECTO:  (809) 585-2799, CELULAR:  (809) 757-9527"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC COTUI III",
+        "detail_path": "2/8282139",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA CAROL - ESTRELLA SADHALA",
+        "detail_path": "2/1871865",
+        "telefono": "CELULAR:  (809) 318-0968, CELULAR:  (809) 241-0000"
+    },
+    {
+        "nombre": "FARMACIA PUJOLS",
+        "detail_path": "2/1677",
+        "telefono": "DIRECTO:  (809) 971-5877"
+    },
+    {
+        "nombre": "FARMACIA LA RINCONADA",
+        "detail_path": "2/8261375",
+        "telefono": "DIRECTO:  (809) 582-0826"
+    },
+    {
+        "nombre": "FARMACIA PRISCILLA",
+        "detail_path": "2/1437",
+        "telefono": "DIRECTO:  (809) 471-8277, CELULAR:  (809) 546-9643"
+    },
+    {
+        "nombre": "FARMACIA VILLA OLGA",
+        "detail_path": "2/8261372",
+        "telefono": "DIRECTO:  (809) 580-1449"
+    },
+    {
+        "nombre": "FARMACIA CAROL - PORTAL DEL NORTE",
+        "detail_path": "2/8275911",
+        "telefono": "TRABAJO:  (809) 955-2828, CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMATRIX  - FARMAHORRO - LIBERTAD",
+        "detail_path": "2/8276496",
+        "telefono": "DIRECTO:  (809) 337-7777"
+    },
+    {
+        "nombre": "FARMACIA CAROL -GURABITO",
+        "detail_path": "2/8279870",
+        "telefono": "DIRECTO:  (809) 563-6060"
+    },
+    {
+        "nombre": "FARMACIA CENTRO EL GRAN PASTOR",
+        "detail_path": "2/8280697",
+        "telefono": "DIRECTO:  (809) 241-2255"
+    },
+    {
+        "nombre": "FARMACIA CAROL - SN EL EMBRUJO",
+        "detail_path": "2/8282724",
+        "telefono": "TRABAJO:  (809) 563-6060"
+    },
+    {
+        "nombre": "FARMACIA CAROL SANTIAGO CENTER",
+        "detail_path": "2/8284239",
+        "telefono": "TRABAJO:  (809) 563-6060"
+    },
+    {
+        "nombre": "FARMACIA LA MANSION",
+        "detail_path": "2/8283332",
+        "telefono": "CELULAR:  (809) 440-1641, DIRECTO:  (809) 758-7204, DIRECTO:  (809) 380-9395, CELULAR:  (829) 749-9738"
+    },
+    {
+        "nombre": "FARMACIA WALYX - LA CATALINA",
+        "detail_path": "2/8279873",
+        "telefono": "TRABAJO:  (809) 582-2166"
+    },
+    {
+        "nombre": "FARMATRIX - FARMAHORRO  MAO",
+        "detail_path": "2/8276497",
+        "telefono": "TRABAJO:  (809) 572-3360"
+    },
+    {
+        "nombre": "FARMAYER",
+        "detail_path": "2/8276381",
+        "telefono": "TRABAJO:  (809) 737-2266, CELULAR:  (829) 877-5559"
+    },
+    {
+        "nombre": "FARMACENTER",
+        "detail_path": "2/8273530",
+        "telefono": "DIRECTO:  (809) 554-4242"
+    },
+    {
+        "nombre": "FARMACIA VIP - BAVARO",
+        "detail_path": "2/8282413",
+        "telefono": "TRABAJO:  (809) 947-1200"
+    },
+    {
+        "nombre": "2B FARMA - FARMA BAVARO III",
+        "detail_path": "2/8282843",
+        "telefono": "TRABAJO:  (809) 813-5288"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - EL SEIBO",
+        "detail_path": "2/8276667",
+        "telefono": "TRABAJO:  (809) 363-0990, CELULAR:  (829) 655-0346"
+    },
+    {
+        "nombre": "FARMACIA IBERIA - HATO MAYOR",
+        "detail_path": "2/1488",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA CARRASCO",
+        "detail_path": "2/1553",
+        "telefono": "CELULAR:  (809) 272-9261, TRABAJO:  (809) 553-1717"
+    },
+    {
+        "nombre": "FARMACIA SAN JUDAS DE HATO MAYOR DEL REY",
+        "detail_path": "2/8275122",
+        "telefono": "TRABAJO:  (809) 553-3710"
+    },
+    {
+        "nombre": "FARMACIA CAROL - JUMBO ROMANA",
+        "detail_path": "2/245561014",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA CAROL - MULTIPLAZA LA ROMANA",
+        "detail_path": "2/8272370",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA AUDREY",
+        "detail_path": "2/8261863",
+        "telefono": "DIRECTO:  (809) 579-2020, CELULAR:  (809) 579-2271"
+    },
+    {
+        "nombre": "FARMACIA ANGELA",
+        "detail_path": "2/8272637",
+        "telefono": "DIRECTO:  (809) 529-2880"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC -  SAN PEDRO DE MACORIS",
+        "detail_path": "2/8273602",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA CAROL - JUMBO SAN PEDRO DE MACORIS",
+        "detail_path": "2/243390059",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA CAROL - HEMINGWAY",
+        "detail_path": "2/8277577",
+        "telefono": "TRABAJO:  (809) 563-6060"
+    },
+    {
+        "nombre": "FARMACIA DICHI VILLA ESPAÑA",
+        "detail_path": "2/8279730",
+        "telefono": "TRABAJO:  (809) 246-6046"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - JUAN DOLIO",
+        "detail_path": "2/8282687",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA DILANIA",
+        "detail_path": "2/1584",
+        "telefono": "DIRECTO:  (809) 521-2301, TRABAJO:  (809) 521-6343, CELULAR:  (809) 769-1295"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - AZUA",
+        "detail_path": "2/8282025",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - VICENTE NOBLE",
+        "detail_path": "2/8277506",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA CRISTIANA",
+        "detail_path": "2/528332301",
+        "telefono": "DIRECTO:  (809) 528-7752, CELULAR:  (829) 452-4593, CELULAR:  (809) 860-5160"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - SAN CRISTOBAL",
+        "detail_path": "2/1632",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMA RALAM EXPRESS",
+        "detail_path": "2/8261001",
+        "telefono": "DIRECTO:  (809) 527-5315, DIRECTO:  (809) 527-5407"
+    },
+    {
+        "nombre": "FARMACIA INMACULADA",
+        "detail_path": "2/1457",
+        "telefono": "DIRECTO:  (809) 557-2801"
+    },
+    {
+        "nombre": "FARMASUR TATA -COLON",
+        "detail_path": "2/8277395",
+        "telefono": "RESIDENCIA:  (809) 567-7529, DIRECTO:  (809) 557-5246"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SAN JUAN II",
+        "detail_path": "2/8282141",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA  IBERIA - FARMACIA DUCO",
+        "detail_path": "2/8262340",
+        "telefono": "DIRECTO:  (809) 552-6666"
+    },
+    {
+        "nombre": "FARMACIA LOS MAMEYES",
+        "detail_path": "2/1614",
+        "telefono": "TRABAJO:  (809) 593-1660"
+    },
+    {
+        "nombre": "FARMACIA LUZON",
+        "detail_path": "2/8260998",
+        "telefono": "DIRECTO:  (809) 483-0003, DIRECTO:  (809) 483-1620, CELULAR:  (809) 383-7788"
+    },
+    {
+        "nombre": "FARMACIA EUROPA - LAS AMERICAS",
+        "detail_path": "2/8262248",
+        "telefono": "DIRECTO:  (809) 599-6111, DIRECTO:  (809) 596-3634"
+    },
+    {
+        "nombre": "FARMACIA PATRIZO II",
+        "detail_path": "2/8261892",
+        "telefono": "DIRECTO:  (809) 593-2405"
+    },
+    {
+        "nombre": "FARMACIA OZAMA",
+        "detail_path": "2/8273092",
+        "telefono": "DIRECTO:  (809) 788-2605, CELULAR:  (829) 379-4767"
+    },
+    {
+        "nombre": "FARMACIA CAROL - MEGACENTRO I",
+        "detail_path": "2/245932949",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA ARLETTE",
+        "detail_path": "2/8275347",
+        "telefono": "DIRECTO:  (809) 388-1994, DIRECTO:  (809) 388-2506, DIRECTO:  (809) 388-2341"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SAN LUIS",
+        "detail_path": "2/8275474",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA VIP CARRETERA MELLA",
+        "detail_path": "2/8276100",
+        "telefono": "CELULAR:  (809) 273-0077, TRABAJO:  (809) 537-0390"
+    },
+    {
+        "nombre": "FARMACIA EMBAJADORA DE LA SALUD",
+        "detail_path": "2/8276644",
+        "telefono": "TRABAJO:  (809) 595-9616"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - AV. HIPICA",
+        "detail_path": "2/8277507",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA VIP MENDO VISTA HERMOSA",
+        "detail_path": "2/8278706",
+        "telefono": "LAB:  (809) 598-9923, DIRECTO:  (809) 234-4486"
+    },
+    {
+        "nombre": "FARMACIA VIP - BRISAS DEL EDEN",
+        "detail_path": "2/8282409",
+        "telefono": "TRABAJO:  (809) 820-0044"
+    },
+    {
+        "nombre": "FARMACIA VIP - CIUDAD JUAN BOSCH",
+        "detail_path": "2/8282721",
+        "telefono": "DIRECTO:  (809) 781-4720"
+    },
+    {
+        "nombre": "FARMACIA PATRIZO - ISABELITA",
+        "detail_path": "2/8283704",
+        "telefono": "TRABAJO:  (809) 592-1100"
+    },
+    {
+        "nombre": "FARMACIA FELLITA",
+        "detail_path": "2/8261003",
+        "telefono": "DIRECTO:  (809) 530-6993"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - PANTOJA",
+        "detail_path": "2/8273308",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MAIKY",
+        "detail_path": "2/8276408",
+        "telefono": "DIRECTO:  (809) 537-8402, CELULAR:  (809) 350-2592, CELULAR:  (809) 383-0122, RESIDENCIA:  (809) 372-0885"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - VILLA MELLA",
+        "detail_path": "2/1629",
+        "telefono": "TRABAJO:  (809) 239-7979"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - VILLA MELLA",
+        "detail_path": "2/8272924",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C S R L -  LAS JACOBOS II",
+        "detail_path": "2/8276173",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - BOCA CHICA II",
+        "detail_path": "2/8282259",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA BEIRUT",
+        "detail_path": "2/8277415",
+        "telefono": "TRABAJO:  (809) 559-8606, CELULAR:  (809) 559-8736"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C S R L - KM17 1/2 DUARTE",
+        "detail_path": "2/8276172",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA CAROL - SAN CARLOS",
+        "detail_path": "2/246899467",
+        "telefono": "DIRECTO:  (809) 685-8024, CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMAHISPANA III",
+        "detail_path": "2/1591",
+        "telefono": "CELULAR:  (809) 860-2866, TRABAJO:  (809) 689-9692"
+    },
+    {
+        "nombre": "FARMACIA CAROL - BELLA VISTA",
+        "detail_path": "2/126329",
+        "telefono": "DIRECTO:  (809) 482-6324, CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMA XTRA - FARMACIA ADA",
+        "detail_path": "2/1623",
+        "telefono": "TRABAJO:  (809) 245-2221, DIRECTO:  (809) 681-2219, RESIDENCIA:  (809) 245-2120, TRABAJO:  (809) 684-1588"
+    },
+    {
+        "nombre": "FARMACIA RIMAC",
+        "detail_path": "2/8260966",
+        "telefono": "DIRECTO:  (809) 535-0202, CELULAR:  (809) 350-6893"
+    },
+    {
+        "nombre": "FARMACIA MIGUELINA",
+        "detail_path": "2/8261376",
+        "telefono": "DIRECTO:  (809) 684-6039"
+    },
+    {
+        "nombre": "FARMACIA MEDIKA INTERNACIONAL SUR",
+        "detail_path": "2/535194001",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA CAROL  -  SUPERMERCADO NACIONAL TIRADENTES",
+        "detail_path": "2/8261523",
+        "telefono": "DIRECTO:  (809) 412-2525"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - PIANTINI",
+        "detail_path": "2/563710301",
+        "telefono": "DIRECTO:  (809) 563-7103"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC -  BELLA VISTA",
+        "detail_path": "2/8262089",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SAN MARTIN",
+        "detail_path": "2/8262093",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS EL CONDE",
+        "detail_path": "2/8261998",
+        "telefono": "DIRECTO:  (809) 541-4848"
+    },
+    {
+        "nombre": "FARMACIA CAROL - CUESTA HERMOSA",
+        "detail_path": "2/8262021",
+        "telefono": "DIRECTO:  (809) 955-2828"
+    },
+    {
+        "nombre": "FARMACIA DILIA",
+        "detail_path": "2/8262251",
+        "telefono": "DIRECTO:  (809) 569-3414"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - INDEPENDENCIA",
+        "detail_path": "2/8272963",
+        "telefono": "DIRECTO:  (809) 255-4045"
+    },
+    {
+        "nombre": "FARMACIA ROSANNA",
+        "detail_path": "2/1689137",
+        "telefono": "TRABAJO:  (809) 532-3351, RESIDENCIA:  (809) 535-2520, CELULAR:  (809) 875-3334"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - LA CASTELLANA",
+        "detail_path": "2/8272962",
+        "telefono": "DIRECTO:  (809) 412-4230"
+    },
+    {
+        "nombre": "FARMA VALUE - EVARISTO MORALES",
+        "detail_path": "2/8275265",
+        "telefono": "TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMACIA TANIA -CARR. SANCHEZ",
+        "detail_path": "2/8275626",
+        "telefono": "TRABAJO:  (809) 532-0711"
+    },
+    {
+        "nombre": "FARMACIA VDG",
+        "detail_path": "2/8276087",
+        "telefono": "TRABAJO:  (809) 792-8880"
+    },
+    {
+        "nombre": "FARMACIA MIRELLY II",
+        "detail_path": "2/8276367",
+        "telefono": "LAB:  (809) 331-5460"
+    },
+    {
+        "nombre": "FARMAXTRA  ALICIA ITALIA",
+        "detail_path": "2/8276380",
+        "telefono": "TRABAJO:  (809) 532-3181"
+    },
+    {
+        "nombre": "FARMACIA VIP REPÚBLICA DE COLOMBIA",
+        "detail_path": "2/8276750",
+        "telefono": "CELULAR:  (809) 332-1580, LAB:  (809) 388-0002"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SOL PONIENTE",
+        "detail_path": "2/8272746",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC -- EVARISTO MORALES",
+        "detail_path": "2/8274893",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - DON BOSCO",
+        "detail_path": "2/8277378",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA LILIA PLAZA CONDESA",
+        "detail_path": "2/8278076",
+        "telefono": "TRABAJO:  (809) 224-3490, RESIDENCIA:  (809) 521-3725, CELULAR:  (829) 765-4759"
+    },
+    {
+        "nombre": "FARMACIA ROSANNA VI",
+        "detail_path": "2/8279488",
+        "telefono": "DIRECTO:  (809) 683-0583, LAB:  (809) 683-0583"
+    },
+    {
+        "nombre": "FARMA EXTRA EL MILLÓN 2",
+        "detail_path": "2/8279849",
+        "telefono": "LAB:  (809) 544-2592"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - SUPERMIX",
+        "detail_path": "2/8280816",
+        "telefono": "RESIDENCIA:  (809) 286-0121"
+    },
+    {
+        "nombre": "FARMACIA COSTA CARIBE",
+        "detail_path": "2/8280796",
+        "telefono": "TRABAJO:  (809) 533-5360, CELULAR:  (849) 650-5360"
+    },
+    {
+        "nombre": "FARMACIA JULIETA MORALES",
+        "detail_path": "2/8281404",
+        "telefono": "TRABAJO:  (809) 918-8218, RESIDENCIA:  (849) 642-1470"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - DAJABON",
+        "detail_path": "2/8280210",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA SAN RAFAEL SRL",
+        "detail_path": "2/8261235",
+        "telefono": "DIRECTO:  (809) 588-2520"
+    },
+    {
+        "nombre": "FARMACIA CAROL - PORVENIR",
+        "detail_path": "2/8275801",
+        "telefono": "TRABAJO:  (809) 563-6060"
+    },
+    {
+        "nombre": "FARMACIA SAN JUAN",
+        "detail_path": "2/8280753",
+        "telefono": "RESIDENCIA:  (809) 725-2438"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - SIRENA MOCA",
+        "detail_path": "2/8275022",
+        "telefono": "TRABAJO:  (809) 822-1100"
+    },
+    {
+        "nombre": "FARMACIA CANDELIER ROSARIO PLAZA CITY CENTER",
+        "detail_path": "2/8283323",
+        "telefono": "RESIDENCIA:  (809) 822-0100"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - SIRENA LA VEGA",
+        "detail_path": "2/8261867",
+        "telefono": "DIRECTO:  (809) 573-0000"
+    },
+    {
+        "nombre": "FARMACIA LA ARBOLEDA EIRL",
+        "detail_path": "2/8280701",
+        "telefono": "TRABAJO:  (809) 242-0088"
+    },
+    {
+        "nombre": "ECOFARMA - LA VEGA",
+        "detail_path": "2/8277392",
+        "telefono": "TRABAJO:  (809) 365-9595"
+    },
+    {
+        "nombre": "FARMACIA SAN ANTONIO",
+        "detail_path": "2/8260855",
+        "telefono": "DIRECTO:  (809) 525-3350, CELULAR:  (809) 415-4057"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC --- BONAO",
+        "detail_path": "2/8275273",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMA VALUE - PUERTO PLATA",
+        "detail_path": "2/8275235",
+        "telefono": "TRABAJO:  (809) 320-9030"
+    },
+    {
+        "nombre": "FARMACIA POPULAR IV PLAZA LA TURISTICA",
+        "detail_path": "2/8276113",
+        "telefono": "TRABAJO:  (809) 586-2679"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - PUERTO PLATA I",
+        "detail_path": "2/8280584",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - SUPERMERCADO EL PLAYERO",
+        "detail_path": "2/8281885",
+        "telefono": "TRABAJO:  (809) 338-3311"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SAMANA",
+        "detail_path": "2/8277876",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C - COTUI",
+        "detail_path": "2/8276176",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA CAROL - LA SIRENA DEL SOL",
+        "detail_path": "2/242416808",
+        "telefono": "DIRECTO:  (809) 338-7070"
+    },
+    {
+        "nombre": "FARMACIA LIDIA II",
+        "detail_path": "2/1418",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA YNA",
+        "detail_path": "2/1531",
+        "telefono": "DIRECTO:  (809) 575-1237"
+    },
+    {
+        "nombre": "FARMACIA SABANA IGLESIA",
+        "detail_path": "2/8260942",
+        "telefono": "DIRECTO:  (809) 587-0282, CELULAR:  (829) 383-7564, CELULAR:  (809) 881-9264"
+    },
+    {
+        "nombre": "FARMACIA LA VILLA",
+        "detail_path": "2/8262127",
+        "telefono": "DIRECTO:  (809) 971-1200, DIRECTO:  (809) 233-3573"
+    },
+    {
+        "nombre": "FARMACIA COROMINAS",
+        "detail_path": "2/1424",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMA VALUE - CERRROS DE GURABO",
+        "detail_path": "2/8273374",
+        "telefono": "DIRECTO:  (809) 289-1515, CELULAR:  (829) 656-4263"
+    },
+    {
+        "nombre": "FARMACIA CAROL - PLAZA MASTER",
+        "detail_path": "2/1018718651",
+        "telefono": "CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMACIA CAROL - EL EMBRUJO",
+        "detail_path": "2/8274213",
+        "telefono": "TRABAJO:  (809) 241-0000, RESIDENCIA:  (809) 241-0000"
+    },
+    {
+        "nombre": "SUPER FARMACIA SANTANA TAMBORIL",
+        "detail_path": "2/8275247",
+        "telefono": "TRABAJO:  (809) 570-9322, CELULAR:  (809) 769-9518"
+    },
+    {
+        "nombre": "FARMATRIX  - FARMAHORRO  REPUBLICA DE ARGENTINA",
+        "detail_path": "2/8276493",
+        "telefono": "LAB:  (809) 337-7777"
+    },
+    {
+        "nombre": "FARMATRIX - FARMAHORRO  CRISTO REY",
+        "detail_path": "2/8276498",
+        "telefono": "TRABAJO:  (809) 337-7777"
+    },
+    {
+        "nombre": "FARMATRIX  - FARMAHORRO III",
+        "detail_path": "2/8276488",
+        "telefono": "DIRECTO:  (809) 337-7777"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - AARON",
+        "detail_path": "2/8278736",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMATRIX BRAVO PONTEZUELA",
+        "detail_path": "2/8281517",
+        "telefono": "TRABAJO:  (809) 882-1845"
+    },
+    {
+        "nombre": "FARMACIA VILLA LUISA",
+        "detail_path": "2/8278783",
+        "telefono": "TRABAJO:  (809) 580-0069"
+    },
+    {
+        "nombre": "SUPER FARMACIA AIDA LICHINIA",
+        "detail_path": "2/8273653",
+        "telefono": "TRABAJO:  (809) 519-2105"
+    },
+    {
+        "nombre": "FARMACIA  ANANIAS",
+        "detail_path": "2/8273094",
+        "telefono": "DIRECTO:  (809) 580-2837"
+    },
+    {
+        "nombre": "FARMACIA LA LINEA",
+        "detail_path": "2/1526",
+        "telefono": "CELULAR:  (829) 259-5877"
+    },
+    {
+        "nombre": "FARMACIA MAIRENI",
+        "detail_path": "2/8261379",
+        "telefono": "DIRECTO:  (809) 590-2333"
+    },
+    {
+        "nombre": "FARMACIA BAVARO",
+        "detail_path": "2/1445",
+        "telefono": "DIRECTO:  (809) 552-1506, CELULAR:  (809) 284-6884"
+    },
+    {
+        "nombre": "FARMACIA LEVI",
+        "detail_path": "2/8276533",
+        "telefono": "TRABAJO:  (809) 258-0038, TRABAJO:  (809) 554-6090"
+    },
+    {
+        "nombre": "2B FARMA-HIGUEY II",
+        "detail_path": "2/8277342",
+        "telefono": "TRABAJO:  (809) 556-5000"
+    },
+    {
+        "nombre": "FARMA VALUE - FD21",
+        "detail_path": "2/8278726",
+        "telefono": "CELULAR:  (829) 848-3972, TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "2B FARMA - HIGUEY V",
+        "detail_path": "2/8282470",
+        "telefono": "TRABAJO:  (809) 813-5288"
+    },
+    {
+        "nombre": "FARMACIA CANEPA",
+        "detail_path": "2/1637",
+        "telefono": "DIRECTO:  (809) 552-3421"
+    },
+    {
+        "nombre": "2B FARMA - PLATA BELLA",
+        "detail_path": "2/8281131",
+        "telefono": "TRABAJO:  (809) 813-5288"
+    },
+    {
+        "nombre": "FARMACIA CAROL - MARINA CASA DE CAMPO",
+        "detail_path": "2/8279361",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "2B FARMA - BANCOLA",
+        "detail_path": "2/8282472",
+        "telefono": "TRABAJO:  (809) 813-5288"
+    },
+    {
+        "nombre": "FARMACIA MIRAMAR ZAGLUL",
+        "detail_path": "2/8276088",
+        "telefono": "DIRECTO:  (809) 529-3191, TRABAJO:  (809) 529-3277"
+    },
+    {
+        "nombre": "FARMACIA SOLIMAR",
+        "detail_path": "2/8280818",
+        "telefono": "TRABAJO:  (809) 339-7162"
+    },
+    {
+        "nombre": "FARMACIA ZELANDIA",
+        "detail_path": "2/8261746",
+        "telefono": "DIRECTO:  (809) 523-0721"
+    },
+    {
+        "nombre": "FARMACIA MIREYA EIRL",
+        "detail_path": "2/8282837",
+        "telefono": "TRABAJO:  (809) 558-4058"
+    },
+    {
+        "nombre": "FARMACIA LEMBERT II",
+        "detail_path": "2/8283598",
+        "telefono": "TRABAJO:  (809) 524-2294, RESIDENCIA:  (809) 524-3713"
+    },
+    {
+        "nombre": "FARMACIA MECAS",
+        "detail_path": "2/1662",
+        "telefono": "TRABAJO:  (809) 528-2530, CELULAR:  (809) 912-5211"
+    },
+    {
+        "nombre": "FARMACIA CRISTIANA - PUERTA DE HACIENDA",
+        "detail_path": "2/8276089",
+        "telefono": "TRABAJO:  (809) 528-7752"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - BRAVO SAN CRISTOBAL",
+        "detail_path": "2/8278942",
+        "telefono": "DIRECTO:  (809) 279-1011"
+    },
+    {
+        "nombre": "FARMACIA CRISTIANA -- SAOMY",
+        "detail_path": "2/8280756",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA CRISTO VIENE SRL",
+        "detail_path": "2/8279352",
+        "telefono": "DIRECTO:  (809) 957-2404, CELULAR:  (809) 869-1249"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - SAN ISIDRO",
+        "detail_path": "2/1625",
+        "telefono": "TRABAJO:  (809) 412-8488, DIRECTO:  (809) 699-6869"
+    },
+    {
+        "nombre": "FARMA XTRA - FARMACIA OLIM",
+        "detail_path": "2/8261377",
+        "telefono": "DIRECTO:  (809) 695-0090"
+    },
+    {
+        "nombre": "FARMACIA VIP ALMA ROSA",
+        "detail_path": "2/8262133",
+        "telefono": "DIRECTO:  (809) 594-1019, CELULAR:  (809) 594-1019"
+    },
+    {
+        "nombre": "FARMACIA ANA MILAGROS",
+        "detail_path": "2/8273145",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA LUZ DIVINA",
+        "detail_path": "2/1440",
+        "telefono": "DIRECTO:  (809) 599-5740, CELULAR:  (809) 224-1438"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LAS AMERICAS",
+        "detail_path": "2/8272920",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS -BRAVO OZAMA",
+        "detail_path": "2/8277143",
+        "telefono": "TRABAJO:  (809) 620-5050"
+    },
+    {
+        "nombre": "FARMACIA CAROL - HIPICA",
+        "detail_path": "2/8277272",
+        "telefono": "TRABAJO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMA OLE",
+        "detail_path": "2/8278317",
+        "telefono": "DIRECTO:  (829) 423-2222"
+    },
+    {
+        "nombre": "FARMACIA VIP MENDO LOS MINA",
+        "detail_path": "2/8278709",
+        "telefono": "LAB:  (829) 547-2376, DIRECTO:  (809) 234-4486"
+    },
+    {
+        "nombre": "FARMACIA VIP  ELISA",
+        "detail_path": "2/8273020",
+        "telefono": "CELULAR:  (809) 234-1614, DIRECTO:  (809) 596-2420"
+    },
+    {
+        "nombre": "FARMACIA VIP MENDO - SAN VICENTE",
+        "detail_path": "2/8279794",
+        "telefono": "TRABAJO:  (809) 234-0094, RESIDENCIA:  (809) 388-0002"
+    },
+    {
+        "nombre": "FARMA EXTRA - VILLA FARO",
+        "detail_path": "2/8281401",
+        "telefono": "RESIDENCIA:  (829) 850-3383, TRABAJO:  (809) 725-2141"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - ZONA FRANCA",
+        "detail_path": "2/8281571",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "PHARMAVIDA PAYF",
+        "detail_path": "2/8277558",
+        "telefono": "TRABAJO:  (809) 534-0825, CELULAR:  (809) 379-3399, DIRECTO:  (809) 872-8898"
+    },
+    {
+        "nombre": "FARMACIA VIP - LOS ALCARRIZOS",
+        "detail_path": "2/8282410",
+        "telefono": "TRABAJO:  (809) 820-0044"
+    },
+    {
+        "nombre": "FARMACIA VIP - BEISBOLISTA",
+        "detail_path": "2/8282463",
+        "telefono": "DIRECTO:  (809) 781-4720"
+    },
+    {
+        "nombre": "FARMACIA CAROL - PASEO 27 DE FEBRERO",
+        "detail_path": "2/8283887",
+        "telefono": "TRABAJO:  (809) 724-1516"
+    },
+    {
+        "nombre": "FARMACIA BUENA VISTA",
+        "detail_path": "2/1282902",
+        "telefono": "TRABAJO:  (809) 568-3323"
+    },
+    {
+        "nombre": "FARMACIA CANCINO II - LA VICTORIA",
+        "detail_path": "2/8278770",
+        "telefono": "TRABAJO:  (809) 350-1091"
+    },
+    {
+        "nombre": "FARMACIA YOIRA",
+        "detail_path": "2/1465",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR  GBC - BOCA CHICA",
+        "detail_path": "2/8282021",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MERCEDES ALTAGRACIA",
+        "detail_path": "2/1945061",
+        "telefono": "TRABAJO:  (809) 363-0004"
+    },
+    {
+        "nombre": "FARMACIA CAROL - 27 DE FEBRERO",
+        "detail_path": "2/245636060",
+        "telefono": "CELULAR:  (809) 318-0968, DIRECTO:  (809) 472-2685"
+    },
+    {
+        "nombre": "FARMACIA BAIK",
+        "detail_path": "2/1456",
+        "telefono": "DIRECTO:  (809) 535-4626"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - CHURCHILL",
+        "detail_path": "2/1626",
+        "telefono": "TRABAJO:  (809) 338-0992"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - AUTOPISTA DUARTE",
+        "detail_path": "2/1628",
+        "telefono": "TRABAJO:  (809) 616-7373"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - LA PLAZA",
+        "detail_path": "2/1630",
+        "telefono": "TRABAJO:  (809) 334-6262"
+    },
+    {
+        "nombre": "FARMACIA CAROL - DR. DELGADO",
+        "detail_path": "2/8261421",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS  - PLAZA LAMA MAXIMO GOMEZ",
+        "detail_path": "2/8261886",
+        "telefono": "DIRECTO:  (809) 238-7199, DIRECTO:  (809) 334-8889"
+    },
+    {
+        "nombre": "FARMACONAL-MEXICO",
+        "detail_path": "2/8261713",
+        "telefono": "DIRECTO:  (809) 381-0906"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS -  ARROYO HONDO",
+        "detail_path": "2/8262319",
+        "telefono": "DIRECTO:  (809) 541-4848, DIRECTO:  (809) 566-7993"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LA ESPERILLA",
+        "detail_path": "2/8272917",
+        "telefono": "DIRECTO:  (809) 636-0990"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - MIRAFLORES",
+        "detail_path": "2/686860401",
+        "telefono": "RESIDENCIA:  (809) 412-8488, DIRECTO:  (809) 686-8604"
+    },
+    {
+        "nombre": "FARMACIA CAROL - ARROYO HONDO",
+        "detail_path": "2/1546",
+        "telefono": "DIRECTO:  (809) 378-0808, CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC -  NACO",
+        "detail_path": "2/8262090",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "SUPER FARMACIA MACORIX",
+        "detail_path": "2/12410624",
+        "telefono": "DIRECTO:  (809) 535-4916, DIRECTO:  (809) 532-1226"
+    },
+    {
+        "nombre": "FARMACIA CAROL - PALACIO",
+        "detail_path": "2/871865",
+        "telefono": "CELULAR:  (809) 318-0968, TRABAJO:  (809) 685-0274"
+    },
+    {
+        "nombre": "FARMACIA CAROL - PLAZA ANDALUCIA",
+        "detail_path": "2/8260788",
+        "telefono": "DIRECTO:  (809) 563-6060, CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMACIA CAROL - BRAVO ESPERILLA",
+        "detail_path": "2/8276091",
+        "telefono": "TRABAJO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - BRAVO NUÑEZ",
+        "detail_path": "2/8276206",
+        "telefono": "TRABAJO:  (809) 227-5425"
+    },
+    {
+        "nombre": "FARMACIA VIP ENSANCHE ESPAILLAT",
+        "detail_path": "2/8276746",
+        "telefono": "CELULAR:  (809) 388-0002, LAB:  (809) 388-0002"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC -  ROMULO BETANCOURT",
+        "detail_path": "2/8262334",
+        "telefono": "DIRECTO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LUPERON",
+        "detail_path": "2/8276932",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LOS RIOS II",
+        "detail_path": "2/8277877",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMA OLE- LOS GIRASOLES",
+        "detail_path": "2/8278486",
+        "telefono": "TRABAJO:  (829) 423-2222"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - PASEO DEL PRADO",
+        "detail_path": "2/8281635",
+        "telefono": "DIRECTO:  (809) 541-4848"
+    },
+    {
+        "nombre": "FARMACIA VIP - JOSE CONTRERAS",
+        "detail_path": "2/8282402",
+        "telefono": "TRABAJO:  (809) 820-0044"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SUPER MERCADO N. ARROYO HONDO",
+        "detail_path": "2/8282526",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "MEGAPHARMA II",
+        "detail_path": "2/8283273",
+        "telefono": "TRABAJO:  (809) 908-1832"
+    },
+    {
+        "nombre": "FARMA VALUE - FD32 - MARIA AUXILIADORA",
+        "detail_path": "2/8283423",
+        "telefono": "DIRECTO:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C BAYAGUANA",
+        "detail_path": "2/8283717",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA CAROL - LA SIRENA SAN FRANCISCO",
+        "detail_path": "2/245883939",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA ANGELITA MARIA",
+        "detail_path": "2/8275456",
+        "telefono": "TRABAJO:  (809) 588-3260, DIRECTO:  (829) 977-3260"
+    },
+    {
+        "nombre": "FARMACIA NEOMEDICAL II",
+        "detail_path": "2/8276593",
+        "telefono": "TRABAJO:  (809) 588-0222, RESIDENCIA:  (809) 725-0222"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - SAN FRANCISCO",
+        "detail_path": "2/8277777",
+        "telefono": "TRABAJO:  (809) 573-0000"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - LA VEGA",
+        "detail_path": "2/8276850",
+        "telefono": "TRABAJO:  (809) 573-2281"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - HAMACA",
+        "detail_path": "2/8282257",
+        "telefono": "TRABAJO:  (809) 573-0000"
+    },
+    {
+        "nombre": "FARMACIA SAN MIGUEL",
+        "detail_path": "2/8260848",
+        "telefono": "DIRECTO:  (809) 574-6536, DIRECTO:  (809) 574-6969"
+    },
+    {
+        "nombre": "ECOFARMA - YERBA BUENA",
+        "detail_path": "2/8279961",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - CONSTANZA",
+        "detail_path": "2/8281029",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA RCM",
+        "detail_path": "2/8282803",
+        "telefono": "DIRECTO:  (849) 884-6615"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - NAGUA",
+        "detail_path": "2/8276933",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "SUPER FARMACIA ALONZO & M",
+        "detail_path": "2/8100341",
+        "telefono": "TRABAJO:  (809) 589-2376, CELULAR:  (849) 880-3106"
+    },
+    {
+        "nombre": "FARMACIA MSK IMBERT",
+        "detail_path": "2/1663",
+        "telefono": "DIRECTO:  (809) 571-7814, CELULAR:  (809) 763-7099"
+    },
+    {
+        "nombre": "FARMA VALUE - PUERTO PLATA",
+        "detail_path": "2/8275235",
+        "telefono": "TRABAJO:  (809) 320-9030"
+    },
+    {
+        "nombre": "FARMACIA POPULAR VII  PLAZA TROCHE",
+        "detail_path": "2/8276114",
+        "telefono": "TRABAJO:  (809) 586-2524"
+    },
+    {
+        "nombre": "FARMACIA POPULAR VI",
+        "detail_path": "2/8277547",
+        "telefono": "TRABAJO:  (809) 566-1515"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - CABARETE",
+        "detail_path": "2/8282140",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LAS TERRENAS",
+        "detail_path": "2/8283158",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "SUPER FARMACIA MADIGNA",
+        "detail_path": "2/1357",
+        "telefono": "DIRECTO:  (809) 575-2676, RESIDENCIA:  (809) 575-2900, TRABAJO:  (809) 575-2900, CELULAR:  (809) 710-3315"
+    },
+    {
+        "nombre": "FARMACIA JULISSA",
+        "detail_path": "2/1582",
+        "telefono": "TRABAJO:  (809) 329-0130"
+    },
+    {
+        "nombre": "FARMACIA EVELINA",
+        "detail_path": "2/1426",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA MILEDY - SANTIAGO",
+        "detail_path": "2/1621",
+        "telefono": "TRABAJO:  (809) 582-9099"
+    },
+    {
+        "nombre": "FARMACIA CAMEJO EIRL",
+        "detail_path": "2/8261129",
+        "telefono": "DIRECTO:  (809) 570-0805"
+    },
+    {
+        "nombre": "FARMACIA MILENIUM",
+        "detail_path": "2/8261163",
+        "telefono": "DIRECTO:  (809) 581-5943, CELULAR:  (829) 730-6566"
+    },
+    {
+        "nombre": "FARMACIA CAROL - COLINAS MALL",
+        "detail_path": "2/8261420",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA CAROL - BRAVO SANTIAGO",
+        "detail_path": "2/8261884",
+        "telefono": "DIRECTO:  (809) 955-2828"
+    },
+    {
+        "nombre": "FARMACIA DOÑA LUZ",
+        "detail_path": "2/2715046",
+        "telefono": "CELULAR:  (809) 481-0563, DIRECTO:  (809) 736-7254, TRABAJO:  (809) 736-7546"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - MADERA",
+        "detail_path": "2/8276670",
+        "telefono": "DIRECTO:  (829) 582-0000"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - SANTA LUCIA",
+        "detail_path": "2/8277778",
+        "telefono": "TRABAJO:  (809) 573-0000"
+    },
+    {
+        "nombre": "FARMACIA WALYX",
+        "detail_path": "2/8278719",
+        "telefono": "TRABAJO:  (809) 582-2166"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SANTIAGO III",
+        "detail_path": "2/8280934",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MSK - SANTIAGO",
+        "detail_path": "2/8282524",
+        "telefono": "TRABAJO:  (809) 581-2284"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - NAVARRETE",
+        "detail_path": "2/8281573",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA DIVINO NINO",
+        "detail_path": "2/8279077",
+        "telefono": "TRABAJO:  (809) 585-9129"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - MAO",
+        "detail_path": "2/8282690",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA SAN JUAN I",
+        "detail_path": "2/8261758",
+        "telefono": "DIRECTO:  (809) 596-2196"
+    },
+    {
+        "nombre": "FARMACIA 347",
+        "detail_path": "2/8275919",
+        "telefono": "TRABAJO:  (809) 501-1885"
+    },
+    {
+        "nombre": "FARMACIAMEDICANA",
+        "detail_path": "2/8276664",
+        "telefono": "DIRECTO:  (829) 850-5801, CELULAR:  (809) 469-8406"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - BAVARO II",
+        "detail_path": "2/8277224",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "2B FARMA-HIGUEY III",
+        "detail_path": "2/8277920",
+        "telefono": "TRABAJO:  (809) 813-5288, CELULAR:  (809) 318-6664"
+    },
+    {
+        "nombre": "2B FARMA - HIGUEY IV",
+        "detail_path": "2/8279056",
+        "telefono": "DIRECTO:  (809) 556-5000"
+    },
+    {
+        "nombre": "2B FARMA - FRIUSA - BAVARO",
+        "detail_path": "2/8280797",
+        "telefono": "TRABAJO:  (809) 813-5288"
+    },
+    {
+        "nombre": "FARMA EXTRA - VERON",
+        "detail_path": "2/8282841",
+        "telefono": "TRABAJO:  (829) 448-0654"
+    },
+    {
+        "nombre": "2B FARMA (BAVARO I)",
+        "detail_path": "2/8277563",
+        "telefono": "TRABAJO:  (809) 813-5288"
+    },
+    {
+        "nombre": "2B FARMA II",
+        "detail_path": "2/8273604",
+        "telefono": "DIRECTO:  (809) 813-5288"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC---LA ROMANA II",
+        "detail_path": "2/8274711",
+        "telefono": "TRABAJO:  (809) 363-0990, CELULAR:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC -- ROMANA I",
+        "detail_path": "2/8275237",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA SAN ANTONIO",
+        "detail_path": "2/1495",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA LIFERPA",
+        "detail_path": "2/8273014",
+        "telefono": "DIRECTO:  (809) 529-5075"
+    },
+    {
+        "nombre": "FARMACIA HNOS. RAMIREZ GARCIA",
+        "detail_path": "2/1544",
+        "telefono": "DIRECTO:  (809) 529-6686"
+    },
+    {
+        "nombre": "FARMACIA CAROL - JUAN DOLIO",
+        "detail_path": "2/1674",
+        "telefono": "DIRECTO:  (809) 526-3031, CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - OCOA II",
+        "detail_path": "2/8283427",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA DARIELA CRISTINA",
+        "detail_path": "2/16016183",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA  LEMBERT",
+        "detail_path": "2/1861861",
+        "telefono": "TRABAJO:  (809) 524-2294"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - MELLA",
+        "detail_path": "2/8282689",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "DIONICIO FARMAC",
+        "detail_path": "2/8273413",
+        "telefono": "DIRECTO:  (809) 408-5180, CELULAR:  (849) 621-6750, DIRECTO:  (809) 434-6093"
+    },
+    {
+        "nombre": "CONSTITUCION I ANTIGUA FARMACIA SANTA ANA",
+        "detail_path": "2/8276115",
+        "telefono": "TRABAJO:  (809) 528-3279"
+    },
+    {
+        "nombre": "FARMACIA CRISTIANA - PADRE AYALAS",
+        "detail_path": "2/8280585",
+        "telefono": "TRABAJO:  (809) 528-7100"
+    },
+    {
+        "nombre": "FARMA OLE - HAINA",
+        "detail_path": "2/8279597",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA CAROL - SAN JUAN DE LA MAGUANA",
+        "detail_path": "2/8279475",
+        "telefono": "DIRECTO:  (809) 563-6060, RESIDENCIA:  (809) 563-6060"
+    },
+    {
+        "nombre": "FARMACIA LAURA CALDERON Y ASOCIADOS SRL",
+        "detail_path": "2/8281307",
+        "telefono": "TRABAJO:  (809) 557-2385"
+    },
+    {
+        "nombre": "FARMACIA POPULAR II",
+        "detail_path": "2/8261762",
+        "telefono": "DIRECTO:  (809) 586-2524"
+    },
+    {
+        "nombre": "FARMACIA CAROL - JUMBO MELLA",
+        "detail_path": "2/8262327",
+        "telefono": "DIRECTO:  (809) 985-5205"
+    },
+    {
+        "nombre": "FARMACIA CAROL - LA SIRENA CHARLES DE GAULLE",
+        "detail_path": "2/244832599",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA VIP VENEZUELA",
+        "detail_path": "2/8273611",
+        "telefono": "DIRECTO:  (809) 332-0131"
+    },
+    {
+        "nombre": "FARMA VALUE - ALMA ROSA",
+        "detail_path": "2/8275216",
+        "telefono": "TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS -SABANA LARGA",
+        "detail_path": "2/8275859",
+        "telefono": "TRABAJO:  (809) 620-5050"
+    },
+    {
+        "nombre": "FARMACIA MAXIM",
+        "detail_path": "2/8276362",
+        "telefono": "RESIDENCIA:  (809) 592-2037, LAB:  (809) 592-6837"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - ALMA ROSA",
+        "detail_path": "2/8277381",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA VIP SAN ISIDRO II",
+        "detail_path": "2/8276916",
+        "telefono": "LAB:  (809) 547-8331"
+    },
+    {
+        "nombre": "FARMACIA VIP SAN ISIDRO",
+        "detail_path": "2/8272741",
+        "telefono": "DIRECTO:  (809) 234-2124"
+    },
+    {
+        "nombre": "2B FARMA - SANTO DOMINGO",
+        "detail_path": "2/8279055",
+        "telefono": "TRABAJO:  (809) 556-5000"
+    },
+    {
+        "nombre": "FARMA VALUE - FD27 VILLA MELLA",
+        "detail_path": "2/8280817",
+        "telefono": "TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMACIA NIN SRL",
+        "detail_path": "2/8281150",
+        "telefono": "TRABAJO:  (829) 669-0777"
+    },
+    {
+        "nombre": "FARMACIA VIP - CARRETERA MELLA II",
+        "detail_path": "2/8282408",
+        "telefono": "TRABAJO:  (809) 820-0044"
+    },
+    {
+        "nombre": "FARMA VALUE - LA ISABELITA",
+        "detail_path": "2/8285075",
+        "telefono": "TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - PLAZA LAMA HERRERA",
+        "detail_path": "2/8261495",
+        "telefono": "DIRECTO:  (809) 620-9055"
+    },
+    {
+        "nombre": "FARMACIA CAROL - PATIO DE COLOMBIA",
+        "detail_path": "2/8273351",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC -  HERRERA",
+        "detail_path": "2/8272743",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - ALAMEDA",
+        "detail_path": "2/8278321",
+        "telefono": "DIRECTO:  (809) 363-0990, DIRECTO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA YUDELKA",
+        "detail_path": "2/8282263",
+        "telefono": "TRABAJO:  (809) 537-2764"
+    },
+    {
+        "nombre": "FARMACIA VIP - PANTOJA",
+        "detail_path": "2/8282412",
+        "telefono": "TRABAJO:  (809) 820-0044"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C - ENRIQUILLO HERRERA",
+        "detail_path": "2/8284222",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMA VALUE - LOS ALCARRIZOS",
+        "detail_path": "2/8285079",
+        "telefono": "TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMACIA CAROL - VILLA MELLA",
+        "detail_path": "2/101871865",
+        "telefono": "CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMACIA MEDARDA",
+        "detail_path": "2/8261607",
+        "telefono": "CELULAR:  (809) 977-3327, CELULAR:  (829) 804-3707, DIRECTO:  (809) 222-7235"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - OLE VILLA MELLA",
+        "detail_path": "2/8262054",
+        "telefono": "DIRECTO:  (809) 541-4848"
+    },
+    {
+        "nombre": "FARMACIA YANI MARIA",
+        "detail_path": "2/8272558",
+        "telefono": "DIRECTO:  (809) 797-7084, CELULAR:  (809) 212-1660"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C - VILLA MELLA II",
+        "detail_path": "2/8276175",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA VIP - SABANA PERDIDA II",
+        "detail_path": "2/8282465",
+        "telefono": "DIRECTO:  (809) 590-5540"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - JACOBO IV",
+        "detail_path": "2/8283005",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA BOCA CHICA",
+        "detail_path": "2/1482",
+        "telefono": "DIRECTO:  (809) 523-4708, CELULAR:  (829) 960-2552"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LOS ALCARRIZOS II",
+        "detail_path": "2/8281022",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - PANTOJA II",
+        "detail_path": "2/8281304",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA CAROL - LOPE DE VEGA",
+        "detail_path": "2/245416767",
+        "telefono": "DIRECTO:  (809) 541-6767, CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMACIA CAROL - MAXIMO GOMEZ",
+        "detail_path": "2/246826254",
+        "telefono": "TRABAJO:  (809) 682-6254, CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS I - NACO",
+        "detail_path": "2/242265444",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS  - PLAZA LAMA DUARTE",
+        "detail_path": "2/8261829",
+        "telefono": "DIRECTO:  (809) 685-1000"
+    },
+    {
+        "nombre": "FARMACIA CAROL - REPUBLICA DE COLOMBIA",
+        "detail_path": "2/8262325",
+        "telefono": "DIRECTO:  (809) 807-8201"
+    },
+    {
+        "nombre": "FARMA VALUE - CRISTO REY",
+        "detail_path": "2/8262507",
+        "telefono": "DIRECTO:  (809) 565-1515, CELULAR:  (829) 222-8535, CELULAR:  (809) 434-8427"
+    },
+    {
+        "nombre": "FARMACIA CAROL - ENRIQUILLO",
+        "detail_path": "2/1608",
+        "telefono": "CELULAR:  (809) 318-0968, TRABAJO:  (809) 482-4040"
+    },
+    {
+        "nombre": "FARMACIA FINA",
+        "detail_path": "2/8261378",
+        "telefono": "DIRECTO:  (809) 564-2642"
+    },
+    {
+        "nombre": "FARMACIA CAROL - SAN JUDAS TADEO",
+        "detail_path": "2/685816501",
+        "telefono": "CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMACIA SAN RAFAEL- THASULIJ",
+        "detail_path": "2/8274352",
+        "telefono": "TRABAJO:  (809) 565-5112"
+    },
+    {
+        "nombre": "FARMACIA CAROL - LAS FLORES",
+        "detail_path": "2/8274712",
+        "telefono": "TRABAJO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - PLAZA APREZIO",
+        "detail_path": "2/8276111",
+        "telefono": "TRABAJO:  (809) 620-5050, DIRECTO:  (809) 602-2425"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - OVANDO",
+        "detail_path": "2/8272919",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - ARROYO HONDO II",
+        "detail_path": "2/8277379",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - PLAZA BOHEMIA",
+        "detail_path": "2/8277380",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA VIP ARROYO HONDO",
+        "detail_path": "2/8272594",
+        "telefono": "DIRECTO:  (809) 683-6878, CELULAR:  (809) 916-1622"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - NACO II",
+        "detail_path": "2/8279353",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA LILIA GAZCUE",
+        "detail_path": "2/8279789",
+        "telefono": "CELULAR:  (829) 765-4759, TRABAJO:  (809) 224-3490"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - MEJORAMIENTO SOCIAL",
+        "detail_path": "2/8280583",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - ZONA UNIVERSITARIA II",
+        "detail_path": "2/8281719",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SAN FRANCISCO DE MACORIS II",
+        "detail_path": "2/8282262",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA VARGAS SANCHEZ SRL",
+        "detail_path": "2/8280886",
+        "telefono": "TRABAJO:  (809) 706-3031, RESIDENCIA:  (809) 679-0350"
+    },
+    {
+        "nombre": "FARMACIA NARALY",
+        "detail_path": "2/8262328",
+        "telefono": "CELULAR:  (809) 710-7936, DIRECTO:  (809) 578-5555, DIRECTO:  (809) 578-5182"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - SAN JOSE",
+        "detail_path": "2/8261866",
+        "telefono": "DIRECTO:  (809) 573-0000"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LA VEGA III",
+        "detail_path": "2/8283153",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - CONFLUENCIA",
+        "detail_path": "2/8282255",
+        "telefono": "TRABAJO:  (809) 573-0000"
+    },
+    {
+        "nombre": "BLANCOFARMAX",
+        "detail_path": "2/8283882",
+        "telefono": "TRABAJO:  (809) 870-4775"
+    },
+    {
+        "nombre": "FARMACIA NAYARIT III",
+        "detail_path": "2/8281028",
+        "telefono": "TRABAJO:  (809) 445-5275"
+    },
+    {
+        "nombre": "FARMACIA MIRIAN INMACULADA",
+        "detail_path": "2/8279031",
+        "telefono": "DIRECTO:  (809) 585-3542, CELULAR:  (809) 585-2332"
+    },
+    {
+        "nombre": "FARMACIA MONUMENTAL",
+        "detail_path": "2/245811493",
+        "telefono": "TRABAJO:  (809) 581-4303, CELULAR:  (809) 224-1418"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - 27 DE FEBRERO (SANTIAGO)",
+        "detail_path": "2/8261499",
+        "telefono": "DIRECTO:  (809) 276-8444"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - SIRENA ESTRELLA SADHALA",
+        "detail_path": "2/8262058",
+        "telefono": "DIRECTO:  (809) 612-1829, DIRECTO:  (809) 295-2093"
+    },
+    {
+        "nombre": "SUPER FARMACIA NAVARRETE",
+        "detail_path": "2/8262080",
+        "telefono": "DIRECTO:  (809) 585-5871, CELULAR:  (809) 585-5171"
+    },
+    {
+        "nombre": "SUPER FARMACIA RACHELLE",
+        "detail_path": "2/8273130",
+        "telefono": "DIRECTO:  (809) 734-0252, CELULAR:  (809) 978-1581, CELULAR:  (829) 380-8115"
+    },
+    {
+        "nombre": "FARMACIA CAROL  -  VILLA OLGA",
+        "detail_path": "2/8262018",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA EL SOL -  BAITOA",
+        "detail_path": "2/8277996",
+        "telefono": "TRABAJO:  (809) 573-0000"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - VICTORIA",
+        "detail_path": "2/8278733",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SANTIAGO V",
+        "detail_path": "2/8280582",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MIVELBA SRL",
+        "detail_path": "2/8282588",
+        "telefono": "TRABAJO:  (809) 575-0930"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - ESMERALDA",
+        "detail_path": "2/8283152",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "SUPER FARMACIA DIANABELL",
+        "detail_path": "2/8284050",
+        "telefono": "TRABAJO:  (829) 722-7137, DIRECTO:  (829) 656-5866, CELULAR:  (829) 682-6354"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - EL NUEVE",
+        "detail_path": "2/8280140",
+        "telefono": "RESIDENCIA:  (809) 582-0000"
+    },
+    {
+        "nombre": "FARMACIA FRANKLIN PAULINO",
+        "detail_path": "2/8282335",
+        "telefono": "RESIDENCIA:  (809) 580-7058"
+    },
+    {
+        "nombre": "FARMACIA MONCION",
+        "detail_path": "2/8261570",
+        "telefono": "DIRECTO:  (809) 579-0788, CELULAR:  (829) 221-4888"
+    },
+    {
+        "nombre": "FARMACIA  ANANIAS - VILLA LOS ALMACIGOS",
+        "detail_path": "2/8282340",
+        "telefono": "TRABAJO:  (809) 580-2837"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C VALVERDE MAO II",
+        "detail_path": "2/8283328",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA AMADO MELO - HIGUEY",
+        "detail_path": "2/119302",
+        "telefono": "CELULAR:  (809) 284-2360, DIRECTO:  (809) 554-5410, DIRECTO:  (809) 552-0984, TRABAJO:  (809) 554-2360"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC-  BAVARO",
+        "detail_path": "2/8273689",
+        "telefono": "LAB:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA CAROL - VERON CENTER",
+        "detail_path": "2/8280231",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - PLAZA LAMA ROMANA",
+        "detail_path": "2/8261497",
+        "telefono": "DIRECTO:  (809) 349-0049"
+    },
+    {
+        "nombre": "FARMA VALUE - FD- 26 LA ROMANA",
+        "detail_path": "2/8280587",
+        "telefono": "TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "2B FARMA - VILLA HERMOSA I",
+        "detail_path": "2/8279640",
+        "telefono": "DIRECTO:  (809) 556-5000"
+    },
+    {
+        "nombre": "2B FARMA - REPARTO TORRES",
+        "detail_path": "2/8282842",
+        "telefono": "TRABAJO:  (809) 813-5288"
+    },
+    {
+        "nombre": "2B FARMA-RESIDENCIAL ROMANA",
+        "detail_path": "2/8276953",
+        "telefono": "TRABAJO:  (809) 556-5000, CELULAR:  (809) 318-6664"
+    },
+    {
+        "nombre": "FARMACIA ZAGLUL - CONSUELO",
+        "detail_path": "2/8276690",
+        "telefono": "TRABAJO:  (809) 529-3277"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS -LAMA AZUA",
+        "detail_path": "2/8282304",
+        "telefono": "DIRECTO:  (809) 620-5050, DIRECTO:  (829) 250-4891"
+    },
+    {
+        "nombre": "FARMA OLE (AZUA)",
+        "detail_path": "2/8285085",
+        "telefono": "TRABAJO:  (829) 423-2222"
+    },
+    {
+        "nombre": "FARMACIA CLAUDIO SANCHEZ",
+        "detail_path": "2/8281979",
+        "telefono": "TRABAJO:  (809) 521-9459, CELULAR:  (809) 729-3737"
+    },
+    {
+        "nombre": "FARMACIA ORQUI",
+        "detail_path": "2/8277414",
+        "telefono": "TRABAJO:  (809) 527-3657"
+    },
+    {
+        "nombre": "FARMACIA MENDEZ",
+        "detail_path": "2/1170153",
+        "telefono": "TRABAJO:  (809) 524-5281, CELULAR:  (809) 399-5281, DIRECTO:  (809) 524-2318"
+    },
+    {
+        "nombre": "GOR ADOLLY FARMACIA SRL",
+        "detail_path": "2/8277048",
+        "telefono": "TRABAJO:  (809) 876-4498, DIRECTO:  (829) 822-2201"
+    },
+    {
+        "nombre": "FARMACIA LAS 3 ROSAS",
+        "detail_path": "2/8284866",
+        "telefono": "TRABAJO:  (809) 522-4423"
+    },
+    {
+        "nombre": "FARMACIA SANDRA",
+        "detail_path": "2/1439",
+        "telefono": "DIRECTO:  (809) 527-8282, CELULAR:  (809) 330-1232"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SAN CRISTOBAL",
+        "detail_path": "2/8279169",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMA VALUE -- FD25",
+        "detail_path": "2/8279167",
+        "telefono": "TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "DIONICIO FARMAC - SUPERMERCADO INES",
+        "detail_path": "2/8284238",
+        "telefono": "TRABAJO:  (809) 279-8915"
+    },
+    {
+        "nombre": "FARMACIA CRISTIANA - VILLA ELISA",
+        "detail_path": "2/8273605",
+        "telefono": "DIRECTO:  (809) 528-3323, DIRECTO:  (809) 528-7752"
+    },
+    {
+        "nombre": "FARMA JVAL SRL HAINA-SAN CRISTOBAL",
+        "detail_path": "2/8284864",
+        "telefono": "TRABAJO:  (809) 237-0040, CELULAR:  (809) 862-2007"
+    },
+    {
+        "nombre": "FARMACIA IGUAMED",
+        "detail_path": "2/1414",
+        "telefono": "DIRECTO:  (809) 557-1874"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SAN JUAN",
+        "detail_path": "2/8275362",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA ESTRELLLA BAVARO",
+        "detail_path": "2/1455",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA DINORAH",
+        "detail_path": "2/8262337",
+        "telefono": "DIRECTO:  (809) 556-3231, DIRECTO:  (809) 556-2431"
+    },
+    {
+        "nombre": "SUPER FARMACIA IRINA",
+        "detail_path": "2/8261553",
+        "telefono": "DIRECTO:  (809) 594-4444"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - SUPER LAMA SAN ISIDRO",
+        "detail_path": "2/8261985",
+        "telefono": "DIRECTO:  (809) 541-4848"
+    },
+    {
+        "nombre": "FARMACIA VIP RIVERA DEL OZAMA",
+        "detail_path": "2/8273612",
+        "telefono": "DIRECTO:  (809) 699-2709"
+    },
+    {
+        "nombre": "FARMACIA LARIMAR III",
+        "detail_path": "2/8273614",
+        "telefono": "DIRECTO:  (809) 695-6633, DIRECTO:  (809) 695-6883"
+    },
+    {
+        "nombre": "FARMACIA EUROPA LUCERNA",
+        "detail_path": "2/8262249",
+        "telefono": "DIRECTO:  (809) 483-0012"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC- VILLA FARO",
+        "detail_path": "2/8274194",
+        "telefono": "CELULAR:  (849) 352-0331, TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MICHELLE DIAZ",
+        "detail_path": "2/8275432",
+        "telefono": "TRABAJO:  (809) 592-2030"
+    },
+    {
+        "nombre": "FARMACIA CAROL - CUADRA SAN ISIDRO",
+        "detail_path": "2/8275985",
+        "telefono": "TRABAJO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA LAS EMERGENCIAS",
+        "detail_path": "2/8276364",
+        "telefono": "LAB:  (809) 788-0911"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SABANA LARGA",
+        "detail_path": "2/8272742",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - CHARLES DE GAULLE",
+        "detail_path": "2/8272922",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MAYREM",
+        "detail_path": "2/8277589",
+        "telefono": "CELULAR:  (829) 894-3594, TRABAJO:  (809) 594-7729"
+    },
+    {
+        "nombre": "FARMACIA KAREN PAOLA",
+        "detail_path": "2/8278361",
+        "telefono": "TRABAJO:  (809) 594-3634"
+    },
+    {
+        "nombre": "FARMACIA VIP - SAN VICENTE II",
+        "detail_path": "2/8282411",
+        "telefono": "TRABAJO:  (809) 820-0044"
+    },
+    {
+        "nombre": "SUPER FARMACIA FELICIDAD",
+        "detail_path": "2/8260741",
+        "telefono": "DIRECTO:  (809) 564-0024"
+    },
+    {
+        "nombre": "FARMACIA CAROL - PLAZA DUARTE",
+        "detail_path": "2/243720675",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - LAS CAOBAS",
+        "detail_path": "2/8261484",
+        "telefono": "DIRECTO:  (809) 412-7818"
+    },
+    {
+        "nombre": "FARMACIA SAN RAFAEL - METRO",
+        "detail_path": "2/8262057",
+        "telefono": "DIRECTO:  (809) 588-2520"
+    },
+    {
+        "nombre": "FARMA VALUE - PALMAS DE HERRERA",
+        "detail_path": "2/8275218",
+        "telefono": "TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMA XTRA - FARMACIA CARMEN ROSA",
+        "detail_path": "2/8276363",
+        "telefono": "LAB:  (809) 560-5866"
+    },
+    {
+        "nombre": "FARMATRIX BARRIO DUARTE",
+        "detail_path": "2/8276722",
+        "telefono": "DIRECTO:  (809) 560-9190"
+    },
+    {
+        "nombre": "FARMACIA DILIA",
+        "detail_path": "2/8262251",
+        "telefono": "DIRECTO:  (809) 569-3414"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LAS JACOBO",
+        "detail_path": "2/8274195",
+        "telefono": "CELULAR:  (809) 608-1227, TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - BRAVO JACOBO MAJLUTA",
+        "detail_path": "2/8278760",
+        "telefono": "LAB:  (809) 262-5418"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - VILLA MELLA III",
+        "detail_path": "2/8281720",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA YANIRKA",
+        "detail_path": "2/8281713",
+        "telefono": "TRABAJO:  (829) 590-5398"
+    },
+    {
+        "nombre": "FARMACIA CAROL - NUÑEZ DE CACERES",
+        "detail_path": "2/101814675",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA CAROL - SUPERMERCADO NACIONAL 27 DE FEBRERO",
+        "detail_path": "2/245651511",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA CAROL - POLA SARASOTA",
+        "detail_path": "2/245359456",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA YAMILA",
+        "detail_path": "2/1611",
+        "telefono": "DIRECTO:  (809) 922-8668, TRABAJO:  (809) 922-9222"
+    },
+    {
+        "nombre": "FARMAHISPANA",
+        "detail_path": "2/13030202",
+        "telefono": "DIRECTO:  (809) 682-0555, TRABAJO:  (809) 682-0550, CELULAR:  (809) 860-2866"
+    },
+    {
+        "nombre": "FARMACIA GRACE",
+        "detail_path": "2/1665",
+        "telefono": "TRABAJO:  (809) 566-7056, CELULAR:  (809) 449-1333"
+    },
+    {
+        "nombre": "FARMACIA ROSANNA III",
+        "detail_path": "2/8260939",
+        "telefono": "DIRECTO:  (809) 620-2525"
+    },
+    {
+        "nombre": "FARMASIL, C POR A",
+        "detail_path": "2/8261114",
+        "telefono": "DIRECTO:  (809) 549-7979, DIRECTO:  (809) 540-5980"
+    },
+    {
+        "nombre": "FARMACIA CAROL - JUMBO LUPERON",
+        "detail_path": "2/8261422",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA CAROL - LA SIRENA JOSE CONTRERAS",
+        "detail_path": "2/8261482",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA CAROL  -  AGORA MALL",
+        "detail_path": "2/8261524",
+        "telefono": "DIRECTO:  (809) 985-5201"
+    },
+    {
+        "nombre": "FARMACIA CAROL - PHARMACY CENTER",
+        "detail_path": "2/565062701",
+        "telefono": "TRABAJO:  (809) 565-0627, CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LAS PRADERAS",
+        "detail_path": "2/8262095",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA DEL PARQUE",
+        "detail_path": "2/8262126",
+        "telefono": "DIRECTO:  (809) 227-7555"
+    },
+    {
+        "nombre": "FARMACIA MEDIKA INTERNACIONAL NORTE",
+        "detail_path": "2/8260832",
+        "telefono": "DIRECTO:  (809) 549-4771"
+    },
+    {
+        "nombre": "FARMACIA CAROL - MIRADOR DE ARROYO HONDO",
+        "detail_path": "2/244722335",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA CAROL - NACO",
+        "detail_path": "2/245626767",
+        "telefono": "TRABAJO:  (809) 565-4906, CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMACIA SANTANA",
+        "detail_path": "2/8261103",
+        "telefono": "DIRECTO:  (809) 682-6737, RESIDENCIA:  (809) 238-8432"
+    },
+    {
+        "nombre": "FARMACIA JOSE NEPO",
+        "detail_path": "2/1610",
+        "telefono": "DIRECTO:  (809) 518-2119, TRABAJO:  (809) 530-0707"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - QUISQUEYA",
+        "detail_path": "2/8261549",
+        "telefono": "DIRECTO:  (809) 566-6555"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - ARROYO HONDO",
+        "detail_path": "2/8262092",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMA VALUE - LOS RESTAURADORES",
+        "detail_path": "2/8275220",
+        "telefono": "TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMACIA VIP EL MILLON",
+        "detail_path": "2/8275422",
+        "telefono": "CELULAR:  (809) 537-0402, TRABAJO:  (809) 537-0390"
+    },
+    {
+        "nombre": "FARMAXTRA TIRADENTES",
+        "detail_path": "2/8276361",
+        "telefono": "LAB:  (809) 565-1293"
+    },
+    {
+        "nombre": "FARMACIA VIP CRISTO REY",
+        "detail_path": "2/8276728",
+        "telefono": "CELULAR:  (809) 705-5910, LAB:  (809) 388-0002"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LOS PROCERES",
+        "detail_path": "2/8272923",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMA VALUE - FD24 ARROYO HONDO 2",
+        "detail_path": "2/8277974",
+        "telefono": "TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SUPER MERCADOS NACIONAL",
+        "detail_path": "2/8280005",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMA OLE - INDEPENDENCIA",
+        "detail_path": "2/8280236",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMA EXTRA - MIRADOR NORTE",
+        "detail_path": "2/8281402",
+        "telefono": "TRABAJO:  (809) 725-2141"
+    },
+    {
+        "nombre": "FARMA EXTRA - RENACIMIENTO II",
+        "detail_path": "2/8281403",
+        "telefono": "RESIDENCIA:  (809) 725-2141"
+    },
+    {
+        "nombre": "FARMACIA VIP - 24 DE ABRIL",
+        "detail_path": "2/8282464",
+        "telefono": "DIRECTO:  (829) 547-3370"
+    },
+    {
+        "nombre": "FARMACIA LILIA - ORTEGA Y GASSET",
+        "detail_path": "2/8282685",
+        "telefono": "CELULAR:  (829) 938-8230"
+    },
+    {
+        "nombre": "FARMACIA VIP MENDO - MONTE PLATA",
+        "detail_path": "2/8280279",
+        "telefono": "TRABAJO:  (809) 388-0512, CELULAR:  (809) 388-0512"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - MONTE PLATA II",
+        "detail_path": "2/8282258",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - TENARES",
+        "detail_path": "2/8276655",
+        "telefono": "RESIDENCIA:  (809) 475-4444, CELULAR:  (829) 659-5981"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - CENOVI",
+        "detail_path": "2/8283883",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA CAROL - MOCA",
+        "detail_path": "2/8261754",
+        "telefono": "DIRECTO:  (809) 307-8496, DIRECTO:  (809) 578-2662"
+    },
+    {
+        "nombre": "FARMACIA SAN MIGUEL VIII",
+        "detail_path": "2/8279217",
+        "telefono": "TRABAJO:  (809) 574-6639"
+    },
+    {
+        "nombre": "FARMACIA SOL",
+        "detail_path": "2/8281806",
+        "telefono": "TRABAJO:  (809) 242-4115, RESIDENCIA:  (809) 277-6909"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - CONCEPCION",
+        "detail_path": "2/8282254",
+        "telefono": "TRABAJO:  (809) 573-0000"
+    },
+    {
+        "nombre": "SUPER FARMACIA INDEPENDENCIA",
+        "detail_path": "2/3031552",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "ECOFARMA - BUENA VISTA",
+        "detail_path": "2/8277391",
+        "telefono": "TRABAJO:  (809) 365-9595"
+    },
+    {
+        "nombre": "FARMACIA ROSARIO JIMA",
+        "detail_path": "2/8282804",
+        "telefono": "TRABAJO:  (829) 559-0157"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - SIRENA BONAO",
+        "detail_path": "2/8261882",
+        "telefono": "DIRECTO:  (809) 573-0000"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - LAMA BONAO",
+        "detail_path": "2/8276032",
+        "telefono": "TRABAJO:  (809) 620-5050"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C BONAO II",
+        "detail_path": "2/8283327",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA T & J",
+        "detail_path": "2/8276909",
+        "telefono": "DIRECTO:  (829) 452-1570"
+    },
+    {
+        "nombre": "SUPER FARMACIA CENTRO",
+        "detail_path": "2/37025",
+        "telefono": "TRABAJO:  (809) 586-8821, CELULAR:  (809) 399-7376"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - PUERTO PLATA",
+        "detail_path": "2/8279606",
+        "telefono": "DIRECTO:  (809) 320-7434"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - PUERTO PLATA V",
+        "detail_path": "2/8282260",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MSK - MAMEY",
+        "detail_path": "2/8282530",
+        "telefono": "TRABAJO:  (809) 581-2284"
+    },
+    {
+        "nombre": "FARMACIA MONTELLANO",
+        "detail_path": "2/8282303",
+        "telefono": "TRABAJO:  (809) 574-0536"
+    },
+    {
+        "nombre": "FARMACIA CAROL - SAMANA",
+        "detail_path": "2/8261885",
+        "telefono": "DIRECTO:  (809) 563-6060, DIRECTO:  (809) 955-2828"
+    },
+    {
+        "nombre": "FARMACIA DAVJOEL TRAVELS MULTISERVICE",
+        "detail_path": "2/8285086",
+        "telefono": "TRABAJO:  (829) 850-3007"
+    },
+    {
+        "nombre": "FARMACIA RUT MARTINEZ",
+        "detail_path": "2/8282462",
+        "telefono": "TRABAJO:  (809) 574-1111"
+    },
+    {
+        "nombre": "FARMACIA DANNY",
+        "detail_path": "2/1678",
+        "telefono": "DIRECTO:  (809) 585-5266, CELULAR:  (829) 576-8329"
+    },
+    {
+        "nombre": "FARMACIA GURABO",
+        "detail_path": "2/8272277",
+        "telefono": "DIRECTO:  (809) 736-7646, DIRECTO:  (809) 736-7558, CELULAR:  (809) 757-0429"
+    },
+    {
+        "nombre": "FARMACIA MARIAM",
+        "detail_path": "2/1475",
+        "telefono": "DIRECTO:  (809) 537-3404"
+    },
+    {
+        "nombre": "SUPER FARMACIA NACIONAL DE SANTIAGO",
+        "detail_path": "2/8272372",
+        "telefono": "DIRECTO:  (809) 247-4906, DIRECTO:  (809) 582-2779"
+    },
+    {
+        "nombre": "FARMACIA PUJOLS- GURABO",
+        "detail_path": "2/8279170",
+        "telefono": "TRABAJO:  (809) 971-2194, DIRECTO:  (809) 971-5988"
+    },
+    {
+        "nombre": "FARMACIA CAROL - PADRE LAS CASAS",
+        "detail_path": "2/8279869",
+        "telefono": "DIRECTO:  (809) 563-6060"
+    },
+    {
+        "nombre": "SUPER FARMACIA QUEZADA",
+        "detail_path": "2/1497",
+        "telefono": "CELULAR:  (809) 901-6737"
+    },
+    {
+        "nombre": "FARMACIA LICEY",
+        "detail_path": "2/8277333",
+        "telefono": "RESIDENCIA:  (809) 580-7002, TRABAJO:  (829) 462-8023"
+    },
+    {
+        "nombre": "NEO-FARMACIA",
+        "detail_path": "2/8282473",
+        "telefono": "TRABAJO:  (809) 970-6004, DIRECTO:  (809) 580-7622"
+    },
+    {
+        "nombre": "FARMACIA LA LINEA - MAO",
+        "detail_path": "2/8282336",
+        "telefono": "DIRECTO:  (809) 226-6472"
+    },
+    {
+        "nombre": "FARMACIA CAROL - BLUE MALL PUNTA CANA",
+        "detail_path": "2/8273267",
+        "telefono": "DIRECTO:  (809) 959-1212"
+    },
+    {
+        "nombre": "SUPER FARMACIA VERON",
+        "detail_path": "2/8276462",
+        "telefono": "CELULAR:  (809) 860-1417, DIRECTO:  (809) 455-1226"
+    },
+    {
+        "nombre": "FARMACIA PHARMACANA - PUNTA CANA",
+        "detail_path": "2/8276402",
+        "telefono": "TRABAJO:  (809) 959-0025"
+    },
+    {
+        "nombre": "2B FARMA -- VERON 2",
+        "detail_path": "2/8281638",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA ELSA MARIA",
+        "detail_path": "2/8260827",
+        "telefono": "DIRECTO:  (809) 552-3576, DIRECTO:  (809) 552-2090"
+    },
+    {
+        "nombre": "2B FARMA - VILLA PEREYRA",
+        "detail_path": "2/8275358",
+        "telefono": "TRABAJO:  (809) 813-1013"
+    },
+    {
+        "nombre": "2B FARMA - PADRE ABREU",
+        "detail_path": "2/8279054",
+        "telefono": "DIRECTO:  (809) 556-5000"
+    },
+    {
+        "nombre": "2B FARMA - MONUMENTO",
+        "detail_path": "2/8280798",
+        "telefono": "TRABAJO:  (809) 813-5288"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C  OCOA I",
+        "detail_path": "2/8283330",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA PUEBLO VIEJO",
+        "detail_path": "2/8281716",
+        "telefono": "TRABAJO:  (829) 850-3707"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - BANI",
+        "detail_path": "2/8273312",
+        "telefono": "DIRECTO:  (809) 522-5808"
+    },
+    {
+        "nombre": "FARMACIA LAS 3 ROSAS (SANTANA)",
+        "detail_path": "2/8285082",
+        "telefono": "TRABAJO:  (809) 522-4423"
+    },
+    {
+        "nombre": "FARMACIA CONSTITUCION",
+        "detail_path": "2/8261074",
+        "telefono": "DIRECTO:  (809) 528-0931, DIRECTO:  (809) 288-2044, CELULAR:  (809) 660-4081"
+    },
+    {
+        "nombre": "FARMACIA VIP MENDO SAN CRISTOBAL",
+        "detail_path": "2/8280003",
+        "telefono": "TRABAJO:  (809) 388-0512"
+    },
+    {
+        "nombre": "FARMACIA FANA",
+        "detail_path": "2/1585",
+        "telefono": "TRABAJO:  (809) 527-5724"
+    },
+    {
+        "nombre": "FARMACIA CAROL - BAVARO",
+        "detail_path": "2/8261237",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA CAROL - CORAL MALL",
+        "detail_path": "2/1609",
+        "telefono": "CELULAR:  (809) 318-0968, TRABAJO:  (809) 748-0088"
+    },
+    {
+        "nombre": "FARMACIA PATRIZO",
+        "detail_path": "2/1655",
+        "telefono": "TRABAJO:  (809) 592-1100, CELULAR:  (809) 383-8853"
+    },
+    {
+        "nombre": "FARMACIA CAROL - MEGACENTRO II",
+        "detail_path": "2/8262314",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA VIP MENDO PRINCIPAL",
+        "detail_path": "2/8262068",
+        "telefono": "CELULAR:  (809) 388-0512, DIRECTO:  (809) 388-0512"
+    },
+    {
+        "nombre": "FARMACIA VIP MENDOZA",
+        "detail_path": "2/8273019",
+        "telefono": "DIRECTO:  (809) 596-2420, CELULAR:  (809) 332-0132"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - OLE SABANA PERDIDA",
+        "detail_path": "2/8261760",
+        "telefono": "DIRECTO:  (809) 332-3333, DIRECTO:  (809) 332-3323"
+    },
+    {
+        "nombre": "FARMACIA LUZ DIVINA - TROPICAL DEL ESTE",
+        "detail_path": "2/8275318",
+        "telefono": "TRABAJO:  (809) 599-5666, DIRECTO:  (809) 599-5740"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - CITY CENTER SAN ISIDRO",
+        "detail_path": "2/8275415",
+        "telefono": "TRABAJO:  (809) 620-5050"
+    },
+    {
+        "nombre": "FARMAXTRA JAZMAL",
+        "detail_path": "2/8276366",
+        "telefono": "LAB:  (809) 335-3333"
+    },
+    {
+        "nombre": "FARMACIA PATRIZO- JUAN BOCH",
+        "detail_path": "2/8278170",
+        "telefono": "CELULAR:  (809) 383-8853"
+    },
+    {
+        "nombre": "FARMACIA PATRIZO - EL ALMIRANTE",
+        "detail_path": "2/8283705",
+        "telefono": "TRABAJO:  (809) 592-1100"
+    },
+    {
+        "nombre": "FARMAPRIX - ANTIGUA FARMACIA LUCY",
+        "detail_path": "2/8272817",
+        "telefono": "DIRECTO:  (809) 548-1277, CELULAR:  (809) 835-8792"
+    },
+    {
+        "nombre": "FARMACIA CAROL - OCCIDENTAL MALL",
+        "detail_path": "2/8276050",
+        "telefono": "TRABAJO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - PLAZA CEILO HERRERA",
+        "detail_path": "2/8276406",
+        "telefono": "TRABAJO:  (809) 620-5050"
+    },
+    {
+        "nombre": "FARMACIA YARIH",
+        "detail_path": "2/8280752",
+        "telefono": "CELULAR:  (829) 405-3001, TRABAJO:  (829) 554-8726, TRABAJO:  (809) 238-0233"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - HATO NUEVO",
+        "detail_path": "2/8282024",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA VIP VILLA MELLA",
+        "detail_path": "2/8275421",
+        "telefono": "CELULAR:  (809) 239-0222, TRABAJO:  (809) 620-0009"
+    },
+    {
+        "nombre": "FARMA JVAL",
+        "detail_path": "2/8277465",
+        "telefono": "TRABAJO:  (809) 779-0487, CELULAR:  (809) 779-4237"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - JACOBO III",
+        "detail_path": "2/8277505",
+        "telefono": "TRABAJO:  (809) 475-4444, RESIDENCIA:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SABANA PERDIDA",
+        "detail_path": "2/8281718",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA BARBARA MARIA I",
+        "detail_path": "2/1442",
+        "telefono": "DIRECTO:  (809) 523-4446"
+    },
+    {
+        "nombre": "FARMACIA BARBARA MARIA II",
+        "detail_path": "2/8281132",
+        "telefono": "TRABAJO:  (809) 523-4446"
+    },
+    {
+        "nombre": "FARMACIA CHURCHILL",
+        "detail_path": "2/2410241",
+        "telefono": "DIRECTO:  (809) 533-1919, DIRECTO:  (809) 535-2584, CELULAR:  (829) 343-2588"
+    },
+    {
+        "nombre": "SUPERFARMACIA KAREN",
+        "detail_path": "2/565164401",
+        "telefono": "TRABAJO:  (809) 565-1644"
+    },
+    {
+        "nombre": "FARMACIA CAROL - ACROPOLIS",
+        "detail_path": "2/1345",
+        "telefono": "CELULAR:  (809) 318-0968, TRABAJO:  (809) 955-2828"
+    },
+    {
+        "nombre": "FARMACIA SANTA MARGARITA",
+        "detail_path": "2/3107742",
+        "telefono": "TRABAJO:  (809) 682-5944"
+    },
+    {
+        "nombre": "FARMACIA CAROL - CHARLES SUMMER",
+        "detail_path": "2/245661752",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA AZIL",
+        "detail_path": "2/533168101",
+        "telefono": "DIRECTO:  (809) 533-1681"
+    },
+    {
+        "nombre": "FARMACIA CAROL - ROMULO",
+        "detail_path": "2/8261883",
+        "telefono": "DIRECTO:  (809) 955-2828"
+    },
+    {
+        "nombre": "A & R PHARMA",
+        "detail_path": "2/1664",
+        "telefono": "TRABAJO:  (809) 482-6666, CELULAR:  (849) 858-3031, CELULAR:  (829) 673-7925"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - MÁXIMO GOMEZ",
+        "detail_path": "2/1635",
+        "telefono": "TRABAJO:  (809) 542-5050"
+    },
+    {
+        "nombre": "FARMACIA ROSANNA II",
+        "detail_path": "2/1556",
+        "telefono": "DIRECTO:  (809) 540-2916, DIRECTO:  (809) 472-2560, DIRECTO:  (809) 540-0867"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - CIUDAD REAL",
+        "detail_path": "2/8262094",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC-  LOS PRADOS",
+        "detail_path": "2/8262333",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMA VALUE - BELLA VISTA",
+        "detail_path": "2/8272593",
+        "telefono": "DIRECTO:  (809) 289-1515, CELULAR:  (829) 342-2200, CELULAR:  (829) 222-8534"
+    },
+    {
+        "nombre": "FARMACIA MEDYVITA",
+        "detail_path": "2/8273493",
+        "telefono": "DIRECTO:  (809) 372-0999"
+    },
+    {
+        "nombre": "FARMACIA CAROL - UCE",
+        "detail_path": "2/246862740",
+        "telefono": "TRABAJO:  (809) 686-2740, CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMACIA LA CASA DE LAS MEDICINAS",
+        "detail_path": "2/1577",
+        "telefono": "DIRECTO:  (809) 682-9881, TRABAJO:  (809) 689-5972"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - LOS FRAILES",
+        "detail_path": "2/1634",
+        "telefono": "TRABAJO:  (809) 234-7878"
+    },
+    {
+        "nombre": "FARMACIA L Y V",
+        "detail_path": "2/8261028",
+        "telefono": "DIRECTO:  (809) 688-4718, DIRECTO:  (809) 688-1836, DIRECTO:  (809) 688-4399"
+    },
+    {
+        "nombre": "FARMACIA LUPERON - LA SIRENA LUPERÓN",
+        "detail_path": "2/8261423",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "SUPER FARMACIA FARMAXPRESS V",
+        "detail_path": "2/8261826",
+        "telefono": "DIRECTO:  (809) 385-1000"
+    },
+    {
+        "nombre": "FARMABLUE",
+        "detail_path": "2/1450",
+        "telefono": "DIRECTO:  (809) 544-2000, CELULAR:  (809) 939-4040"
+    },
+    {
+        "nombre": "MEGAPHARMA",
+        "detail_path": "2/8273260",
+        "telefono": "DIRECTO:  (809) 364-5522, DIRECTO:  (809) 908-1832"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC --  SAN GERONIMO",
+        "detail_path": "2/8275236",
+        "telefono": "DIRECTO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - PLAZA CATALUÑA",
+        "detail_path": "2/8275345",
+        "telefono": "TRABAJO:  (809) 620-5050"
+    },
+    {
+        "nombre": "FARMACIA CAROL - LOS RIOS",
+        "detail_path": "2/8275467",
+        "telefono": "TRABAJO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA TANIA --- BELLA VISTA MALL",
+        "detail_path": "2/8275563",
+        "telefono": "DIRECTO:  (809) 255-2020"
+    },
+    {
+        "nombre": "FARMACIA TANIA - DR. DEFILLO",
+        "detail_path": "2/8275627",
+        "telefono": "TRABAJO:  (809) 338-2121"
+    },
+    {
+        "nombre": "FARMACIA SANTA CRUZ",
+        "detail_path": "2/8276368",
+        "telefono": "LAB:  (809) 688-1894"
+    },
+    {
+        "nombre": "FARMACIA VIP ENSANCHE LUPERÓN",
+        "detail_path": "2/8276729",
+        "telefono": "CELULAR:  (829) 547-3377, LAB:  (809) 388-0512"
+    },
+    {
+        "nombre": "FARMACIA VIP LOS PRADOS",
+        "detail_path": "2/8277033",
+        "telefono": "LAB:  (809) 227-3630"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LINCOLN",
+        "detail_path": "2/8272744",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMA VALUE - ARROYO HONDO",
+        "detail_path": "2/8277358",
+        "telefono": "DIRECTO:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMACIA ROSANNA V",
+        "detail_path": "2/8277367",
+        "telefono": "TRABAJO:  (809) 620-2525"
+    },
+    {
+        "nombre": "FARMACIA DON HONORIO",
+        "detail_path": "2/8277406",
+        "telefono": "TRABAJO:  (809) 331-5206, TRABAJO:  (809) 616-8003"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - CERVECERIA",
+        "detail_path": "2/8279607",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LA AGUSTINA",
+        "detail_path": "2/8279724",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - JARDINES DEL SUR",
+        "detail_path": "2/8280206",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA PARAISO",
+        "detail_path": "2/8281399",
+        "telefono": "TRABAJO:  (809) 567-3919, RESIDENCIA:  (829) 340-1369"
+    },
+    {
+        "nombre": "FARMA VALUE - ENSANCHE LA FE",
+        "detail_path": "2/8282469",
+        "telefono": "TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMACIA MEXICO",
+        "detail_path": "2/8283262",
+        "telefono": "TRABAJO:  (809) 682-4547, RESIDENCIA:  (809) 686-5940"
+    },
+    {
+        "nombre": "FARMACIAS MILO",
+        "detail_path": "2/8283331",
+        "telefono": "TRABAJO:  (829) 244-0161"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C  SERRALLES",
+        "detail_path": "2/8284225",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA ESTHER MACORIS",
+        "detail_path": "2/8272722",
+        "telefono": "DIRECTO:  (809) 588-2375, DIRECTO:  (809) 290-2323"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - MONTEPLATA",
+        "detail_path": "2/8276934",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMA AZUR HURREM",
+        "detail_path": "2/8281715",
+        "telefono": "TRABAJO:  (829) 243-9681"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - SIRENA HIGUEY",
+        "detail_path": "2/8261543",
+        "telefono": "DIRECTO:  (809) 554-0444"
+    },
+    {
+        "nombre": "PHARMA CENTRO NFQ 2",
+        "detail_path": "2/8276137",
+        "telefono": "CELULAR:  (829) 808-0868"
+    },
+    {
+        "nombre": "FARMACIA CAROL - LOS PALMARES",
+        "detail_path": "2/8262020",
+        "telefono": "DIRECTO:  (809) 955-2828"
+    },
+    {
+        "nombre": "FARMACIA EL MANANTIAL",
+        "detail_path": "2/8276964",
+        "telefono": "TRABAJO:  (809) 588-0006"
+    },
+    {
+        "nombre": "FARMA VALUE - SAN FRANCISCO DE MACORIS",
+        "detail_path": "2/8285078",
+        "telefono": "TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - PIMENTEL",
+        "detail_path": "2/8281031",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA POPULAR",
+        "detail_path": "2/1511",
+        "telefono": "DIRECTO:  (809) 578-2216, DIRECTO:  (809) 578-2216, CELULAR:  (809) 722-5474"
+    },
+    {
+        "nombre": "FARMACIA CANDELIER ROSARIO",
+        "detail_path": "2/8274880",
+        "telefono": "DIRECTO:  (809) 822-0100, CELULAR:  (809) 330-2230"
+    },
+    {
+        "nombre": "FARMATRIX - FARMAHORRO  MOCA",
+        "detail_path": "2/8276495",
+        "telefono": "LAB:  (809) 337-7777"
+    },
+    {
+        "nombre": "FARMACIA JIMENEZ DIAZ",
+        "detail_path": "2/8281807",
+        "telefono": "DIRECTO:  (809) 578-6165, DIRECTO:  (809) 578-2335"
+    },
+    {
+        "nombre": "FARMACIA  PAPATERRA",
+        "detail_path": "2/8275270",
+        "telefono": "DIRECTO:  (809) 587-2252"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - MONSEÑOR PANAL",
+        "detail_path": "2/8261868",
+        "telefono": "DIRECTO:  (809) 573-0000"
+    },
+    {
+        "nombre": "FARMACIA EL SOL -  INMACULADA",
+        "detail_path": "2/8276711",
+        "telefono": "LAB:  (809) 242-0000"
+    },
+    {
+        "nombre": "FARMACIA EL SOL DEL VALLE",
+        "detail_path": "2/8282256",
+        "telefono": "TRABAJO:  (809) 573-0000"
+    },
+    {
+        "nombre": "ECOFARMA - HATO VIEJO",
+        "detail_path": "2/8272595",
+        "telefono": "DIRECTO:  (809) 365-9500, CELULAR:  (829) 344-1177"
+    },
+    {
+        "nombre": "FARMACIA CONSTANZA",
+        "detail_path": "2/8261049",
+        "telefono": "DIRECTO:  (809) 539-2880, DIRECTO:  (809) 539-2091"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C CABRERA",
+        "detail_path": "2/8284241",
+        "telefono": "RESIDENCIA:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA REYES PEROZO",
+        "detail_path": "2/8281712",
+        "telefono": "TRABAJO:  (809) 589-2234"
+    },
+    {
+        "nombre": "FARMACIA POPULAR III",
+        "detail_path": "2/8261763",
+        "telefono": "DIRECTO:  (809) 586-2583"
+    },
+    {
+        "nombre": "FARMACIA CAROL - SOSUA",
+        "detail_path": "2/8262323",
+        "telefono": "DIRECTO:  (809) 571-2901"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - MONTELLANO",
+        "detail_path": "2/8281303",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA ORTEGA UREÑA",
+        "detail_path": "2/1502",
+        "telefono": "TRABAJO:  (809) 577-1255, CELULAR:  (809) 694-1255"
+    },
+    {
+        "nombre": "FARMACIA LA NUEVA SH",
+        "detail_path": "2/8273303",
+        "telefono": "DIRECTO:  (809) 577-2326, CELULAR:  (829) 340-1039, TRABAJO:  (809) 577-1515"
+    },
+    {
+        "nombre": "FARMACIA CANDILEJA",
+        "detail_path": "2/1601",
+        "telefono": "TRABAJO:  (809) 585-3165, TRABAJO:  (809) 861-8285"
+    },
+    {
+        "nombre": "FARMACIA CAROL  - LA SIRENA BARTOLOME COLON",
+        "detail_path": "2/245810991",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA LA HUMANITARIA",
+        "detail_path": "2/1586",
+        "telefono": "TRABAJO:  (809) 582-6266, TRABAJO:  (809) 736-9184, CELULAR:  (809) 841-5608"
+    },
+    {
+        "nombre": "FARMACIA MILEDY - TENARES",
+        "detail_path": "2/1620",
+        "telefono": "TRABAJO:  (809) 587-8043, CELULAR:  (809) 757-8043, CELULAR:  (829) 766-8043, CELULAR:  (809) 543-8825"
+    },
+    {
+        "nombre": "FARMACIA CAROL - LA NORMAL",
+        "detail_path": "2/245821157",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA REYNA",
+        "detail_path": "2/581110001",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "SUPER FARMACIA MODERNA C POR A",
+        "detail_path": "2/8261167",
+        "telefono": "DIRECTO:  (809) 971-1117, DIRECTO:  (809) 582-4855, DIRECTO:  (809) 583-1344"
+    },
+    {
+        "nombre": "FARMACIA HUMANITARIA",
+        "detail_path": "2/8260749",
+        "telefono": "DIRECTO:  (809) 736-9184"
+    },
+    {
+        "nombre": "FARMACIA GIO",
+        "detail_path": "2/8262356",
+        "telefono": "DIRECTO:  (809) 241-9084"
+    },
+    {
+        "nombre": "FARMACIA LAS LAGUNAS",
+        "detail_path": "2/8275962",
+        "telefono": "TRABAJO:  (809) 570-5320"
+    },
+    {
+        "nombre": "FARMA VALUE - ENSANCHE BERMUDEZ",
+        "detail_path": "2/8277971",
+        "telefono": "TRABAJO:  (809) 289-1515, RESIDENCIA:  (829) 966-1600"
+    },
+    {
+        "nombre": "FARMA VALUE - SANTIAGO",
+        "detail_path": "2/8272210",
+        "telefono": "DIRECTO:  (809) 226-2277, CELULAR:  (829) 222-9405"
+    },
+    {
+        "nombre": "FARMACIA WALYX- INGENIO ARRIBA",
+        "detail_path": "2/8279090",
+        "telefono": "TRABAJO:  (809) 582-2166"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - GURABO",
+        "detail_path": "2/8280138",
+        "telefono": "RESIDENCIA:  (809) 582-0000"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SANTIAGO IV",
+        "detail_path": "2/8280204",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA BIANCA EMILSE",
+        "detail_path": "2/8280589",
+        "telefono": "TRABAJO:  (809) 583-1498"
+    },
+    {
+        "nombre": "FARMATRIX - FARMAHORRO TAMBORIL",
+        "detail_path": "2/8276491",
+        "telefono": "LAB:  (809) 337-7777"
+    },
+    {
+        "nombre": "FARMACIA  ANANIAS - SABANETA",
+        "detail_path": "2/8282337",
+        "telefono": "TRABAJO:  (809) 580-2837"
+    },
+    {
+        "nombre": "FARMACIA LANTIAGUA CARABALLO",
+        "detail_path": "2/8282264",
+        "telefono": "TRABAJO:  (809) 383-7659, CELULAR:  (809) 398-4251"
+    },
+    {
+        "nombre": "FARMACIA BOGAERT",
+        "detail_path": "2/245722725",
+        "telefono": "DIRECTO:  (809) 572-3266"
+    },
+    {
+        "nombre": "FARMACIA ELYFIOR",
+        "detail_path": "2/8261428",
+        "telefono": "DIRECTO:  (809) 572-2064"
+    },
+    {
+        "nombre": "FARMAEXTRA ESPERANZA",
+        "detail_path": "2/8283324",
+        "telefono": "TRABAJO:  (809) 585-8361"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - BOCA CHICA",
+        "detail_path": "2/8261496",
+        "telefono": "DIRECTO:  (809) 273-3333"
+    },
+    {
+        "nombre": "FARMACIA BELLA VISTA",
+        "detail_path": "2/8261509",
+        "telefono": "DIRECTO:  (809) 554-1543, CELULAR:  (829) 265-3799, CELULAR:  (829) 988-2714"
+    },
+    {
+        "nombre": "2B FARMA - VERON",
+        "detail_path": "2/8277782",
+        "telefono": "TRABAJO:  (809) 556-5000"
+    },
+    {
+        "nombre": "FARMACIA CAROL - ALMACENES UNIDOS PUNTA CANA",
+        "detail_path": "2/8281636",
+        "telefono": "TRABAJO:  (809) 562-6767"
+    },
+    {
+        "nombre": "SUPER FARMACIA TORRES SRL -- LAS MALVINAS",
+        "detail_path": "2/8280751",
+        "telefono": "DIRECTO:  (809) 553-3717"
+    },
+    {
+        "nombre": "2B FARMA --- QUISQUEYA",
+        "detail_path": "2/8275359",
+        "telefono": "TRABAJO:  (809) 813-5288, CELULAR:  (809) 813-1013"
+    },
+    {
+        "nombre": "2B FARMA- CENTRO CIUDAD",
+        "detail_path": "2/8283712",
+        "telefono": "TRABAJO:  (809) 556-5000, RESIDENCIA:  (809) 813-5288"
+    },
+    {
+        "nombre": "FARMACIA DIOGENES MORALES",
+        "detail_path": "2/8272557",
+        "telefono": "DIRECTO:  (809) 551-8138, CELULAR:  (829) 273-8786"
+    },
+    {
+        "nombre": "FARMACIA RAMIREZ MEDINA - ANTIGUA  AGUASVIVAS",
+        "detail_path": "2/1472",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - SAN PEDRO",
+        "detail_path": "2/8279599",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - CONSUELO",
+        "detail_path": "2/8281572",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA ALIBELL",
+        "detail_path": "2/8281019",
+        "telefono": "DIRECTO:  (809) 998-7619"
+    },
+    {
+        "nombre": "FARMACIA LILIA",
+        "detail_path": "2/1560",
+        "telefono": "CELULAR:  (809) 224-3490, CELULAR:  (829) 823-4064, TRABAJO:  (809) 521-3725, CELULAR:  (829) 765-4759"
+    },
+    {
+        "nombre": "FARMACIA ROSA",
+        "detail_path": "2/8261037",
+        "telefono": "DIRECTO:  (809) 521-3531"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - JIMANI",
+        "detail_path": "2/8281721",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA EL PODER DE JEHOVA",
+        "detail_path": "2/8281809",
+        "telefono": "TRABAJO:  (809) 524-0514"
+    },
+    {
+        "nombre": "FARMACIA DIAZ ROSARIO",
+        "detail_path": "2/3856747",
+        "telefono": "DIRECTO:  (809) 522-8544, TRABAJO:  (809) 380-0078"
+    },
+    {
+        "nombre": "FARMACIA AMISTAD",
+        "detail_path": "2/8261115",
+        "telefono": "DIRECTO:  (809) 522-3267, DIRECTO:  (809) 522-5800, DIRECTO:  (809) 522-4158"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - SIRENA BANI",
+        "detail_path": "2/8261887",
+        "telefono": "DIRECTO:  (809) 522-9292, DIRECTO:  (809) 522-2100"
+    },
+    {
+        "nombre": "FARMACIA SAN JOSE OBRERO",
+        "detail_path": "2/5158056",
+        "telefono": "DIRECTO:  (809) 522-5766, DIRECTO:  (809) 522-3223, CELULAR:  (829) 876-3223"
+    },
+    {
+        "nombre": "FARMACIA CRISTIANA -- SAN CRISTOBAL II",
+        "detail_path": "2/8275322",
+        "telefono": "TRABAJO:  (809) 979-4460"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - SAN VICENTE",
+        "detail_path": "2/1627",
+        "telefono": "TRABAJO:  (809) 273-3773"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC-ENS. LAS AMERICAS",
+        "detail_path": "2/8274196",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - EL ROSAL",
+        "detail_path": "2/8275473",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMA VALUE - VILLA FARO",
+        "detail_path": "2/8276769",
+        "telefono": "LAB:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMACIA VIP ALMIRANTE",
+        "detail_path": "2/8277034",
+        "telefono": "LAB:  (809) 236-1700"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - ISABELITA",
+        "detail_path": "2/8273310",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LOS MINA",
+        "detail_path": "2/8273313",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - BRAVO HIPICA",
+        "detail_path": "2/8277159",
+        "telefono": "TRABAJO:  (809) 620-5050"
+    },
+    {
+        "nombre": "FARMACIA CAROL - BRAVO CHARLES",
+        "detail_path": "2/8278911",
+        "telefono": "LAB:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMA OLE SAN ISIDRO",
+        "detail_path": "2/8282142",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS SIRENA LAS AMERICAS",
+        "detail_path": "2/8285083",
+        "telefono": "TRABAJO:  (809) 286-0021"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - PLAZA LAMA AUTOPISTA DUARTE",
+        "detail_path": "2/8276669",
+        "telefono": "DIRECTO:  (809) 620-5050, LAB:  (809) 620-5050"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LOS ALCARRIZOS",
+        "detail_path": "2/8273309",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "EXTRA FARMA - BUENOS AIRES DE HERRERA",
+        "detail_path": "2/8281405",
+        "telefono": "TRABAJO:  (809) 725-2141, RESIDENCIA:  (809) 909-4803"
+    },
+    {
+        "nombre": "FARMA VALUE - PANTOJA",
+        "detail_path": "2/8285077",
+        "telefono": "TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C VILLA MELLA IV",
+        "detail_path": "2/8283885",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - GARRIDO AUTOPISTA DUARTE",
+        "detail_path": "2/8277251",
+        "telefono": "DIRECTO:  (809) 620-5050, DIRECTO:  (829) 423-3068"
+    },
+    {
+        "nombre": "FARMACIA VIP PABLO MELLA",
+        "detail_path": "2/8282405",
+        "telefono": "TRABAJO:  (809) 820-0044"
+    },
+    {
+        "nombre": "FARMACIA CAROL - GAZCUE",
+        "detail_path": "2/246821777",
+        "telefono": "TRABAJO:  (809) 682-1777, CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMACIA TANIA - BELLA VISTA",
+        "detail_path": "2/1527",
+        "telefono": "DIRECTO:  (809) 412-4415, CELULAR:  (809) 765-4949"
+    },
+    {
+        "nombre": "FARMACIA CAROL PRADERAS (ANTIGUA BRASIL III)",
+        "detail_path": "2/1658",
+        "telefono": "DIRECTO:  (809) 227-2555"
+    },
+    {
+        "nombre": "FARMACIA CAROL - GALERIAS DE NACO",
+        "detail_path": "2/8261464",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA PRIMIUM",
+        "detail_path": "2/8262168",
+        "telefono": "DIRECTO:  (809) 748-0283, CELULAR:  (809) 366-2715"
+    },
+    {
+        "nombre": "SUPER FARMACIA O&D",
+        "detail_path": "2/1549",
+        "telefono": "TRABAJO:  (809) 532-3728, TRABAJO:  (809) 534-8297"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - CAYETANO GERMOSEN",
+        "detail_path": "2/8275274",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA INDEN",
+        "detail_path": "2/8276098",
+        "telefono": "TRABAJO:  (809) 385-0451"
+    },
+    {
+        "nombre": "FARMACIA LAS EMERGENCIAS II",
+        "detail_path": "2/8276375",
+        "telefono": "LAB:  (809) 598-1333"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - REPUBLICA DE COLOMBIA",
+        "detail_path": "2/8262368",
+        "telefono": "CELULAR:  (809) 436-1296, DIRECTO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C - LA FE II",
+        "detail_path": "2/8276174",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LA FERIA",
+        "detail_path": "2/8277878",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - BRAVO REPUBLICA DE COLOMBIA",
+        "detail_path": "2/8279615",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - EL PEDREGAL",
+        "detail_path": "2/8280008",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA DRAGON DE ORO - BELLA VISTA",
+        "detail_path": "2/8281398",
+        "telefono": "TRABAJO:  (809) 706-1548, RESIDENCIA:  (829) 439-1395"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - CRISTO REY II",
+        "detail_path": "2/8282023",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA CAROL - VILLA FRANCISCA",
+        "detail_path": "2/8282720",
+        "telefono": "TRABAJO:  (809) 563-6060"
+    },
+    {
+        "nombre": "FARMA VALUE REPUBLICA DE COLOMBIA",
+        "detail_path": "2/8285076",
+        "telefono": "TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMA VALUE - BONAO",
+        "detail_path": "2/8272877",
+        "telefono": "CELULAR:  (849) 343-9993, DIRECTO:  (809) 525-5544"
+    },
+    {
+        "nombre": "FARMACIA LIBERTAD",
+        "detail_path": "2/8261757",
+        "telefono": "DIRECTO:  (809) 588-2710"
+    },
+    {
+        "nombre": "FARMACIA NEOMEDICAL III",
+        "detail_path": "2/8283485",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA CAROL - JUMBO SAN FRANCISCO",
+        "detail_path": "2/8284240",
+        "telefono": "TRABAJO:  (809) 563-6060"
+    },
+    {
+        "nombre": "FARMACIA CENTRAL",
+        "detail_path": "2/54146931",
+        "telefono": "TRABAJO:  (809) 578-7064"
+    },
+    {
+        "nombre": "FARMACIA EVELIA",
+        "detail_path": "2/8261417",
+        "telefono": "DIRECTO:  (809) 578-2710, DIRECTO:  (809) 578-6995"
+    },
+    {
+        "nombre": "FARMACIA HEIDY GILBEN",
+        "detail_path": "2/8272218",
+        "telefono": "DIRECTO:  (809) 578-3718"
+    },
+    {
+        "nombre": "FARMACIA NARALY VI",
+        "detail_path": "2/8260711",
+        "telefono": "DIRECTO:  (809) 573-7575"
+    },
+    {
+        "nombre": "FARMA VALUE - LA VEGA",
+        "detail_path": "2/8273083",
+        "telefono": "DIRECTO:  (809) 242-0015, CELULAR:  (829) 812-4756"
+    },
+    {
+        "nombre": "ECOFARMA",
+        "detail_path": "2/8262108",
+        "telefono": "DIRECTO:  (809) 365-9595, CELULAR:  (829) 344-1177"
+    },
+    {
+        "nombre": "SUPER FARMACIA FANNY SRL",
+        "detail_path": "2/8262393",
+        "telefono": "DIRECTO:  (809) 584-3311, DIRECTO:  (809) 584-2121"
+    },
+    {
+        "nombre": "FARMACIA SCHARIMEL",
+        "detail_path": "2/8282838",
+        "telefono": "TRABAJO:  (809) 584-1515, CELULAR:  (829) 321-0565"
+    },
+    {
+        "nombre": "FARMACIA SAHIRA",
+        "detail_path": "2/504781",
+        "telefono": "TRABAJO:  (809) 525-2281, RESIDENCIA:  (809) 525-6090"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - PUERTO PLATA II",
+        "detail_path": "2/8278654",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA POPULAR IX  AV. CAAMAÑO",
+        "detail_path": "2/8279616",
+        "telefono": "DIRECTO:  (809) 586-1515"
+    },
+    {
+        "nombre": "FARMACIA POPULAR VIII AV. MANOLO TAVAREZ JUSTO",
+        "detail_path": "2/8280000",
+        "telefono": "DIRECTO:  (809) 261-1515"
+    },
+    {
+        "nombre": "FARMACIA LOURDES EMPERATRIZ",
+        "detail_path": "2/1563",
+        "telefono": "TRABAJO:  (809) 587-8512"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - SAMANA",
+        "detail_path": "2/8280866",
+        "telefono": "RESIDENCIA:  (809) 538-2303, CELULAR:  (849) 314-4848"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - COTUI II",
+        "detail_path": "2/8281178",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C - CEVICOS",
+        "detail_path": "2/8283721",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA  ALIALY",
+        "detail_path": "2/1478",
+        "telefono": "TRABAJO:  (809) 583-7225, TRABAJO:  (809) 582-2602"
+    },
+    {
+        "nombre": "FARMACIA DARY",
+        "detail_path": "2/1562",
+        "telefono": "DIRECTO:  (829) 582-3161, TRABAJO:  (809) 582-3161"
+    },
+    {
+        "nombre": "FARMACIA LIDIA",
+        "detail_path": "2/581118701",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA SHALIMAR",
+        "detail_path": "2/1510",
+        "telefono": "DIRECTO:  (809) 226-8868"
+    },
+    {
+        "nombre": "FARMACIA DEL ESTE",
+        "detail_path": "2/8261298",
+        "telefono": "DIRECTO:  (809) 582-3474, DIRECTO:  (809) 583-5126, CELULAR:  (809) 813-2055"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - AUTOPISTA DUARTE (SANTIAGO)",
+        "detail_path": "2/8261498",
+        "telefono": "DIRECTO:  (809) 276-8444"
+    },
+    {
+        "nombre": "FARMACIA COSMO",
+        "detail_path": "2/8272946",
+        "telefono": "DIRECTO:  (809) 247-3888"
+    },
+    {
+        "nombre": "FARMACIA CAROL - SUPERMERCADO NACIONAL ESTRELLA SADHALA",
+        "detail_path": "2/242417577",
+        "telefono": "TRABAJO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA SAN LUIS DE SANTIAGO DE LOS CABALLEROS",
+        "detail_path": "2/1568",
+        "telefono": "CELULAR:  (829) 222-2171, DIRECTO:  (809) 276-5078, TRABAJO:  (809) 247-6494, RESIDENCIA:  (809) 612-4905"
+    },
+    {
+        "nombre": "FARMA VALUE - REP. ARGENTINA",
+        "detail_path": "2/8275219",
+        "telefono": "TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC -- SANTIAGO",
+        "detail_path": "2/8275238",
+        "telefono": "TRABAJO:  (809) 475-4444, RESIDENCIA:  (829) 420-2210"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - MARILÓPEZ",
+        "detail_path": "2/8276213",
+        "telefono": "TRABAJO:  (809) 573-0000"
+    },
+    {
+        "nombre": "FARMATRIX - FARMAHORRO  LA LOTERIA EXPRESS",
+        "detail_path": "2/8276494",
+        "telefono": "DIRECTO:  (809) 332-1220, DIRECTO:  (809) 337-7777"
+    },
+    {
+        "nombre": "FARMACIA CAROL - HOMS",
+        "detail_path": "2/8277961",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - LOS PINOS",
+        "detail_path": "2/8278735",
+        "telefono": "LAB:  (809) 582-0000"
+    },
+    {
+        "nombre": "FARMACIA EL SOL -  ELBA",
+        "detail_path": "2/8280137",
+        "telefono": "RESIDENCIA:  (809) 582-0000"
+    },
+    {
+        "nombre": "FARMACIA WALYX - LOS CERROS",
+        "detail_path": "2/8280163",
+        "telefono": "TRABAJO:  (809) 581-0909"
+    },
+    {
+        "nombre": "FARMACIA ESPINAL RAMOS SRL",
+        "detail_path": "2/8282265",
+        "telefono": "TRABAJO:  (809) 247-7762"
+    },
+    {
+        "nombre": "FARMACIA SAN MIGUEL X",
+        "detail_path": "2/8282718",
+        "telefono": "TRABAJO:  (809) 574-6681"
+    },
+    {
+        "nombre": "FARMACIA BRAMIL",
+        "detail_path": "2/1566",
+        "telefono": "TRABAJO:  (809) 580-2311, CELULAR:  (809) 722-6697"
+    },
+    {
+        "nombre": "FARMACIA SAN ANDRES",
+        "detail_path": "2/8261166",
+        "telefono": "DIRECTO:  (809) 523-4000"
+    },
+    {
+        "nombre": "FARMACIA JUAN XXIII",
+        "detail_path": "2/8261510",
+        "telefono": "CELULAR:  (829) 669-3732, DIRECTO:  (809) 554-5472"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC-  HIGUEY",
+        "detail_path": "2/8273690",
+        "telefono": "LAB:  (809) 363-0990"
+    },
+    {
+        "nombre": "SPS SERVICE",
+        "detail_path": "2/8273712",
+        "telefono": "CELULAR:  (809) 705-9542"
+    },
+    {
+        "nombre": "FARMACIA IBERIA - LA ROMANA",
+        "detail_path": "2/1489",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "2B FARMA",
+        "detail_path": "2/8262246",
+        "telefono": "CELULAR:  (809) 318-6664, DIRECTO:  (809) 556-5000"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - ORENSE",
+        "detail_path": "2/8262320",
+        "telefono": "DIRECTO:  (809) 550-3888"
+    },
+    {
+        "nombre": "FARMACIA CAROL - ROMANA",
+        "detail_path": "2/8262324",
+        "telefono": "DIRECTO:  (809) 550-6638, LAB:  (809) 349-9191"
+    },
+    {
+        "nombre": "2B FARMA --- ROMANA DEL OESTE",
+        "detail_path": "2/8276524",
+        "telefono": "CELULAR:  (809) 318-6664, TRABAJO:  (809) 556-5000"
+    },
+    {
+        "nombre": "FARMACIA BANCOLA",
+        "detail_path": "2/8281021",
+        "telefono": "DIRECTO:  (809) 813-0463, DIRECTO:  (809) 813-4768, DIRECTO:  (809) 224-8148"
+    },
+    {
+        "nombre": "2B FARMA - DR. FERRY",
+        "detail_path": "2/8281637",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMA VALUE - URBANIZACION KENNEDY",
+        "detail_path": "2/8275223",
+        "telefono": "TRABAJO:  (809) 289-1515"
+    },
+    {
+        "nombre": "FARMACIA JUANDY",
+        "detail_path": "2/8282759",
+        "telefono": "TRABAJO:  (809) 553-8485"
+    },
+    {
+        "nombre": "FARMACIA CARAMONA - ANTIGUA BICAR",
+        "detail_path": "2/5122231",
+        "telefono": "TRABAJO:  (809) 558-2214"
+    },
+    {
+        "nombre": "LA FARMACIA JACQUELINE CASTILLO",
+        "detail_path": "2/8281714",
+        "telefono": "TRABAJO:  (849) 720-6738, RESIDENCIA:  (849) 244-1135"
+    },
+    {
+        "nombre": "FARMACIA RAMIREZ DAPIATO",
+        "detail_path": "2/1567",
+        "telefono": "TRABAJO:  (809) 521-2973, CELULAR:  (829) 222-4525"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C  -  AZUA III",
+        "detail_path": "2/8283718",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "SUPER FARMACIA NANCY MARIÑEZ",
+        "detail_path": "2/8282758",
+        "telefono": "DIRECTO:  (809) 521-0230, CELULAR:  (809) 399-0385, LAB:  (809) 521-0230"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - NEIBA",
+        "detail_path": "2/8282688",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA SAN JUAN DE LA MAGUANA ---- BANI",
+        "detail_path": "2/8275080",
+        "telefono": "TRABAJO:  (809) 522-3344, CELULAR:  (809) 757-1470"
+    },
+    {
+        "nombre": "FARMACIA LAS 3 ROSAS (PIZARRETE)",
+        "detail_path": "2/8285081",
+        "telefono": "TRABAJO:  (809) 522-4423"
+    },
+    {
+        "nombre": "FARMACIA SAN JUAN BOSCO",
+        "detail_path": "2/1452",
+        "telefono": "DIRECTO:  (809) 877-2171, CELULAR:  (809) 853-5004"
+    },
+    {
+        "nombre": "FARMACIA CRISTIANA - CAMBITA",
+        "detail_path": "2/8278311",
+        "telefono": "DIRECTO:  (809) 528-7100"
+    },
+    {
+        "nombre": "FARMACIA CAROL - CHARLES DE GAULLE",
+        "detail_path": "2/245943577",
+        "telefono": "DIRECTO:  (809) 594-3577, CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - PLAZA LAMA CARRETERA MELLA",
+        "detail_path": "2/8261766",
+        "telefono": "DIRECTO:  (809) 236-7900"
+    },
+    {
+        "nombre": "FARMACIA LARIMAR",
+        "detail_path": "2/8262067",
+        "telefono": "CELULAR:  (809) 707-6188, DIRECTO:  (809) 245-8111, DIRECTO:  (809) 245-8999"
+    },
+    {
+        "nombre": "FARMACIA FARO SRL",
+        "detail_path": "2/8262106",
+        "telefono": "DIRECTO:  (809) 593-8028, DIRECTO:  (809) 273-8911, CELULAR:  (829) 962-2442"
+    },
+    {
+        "nombre": "FARMACIA CAROL - SARA DUARTE",
+        "detail_path": "2/246848796",
+        "telefono": "CELULAR:  (829) 537-5038, DIRECTO:  (809) 536-6363"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - SAN VICENTE LOS MINA",
+        "detail_path": "2/8276112",
+        "telefono": "TRABAJO:  (809) 620-5050, DIRECTO:  (809) 239-7900, CELULAR:  (849) 865-7960"
+    },
+    {
+        "nombre": "FARMACIA PATRIZO IV - ECOLOGICA",
+        "detail_path": "2/8276672",
+        "telefono": "DIRECTO:  (809) 592-1100"
+    },
+    {
+        "nombre": "FARMACIA VIP MENDO SABANA LARGA",
+        "detail_path": "2/8278711",
+        "telefono": "RESIDENCIA:  (809) 616-9186"
+    },
+    {
+        "nombre": "FARMACIA ROSYEL",
+        "detail_path": "2/8279728",
+        "telefono": "RESIDENCIA:  (809) 236-6967"
+    },
+    {
+        "nombre": "FARMACIA CAROL - LA MARQUESA",
+        "detail_path": "2/8279851",
+        "telefono": "DIRECTO:  (809) 563-6060, LAB:  (809) 563-6060"
+    },
+    {
+        "nombre": "FARMACIA CAROL - HERRERA",
+        "detail_path": "2/1545",
+        "telefono": "CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - RES. SANTO DOMINGO",
+        "detail_path": "2/8276656",
+        "telefono": "RESIDENCIA:  (809) 475-4444, CELULAR:  (849) 452-4754"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LAS PALMAS",
+        "detail_path": "2/8277376",
+        "telefono": "RESIDENCIA:  (809) 475-4444, TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA VIP - HATO NUEVO",
+        "detail_path": "2/8282407",
+        "telefono": "TRABAJO:  (809) 947-1200"
+    },
+    {
+        "nombre": "FARMACIA CAROL - CUADRA ALAMEDA",
+        "detail_path": "2/8282894",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA VIP CIUDAD MODELO",
+        "detail_path": "2/8273613",
+        "telefono": "DIRECTO:  (809) 620-0009"
+    },
+    {
+        "nombre": "FARMACIA CAROL - BRAVO VILLA MELLA",
+        "detail_path": "2/8276510",
+        "telefono": "DIRECTO:  (809) 536-6060, LAB:  (809) 536-6060"
+    },
+    {
+        "nombre": "FARMACIA ORIANA",
+        "detail_path": "2/8281521",
+        "telefono": "TRABAJO:  (809) 569-6628, RESIDENCIA:  (809) 986-7477"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - PUNTA VILLA MELLA",
+        "detail_path": "2/8281717",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA BARBARA MARIA - ALTOS DE CHAVON",
+        "detail_path": "2/8281226",
+        "telefono": "TRABAJO:  (809) 523-4446"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - SIRENA LOS ALCARRIZOS",
+        "detail_path": "2/8277956",
+        "telefono": "TRABAJO:  (809) 616-7373"
+    },
+    {
+        "nombre": "FARMACIA VIP SAVICA",
+        "detail_path": "2/8282406",
+        "telefono": "TRABAJO:  (809) 947-1200"
+    },
+    {
+        "nombre": "FARMACIA CAROL - POLA LOPE DE VEGA",
+        "detail_path": "2/246834427",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA SAN GERONIMO",
+        "detail_path": "2/246899766",
+        "telefono": "DIRECTO:  (809) 682-0550"
+    },
+    {
+        "nombre": "FARMACIA CAROL - SUPER MERCADO NACIONAL LOPE DE VEGA",
+        "detail_path": "2/245412250",
+        "telefono": "TRABAJO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - SIRENA LUPERON",
+        "detail_path": "2/1631",
+        "telefono": "TRABAJO:  (809) 616-6886"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - DUARTE",
+        "detail_path": "2/1633",
+        "telefono": "TRABAJO:  (809) 621-2221"
+    },
+    {
+        "nombre": "FARMACIA CAROL - LA SIRENA CHURCHILL",
+        "detail_path": "2/247327371",
+        "telefono": "DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA CAROL  -  EVARISTO MORALES (ANTIGUA BRASIL II)",
+        "detail_path": "2/1657",
+        "telefono": "DIRECTO:  (809) 563-1507"
+    },
+    {
+        "nombre": "WORLDWIDE PHARMACY",
+        "detail_path": "2/8261430",
+        "telefono": "RESIDENCIA:  (809) 535-1055, RESIDENCIA:  (809) 535-1075, RESIDENCIA:  (809) 535-1070, CELULAR:  (829) 471-4801"
+    },
+    {
+        "nombre": "FARMACIA CAROL - EL MILLON",
+        "detail_path": "2/8261552",
+        "telefono": "DIRECTO:  (809) 472-2685, CELULAR:  (829) 537-5056"
+    },
+    {
+        "nombre": "FARMACIA CAROL - GALERIA 360",
+        "detail_path": "2/8261697",
+        "telefono": "DIRECTO:  (809) 985-5202"
+    },
+    {
+        "nombre": "LOS PRADOS III",
+        "detail_path": "2/8262107",
+        "telefono": "DIRECTO:  (809) 562-6908, DIRECTO:  (809) 544-0896"
+    },
+    {
+        "nombre": "MEDCITY",
+        "detail_path": "2/8260708",
+        "telefono": "CELULAR:  (809) 858-1936, DIRECTO:  (809) 685-7549, CELULAR:  (809) 757-1470, TRABAJO:  (809) 685-7582"
+    },
+    {
+        "nombre": "FARMACIA CAROL - MALECON CENTER",
+        "detail_path": "2/1673",
+        "telefono": "DIRECTO:  (809) 682-7997, CELULAR:  (809) 318-0968"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC -  GAZCUE",
+        "detail_path": "2/8262091",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - KM. 13",
+        "detail_path": "2/8273601",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA JOSE NEPO III",
+        "detail_path": "2/8273686",
+        "telefono": "DIRECTO:  (809) 740-8826"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - BELLA VISTA",
+        "detail_path": "2/1624",
+        "telefono": "TRABAJO:  (809) 620-2420, DIRECTO:  (849) 865-7984"
+    },
+    {
+        "nombre": "FARMACIA CAROL - BRASIL",
+        "detail_path": "2/1656",
+        "telefono": "TRABAJO:  (809) 533-3100"
+    },
+    {
+        "nombre": "FARMA VALUE - FERNANDEZ",
+        "detail_path": "2/8273375",
+        "telefono": "DIRECTO:  (809) 289-1515, CELULAR:  (849) 357-7662"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - PLAZA NACO",
+        "detail_path": "2/8274713",
+        "telefono": "TRABAJO:  (809) 620-5050"
+    },
+    {
+        "nombre": "FARMACIA LOS HIDALGOS - RESTAURACION",
+        "detail_path": "2/8275021",
+        "telefono": "TRABAJO:  (809) 616-6886"
+    },
+    {
+        "nombre": "FARMACIA TANIA - ENSANCHE QUISQUEYA",
+        "detail_path": "2/8261794",
+        "telefono": "DIRECTO:  (809) 565-0666, CELULAR:  (809) 765-4949"
+    },
+    {
+        "nombre": "FARMACIA ALBA",
+        "detail_path": "2/8275806",
+        "telefono": "TRABAJO:  (809) 684-3010, CELULAR:  (809) 684-5732, RESIDENCIA:  (809) 536-7696"
+    },
+    {
+        "nombre": "FARMACIA CAROL BRAVO LOS PROCERES",
+        "detail_path": "2/8276312",
+        "telefono": "CELULAR:  (809) 660-2516, DIRECTO:  (809) 562-6767"
+    },
+    {
+        "nombre": "FARMACIA VIP PADRE CASTELLANO II",
+        "detail_path": "2/8276751",
+        "telefono": "CELULAR:  (809) 388-0002, LAB:  (809) 388-0002"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - MIRAMAR",
+        "detail_path": "2/8262335",
+        "telefono": "DIRECTO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC -  HONDURA",
+        "detail_path": "2/8277225",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - ARROYO HONDO III",
+        "detail_path": "2/8279007",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMA VALUE -  FD28 INDEPENDENCIA",
+        "detail_path": "2/8280865",
+        "telefono": "TRABAJO:  (849) 318-7171"
+    },
+    {
+        "nombre": "FARMACIA JIMENA II",
+        "detail_path": "2/8281406",
+        "telefono": "TRABAJO:  (809) 547-2525"
+    },
+    {
+        "nombre": "FARMACIA JOSE NEPO - LOS RIOS",
+        "detail_path": "2/8281407",
+        "telefono": "TRABAJO:  (809) 530-0707"
+    },
+    {
+        "nombre": "FARMACIA CAROL - PARQUE ENRIQUILLO",
+        "detail_path": "2/8282723",
+        "telefono": "TRABAJO:  (809) 563-6060"
+    },
+    {
+        "nombre": "FARMACIA QUALITY LAG",
+        "detail_path": "2/8281711",
+        "telefono": "TRABAJO:  (829) 243-4090"
+    },
+    {
+        "nombre": "FARMACIA JACALIG",
+        "detail_path": "2/8273012",
+        "telefono": "DIRECTO:  (809) 471-4428, DIRECTO:  (809) 551-6801"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C DON JUAN",
+        "detail_path": "2/8283329",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA CALDERON",
+        "detail_path": "2/8261047",
+        "telefono": "DIRECTO:  (809) 588-2952, CELULAR:  (829) 588-2534"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C - LAS GUARANAS",
+        "detail_path": "2/8283722",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC -  GASPAR HERNANDEZ",
+        "detail_path": "2/8277375",
+        "telefono": "TRABAJO:  (809) 475-4444, RESIDENCIA:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - SAN PEDRO",
+        "detail_path": "2/8261865",
+        "telefono": "DIRECTO:  (809) 573-0000"
+    },
+    {
+        "nombre": "FARMACIA SAN MIGUEL IV",
+        "detail_path": "2/8260823",
+        "telefono": "DIRECTO:  (809) 573-5017, DIRECTO:  (809) 573-7272, DIRECTO:  (809) 574-6681"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - METROPOLITANA",
+        "detail_path": "2/8272416",
+        "telefono": "DIRECTO:  (809) 573-0000"
+    },
+    {
+        "nombre": "FARMACIA ALLAN",
+        "detail_path": "2/8276641",
+        "telefono": "TRABAJO:  (809) 691-6611"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LA VEGA",
+        "detail_path": "2/8277223",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - LA VEGA II",
+        "detail_path": "2/8279408",
+        "telefono": "DIRECTO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - JARABACOA",
+        "detail_path": "2/8276710",
+        "telefono": "LAB:  (809) 242-0000"
+    },
+    {
+        "nombre": "FARMACIA JACQUELINE BONAO",
+        "detail_path": "2/8260886",
+        "telefono": "DIRECTO:  (809) 525-3711"
+    },
+    {
+        "nombre": "FARMACIA DE LA LUZ",
+        "detail_path": "2/1447",
+        "telefono": "DIRECTO:  (809) 296-1202"
+    },
+    {
+        "nombre": "FARMACIA SAN MARTIN DE PORRES DE VILLA VASQUEZ",
+        "detail_path": "2/8261683",
+        "telefono": "DIRECTO:  (829) 520-4461"
+    },
+    {
+        "nombre": "FARMACIA POPULAR",
+        "detail_path": "2/586267901",
+        "telefono": "CELULAR:  (809) 855-1100"
+    },
+    {
+        "nombre": "FARMACIA JARDIN DE LAS FLORES",
+        "detail_path": "2/2346947",
+        "telefono": "TRABAJO:  (809) 586-5666"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - PUERTO PLATA III",
+        "detail_path": "2/8279354",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - PUERTO PLATA IV",
+        "detail_path": "2/8279398",
+        "telefono": "TRABAJO:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA MSK ALTAMIRA",
+        "detail_path": "2/8282305",
+        "telefono": "CELULAR:  (809) 763-7099"
+    },
+    {
+        "nombre": "FARMACIA BERNARDO",
+        "detail_path": "2/8260964",
+        "telefono": "DIRECTO:  (809) 528-6128, DIRECTO:  (809) 528-3237, CELULAR:  (809) 299-9791"
+    },
+    {
+        "nombre": "FARMACIA DRA. CLETO",
+        "detail_path": "2/8277149",
+        "telefono": "DIRECTO:  (809) 585-3473, TRABAJO:  (849) 357-7334"
+    },
+    {
+        "nombre": "FARMACIA WALYX - PEDRO FRANCISCO BONO",
+        "detail_path": "2/1602",
+        "telefono": "TRABAJO:  (809) 582-2166"
+    },
+    {
+        "nombre": "FARMACIA MARGARITA",
+        "detail_path": "2/1351",
+        "telefono": "DIRECTO:  (809) 581-5414"
+    },
+    {
+        "nombre": "FARMACIA GRACIELA",
+        "detail_path": "2/245822071",
+        "telefono": "TRABAJO:  (809) 582-3635, DIRECTO:  (809) 583-8783"
+    },
+    {
+        "nombre": "FARMACIA NARBI, SRL",
+        "detail_path": "2/8274966",
+        "telefono": "DIRECTO:  (809) 736-2421"
+    },
+    {
+        "nombre": "TELEFARMA - CORONA",
+        "detail_path": "2/8276370",
+        "telefono": "LAB:  (809) 582-1627"
+    },
+    {
+        "nombre": "FARMATRIX - FARMAHORRO IV",
+        "detail_path": "2/8276487",
+        "telefono": "LAB:  (809) 337-7777"
+    },
+    {
+        "nombre": "FARMATRIX - FARMAHORRO II",
+        "detail_path": "2/8276489",
+        "telefono": "LAB:  (809) 337-7777"
+    },
+    {
+        "nombre": "FARMATRIX - FARMAHORRO I",
+        "detail_path": "2/8276492",
+        "telefono": "LAB:  (809) 337-7777"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - MEDICA",
+        "detail_path": "2/8276622",
+        "telefono": "TRABAJO:  (829) 582-0000"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SANTIAGO II",
+        "detail_path": "2/8277374",
+        "telefono": "RESIDENCIA:  (809) 363-0990"
+    },
+    {
+        "nombre": "FARMACIA FANNY",
+        "detail_path": "2/8277584",
+        "telefono": "DIRECTO:  (809) 576-6839, CELULAR:  (849) 250-6460"
+    },
+    {
+        "nombre": "FARMA VALUE - FD23 PADRE LAS CASAS",
+        "detail_path": "2/8277975",
+        "telefono": "CELULAR:  (829) 343-0603"
+    },
+    {
+        "nombre": "FARMACIA FANNY - EMILMOR",
+        "detail_path": "2/8278416",
+        "telefono": "DIRECTO:  (809) 233-1311, CELULAR:  (849) 250-6460"
+    },
+    {
+        "nombre": "FARMACIA EL SOL - DESCUENTO",
+        "detail_path": "2/8278732",
+        "telefono": "DIRECTO:  (809) 582-0000, LAB:  (809) 582-0000"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SANTIAGO XVI",
+        "detail_path": "2/8283424",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA FELI Y MARIO",
+        "detail_path": "2/8283707",
+        "telefono": "RESIDENCIA:  (809) 580-9433"
+    },
+    {
+        "nombre": "FARMACIA  ANANIAS - MONCION",
+        "detail_path": "2/8282339",
+        "telefono": "TRABAJO:  (809) 580-2837"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - SANTIAGO RODRIGUEZ",
+        "detail_path": "2/8281030",
+        "telefono": "TRABAJO:  (809) 457-4444"
+    },
+    {
+        "nombre": "FARMACIA  ANANIAS - SABANETA II",
+        "detail_path": "2/8282338",
+        "telefono": "TRABAJO:  (809) 580-2837"
+    },
+    {
+        "nombre": "FARMACIA IBERIA - HIGUEY",
+        "detail_path": "2/1490",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA VIDA NUEVA",
+        "detail_path": "2/8276564",
+        "telefono": "TRABAJO:  (809) 455-1892, CELULAR:  (809) 223-3656, DIRECTO:  (809) 362-7531"
+    },
+    {
+        "nombre": "2B FARMA- HIGUEY I",
+        "detail_path": "2/8277341",
+        "telefono": "TRABAJO:  (809) 556-5000"
+    },
+    {
+        "nombre": "FARMACIA PHARMACANA - CIUDAD LA PALMA",
+        "detail_path": "2/8276764",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "FARMACIA BEGO",
+        "detail_path": "2/8282590",
+        "telefono": "RESIDENCIA:  (829) 642-7310"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - HATO MAYOR",
+        "detail_path": "2/8277377",
+        "telefono": "TRABAJO:  (809) 475-4444, RESIDENCIA:  (809) 363-0990"
+    },
+    {
+        "nombre": "2B FARMA -- VILLA ESPAÑA",
+        "detail_path": "2/8276523",
+        "telefono": "TRABAJO:  (809) 813-5288, CELULAR:  (809) 813-1013"
+    },
+    {
+        "nombre": "FARMACIA CAROL - RESTAURACION",
+        "detail_path": "2/8280586",
+        "telefono": "No disponible"
+    },
+    {
+        "nombre": "2B FARMA RESIDENCIAL ROMANA II",
+        "detail_path": "2/8283325",
+        "telefono": "TRABAJO:  (809) 556-5000"
+    },
+    {
+        "nombre": "2B FARMA - VILLA HERMOSA III",
+        "detail_path": "2/8282471",
+        "telefono": "TRABAJO:  (809) 813-5288"
+    },
+    {
+        "nombre": "FARMACIA IBERIA - SAN PEDRO DE MACORIS",
+        "detail_path": "2/1487",
+        "telefono": "TRABAJO:  (809) 553-2436"
+    },
+    {
+        "nombre": "FARMACIA ZAGLUL -- MERCADO",
+        "detail_path": "2/8277105",
+        "telefono": "TRABAJO:  (809) 529-3277"
+    },
+    {
+        "nombre": "2B FARMA - SAN PEDRO DE MACORIS",
+        "detail_path": "2/8280799",
+        "telefono": "TRABAJO:  (809) 813-5288"
+    },
+    {
+        "nombre": "FARMACIA DICHI BARRIO LINDO",
+        "detail_path": "2/8281518",
+        "telefono": "TRABAJO:  (809) 246-6046"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - AZUA II",
+        "detail_path": "2/8282466",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR G B C - VILLA CENTRAL BARAHONA",
+        "detail_path": "2/8283723",
+        "telefono": "TRABAJO:  (809) 363-0990, RESIDENCIA:  (809) 475-4444"
+    },
+    {
+        "nombre": "GOR ADOLLY FARMACIA SRL",
+        "detail_path": "2/8277048",
+        "telefono": "TRABAJO:  (809) 876-4498, DIRECTO:  (829) 822-2201"
+    },
+    {
+        "nombre": "FARMACIA VILLA FUNDACION",
+        "detail_path": "2/8260901",
+        "telefono": "DIRECTO:  (809) 522-9485"
+    },
+    {
+        "nombre": "FARMACIA VILLALONA",
+        "detail_path": "2/8261663",
+        "telefono": "DIRECTO:  (809) 522-3738, CELULAR:  (809) 862-2567"
+    },
+    {
+        "nombre": "FARMACIA MEDICAR GBC - VILLA ALTAGRACIA",
+        "detail_path": "2/8281305",
+        "telefono": "TRABAJO:  (809) 475-4444"
+    },
+    {
+        "nombre": "FARMACIA YAGUATE",
+        "detail_path": "2/8277442",
+        "telefono": "DIRECTO:  (809) 243-6141, CELULAR:  (849) 246-6118, CELULAR:  (829) 712-8786"
+    },
+    {
+        "nombre": "FARMACIA SURIELI",
+        "detail_path": "2/8282589",
+        "telefono": "TRABAJO:  (809) 243-5750"
+    },
+    {
+        "nombre": "FARMACIA CARMEN",
+        "detail_path": "2/5018698",
+        "telefono": "CELULAR:  (809) 703-2143, DIRECTO:  (809) 237-4748, DIRECTO:  (809) 237-2275"
+    },
+    {
+        "nombre": "FARMASUR TATA",
+        "detail_path": "2/8277338",
+        "telefono": "TRABAJO:  (809) 567-7529, DIRECTO:  (809) 557-1953"
+    },
+    {
+        "nombre": "FARMACIA AMADO MELO - BAVARO",
+        "detail_path": "2/1376",
+        "telefono": "DIRECTO:  (809) 552-0984, TRABAJO:  (809) 552-1189, CELULAR:  (809) 284-2360"
+    }
+]

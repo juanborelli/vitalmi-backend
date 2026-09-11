@@ -171,10 +171,16 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         logger.error(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# MOTOR UNIVERSAL: BÚSQUEDA SEMÁNTICA VECTORIAL (RPC)
+# MOTOR HÍBRIDO: BÚSQUEDA VECTORIAL Y RPC (`buscar_prestadores_gema`)
 # ==========================================
 
-async def buscar_directorio_semantico_rpc(consulta_texto: str, limite: int = 6) -> str:
+async def buscar_directorio_semantico_rpc(
+    consulta_texto: str, 
+    limite: int = 6, 
+    filtro_aseguradora: Optional[str] = None, 
+    filtro_provincia: Optional[str] = None, 
+    filtro_tipo: Optional[str] = None
+) -> str:
     supabase = obtener_cliente_supabase()
     client = obtener_cliente_openai()
     
@@ -182,18 +188,23 @@ async def buscar_directorio_semantico_rpc(consulta_texto: str, limite: int = 6) 
         return json.dumps({"error": "Sin conexión a base de datos o API de OpenAI"})
 
     try:
-        logger.info(f"🧠 BÚSQUEDA SEMÁNTICA VECTORIAL: '{consulta_texto}'")
+        logger.info(f"🧠 BÚSQUEDA HÍBRIDA GEMA (RPC): '{consulta_texto}' | Aseguradora: {filtro_aseguradora} | Provincia: {filtro_provincia}")
 
+        # Generar embedding del texto de consulta
         emb_response = await client.embeddings.create(
             model="text-embedding-3-small",
             input=consulta_texto
         )
         query_vector = emb_response.data[0].embedding
 
-        res = supabase.rpc("buscar_directorio_semantico", {
+        # Llamada a la función RPC optimizada en Supabase
+        res = supabase.rpc("buscar_prestadores_gema", {
+            "busqueda_texto": consulta_texto,
             "query_embedding": query_vector,
-            "match_threshold": 0.18,
-            "match_count": limite
+            "filtro_aseguradora": filtro_aseguradora,
+            "filtro_provincia": filtro_provincia,
+            "filtro_tipo": filtro_tipo,
+            "limite": limite
         }).execute()
 
         resultados = res.data or []
@@ -202,8 +213,15 @@ async def buscar_directorio_semantico_rpc(consulta_texto: str, limite: int = 6) 
         for r in resultados:
             item = dict(r)
             item['tipo_prestador'] = item.get('tipo_prestador') or 'PRESTADOR'
-            item['especialidad_final'] = item.get('especialidad') or item.get('especialidad_medico') or item.get('especialidad_clinica') or 'General'
-            item['telefono_final'] = item.get('telefono_institucional') or item.get('telefono_alterno') or 'No disponible'
+            
+            # Usar las especialidades consolidadas en formato arreglo
+            esp_cons = item.get('especialidades_consolidadas')
+            if isinstance(esp_cons, list) and esp_cons:
+                item['especialidad_final'] = ", ".join(esp_cons)
+            else:
+                item['especialidad_final'] = 'General'
+                
+            item['telefono_final'] = item.get('telefono_institucional') or 'No disponible'
             item['whatsapp_final'] = item.get('whatsapp') or item.get('telefono_institucional') or 'No disponible'
             prestadores_procesados.append(item)
 
@@ -213,7 +231,7 @@ async def buscar_directorio_semantico_rpc(consulta_texto: str, limite: int = 6) 
         }, ensure_ascii=False)
 
     except Exception as e:
-        logger.error(f"❌ Error en búsqueda semántica: {e}")
+        logger.error(f"❌ Error en búsqueda RPC de Gema: {e}")
         return json.dumps({"error": str(e), "total_encontrados": 0, "prestadores": []})
 
 # ==========================================
@@ -391,27 +409,23 @@ Eres Gema, la asistente inteligente para citas médicas y servicios de salud de 
 ### 👤 RECONOCIMIENTO Y UBICACIÓN DEL USUARIO:
 - Cuentas con la identidad y ubicación guardada del usuario en el contexto (`Nombre identificado` y `Ubicación Habitual`).
 - Si el usuario pregunta quién le escribe o si lo conoces, salúdalo personalmente por su nombre.
-- **Uso de Ubicación Habitual:** Si el usuario busca un servicio general sin especificar ciudad (ej: "necesito una farmacia", "busco un cardiólogo"), UTILIZA su `Ubicación Habitual` en la búsqueda.
-- **Búsqueda por Nombre Propio (EXCEPCIÓN):** Si el usuario busca a un médico por su NOMBRE Y APELLIDO (ej: "José Santiago Tolentino Caraballo"), pasa únicamente el nombre del doctor a `consulta_texto` SIN agregar la ubicación habitual, ya que el doctor puede estar en otra provincia.
+- **Uso de Ubicación Habitual:** Si el usuario busca un servicio general sin especificar ciudad (ej: "necesito una farmacia", "busco un cardiólogo"), UTILIZA su `Ubicación Habitual` en la búsqueda (por ejemplo, pasándola en `filtro_provincia`).
+- **Búsqueda por Nombre Propio (EXCEPCIÓN):** Si el usuario busca a un médico por su NOMBRE Y APELLIDO (ej: "José Santiago Tolentino Caraballo"), pasa únicamente el nombre a `consulta_texto` sin forzar la ubicación, ya que el doctor puede estar en otra provincia.
 
 ### ⚡ REGLA DE AGILIDAD EN BÚSQUEDA (CRÍTICO):
-1. Cuando el usuario solicite un médico, especialidad o servicio de salud (ej. "Ginecólogo 23 de septiembre", "Cardiólogo en Santiago"), DEBES MOSTRAR INMEDIATAMENTE las opciones disponibles ejecutando `buscar_directorio_semantico_rpc`.
-2. NO le pidas hora, motivo ni confirmación de tercero ANTES de mostrar los médicos. Muestra la lista de médicos disponibles primero para que el usuario pueda elegir a su especialista.
-3. NUNCA inventes nombres, teléfonos ni direcciones. Para TODA consulta de salud, INVOCA OBLIGATORIAMENTE la herramienta `buscar_directorio_semantico_rpc`.
+1. Cuando el usuario solicite un médico, especialidad, aseguradora o servicio de salud (ej. "Cardiólogo en San Cristóbal que acepte SeNaSa"), EXTRAE los filtros correctamente:
+   - `consulta_texto`: la especialidad o síntoma (ej. "cardiologo").
+   - `filtro_aseguradora`: la aseguradora si se menciona (ej. "SeNaSa", "ARS Humano", "Mapfre Salud ARS").
+   - `filtro_provincia`: la provincia si se menciona o la habitual del usuario (ej. "San Cristóbal").
+2. DEBES MOSTRAR INMEDIATAMENTE las opciones disponibles ejecutando `buscar_directorio_semantico_rpc`.
+3. NO le pidas hora, motivo ni confirmación de tercero ANTES de mostrar los médicos. Muestra la lista primero.
+4. NUNCA inventes nombres, teléfonos ni direcciones. Invoca obligatoriamente la herramienta.
 
 ### 👥 MANEJO DE CITAS PARA TERCEROS:
-- Si el usuario indica que la cita es para otra persona (ej. "para mi madre", "un familiar", "un amigo"), asegúrate de procesar el agendamiento indicando `es_para_tercero: true`.
+- Si el usuario indica que la cita es para otra persona (ej. "para mi madre", "un familiar"), asegúrate de procesar el agendamiento indicando `es_para_tercero: true`.
 
 ### 📝 REGLA DE REGISTRO EN GOOGLE FORM:
-- Toda la consulta e información de médicos es 100% libre.
-- El formulario de registro (`URL_FORM_OFICIAL`) SOLO se solicita al final, cuando el usuario ya eligió doctor, fecha y hora.
-
-### 📍 FILTRADO POR TIPO DE PRESTADOR EN TOOL CALL:
-- Si pide **médico / doctor / especialista**, incluye "Médico" en `consulta_texto`.
-- Si pide **farmacia**, incluye "Tipo de Prestador: FARMACIA" en `consulta_texto`.
-- Si pide **clínica / centro médico**, incluye "Tipo de Prestador: CLINICA centro medico hospital".
-- Si pide **laboratorio**, incluye "Tipo de Prestador: LABORATORIO".
-- Si pide **odontólogo / dentista**, incluye "Tipo de Prestador: ODONTOLOGO dentista".
+- El formulario de registro (`URL_FORM_OFICIAL`) SOLO se solicita al final, cuando el usuario ya eligió doctor, fecha y hora para agendar.
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
@@ -432,7 +446,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     if provincia_user or municipio_user:
         ubicacion_str = f"{municipio_user}, {provincia_user}".strip(", ")
     else:
-        ubicacion_str = "No especificada (República Dominicana)"
+        ubicacion_str = "San Cristóbal, República Dominicana"
 
     guardar_mensaje_supabase(jid_normalizado, "user", mensaje_usuario)
     historial_raw = obtener_historial_supabase(jid_normalizado, limite=10)
@@ -449,17 +463,29 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             "type": "function",
             "function": {
                 "name": "buscar_directorio_semantico_rpc",
-                "description": "Realiza una búsqueda inteligente por vector semántico en todo el directorio (médicos, clínicas, farmacias, laboratorios, odontólogos).",
+                "description": "Busca prestadores de salud (médicos, clínicas, farmacias, laboratorios) usando búsqueda híbrida en Supabase con filtros opcionales de aseguradora y provincia.",
                 "parameters": {
                     "type": "object", 
                     "properties": {
                         "consulta_texto": {
                             "type": "string",
-                            "description": "Texto optimizado de búsqueda (ej: 'Médico ginecólogo en San Cristóbal', 'Tipo de Prestador: FARMACIA en San Cristóbal')"
+                            "description": "Término de búsqueda, síntoma o especialidad (ej: 'cardiologo', 'dolor de pecho', 'pediatra')"
+                        },
+                        "filtro_aseguradora": {
+                            "type": "string",
+                            "description": "Aseguradora mencionada por el usuario (ej: 'SeNaSa', 'ARS Humano', 'Mapfre Salud ARS')"
+                        },
+                        "filtro_provincia": {
+                            "type": "string",
+                            "description": "Provincia o ubicación mencionada o por defecto del usuario (ej: 'San Cristóbal')"
+                        },
+                        "filtro_tipo": {
+                            "type": "string",
+                            "description": "Tipo de prestador opcional (ej: 'Médico', 'CLINICA', 'FARMACIA', 'LABORATORIO')"
                         },
                         "limite": {
                             "type": "integer",
-                            "description": "Número máximo de resultados a devolver (default 6)"
+                            "description": "Número máximo de resultados (default 6)"
                         }
                     }, 
                     "required": ["consulta_texto"]
