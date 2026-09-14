@@ -184,14 +184,10 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         logger.error(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
-# NUEVO: EXTRACCIÓN ESTRUCTURADA (PYDANTIC + OPENAI)
+# EXTRACCIÓN ESTRUCTURADA (PYDANTIC + OPENAI)
 # ==========================================
 
 async def extraer_parametros_async(mensaje_usuario: str, client: AsyncOpenAI) -> ExtraccionIntencion:
-    """
-    Usa OpenAI Structured Outputs para leer el mensaje del usuario y 
-    convertirlo asíncronamente en un objeto validado por Pydantic.
-    """
     try:
         response = await client.beta.chat.completions.parse(
             model="gpt-4o-mini",
@@ -485,15 +481,26 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     datos_extraidos = await extraer_parametros_async(mensaje_usuario, client)
     logger.info(f"🧠 Datos interpretados (Pydantic): {datos_extraidos.model_dump()}")
 
-    # === 2. CONSTRUCCIÓN DEL CONTEXTO FINAL ===
+    # === 2. MAPEO Y CONSTRUCCIÓN DE ARGUMENTOS SUGERIDOS ===
+    argumentos_sugeridos = {}
+    if datos_extraidos.especialidad or datos_extraidos.nombre_medico:
+        argumentos_sugeridos["consulta_texto"] = datos_extraidos.especialidad or datos_extraidos.nombre_medico
+    if datos_extraidos.aseguradora:
+        argumentos_sugeridos["filtro_aseguradora"] = datos_extraidos.aseguradora
+    if datos_extraidos.ubicacion_provincia:
+        argumentos_sugeridos["filtro_provincia"] = datos_extraidos.ubicacion_provincia
+    if datos_extraidos.tipo_entidad:
+        argumentos_sugeridos["filtro_tipo"] = datos_extraidos.tipo_entidad
+
+    # === 3. CONSTRUCCIÓN DEL CONTEXTO FINAL ===
     ahora_rd = datetime.now(TZ_RD)
     contexto_temporal = f"\n\n🕒 Hoy es {ahora_rd.strftime('%Y-%m-%d %H:%M:%S')} AST."
     contexto_paciente = f"\n👤 USUARIO: Nombre='{nombre_contacto or 'Usuario'}' | WhatsApp={jid_normalizado} | Ubicación='{ubicacion_str}'."
     
     contexto_extraccion = (
         f"\n\n🔍 EXTRACCIÓN ESTRUCTURADA (OBLIGATORIA):\n"
-        f"El sistema ha pre-analizado la intención del usuario. Si decides llamar a la herramienta `buscar_directorio_semantico_rpc`, "
-        f"DEBES usar exactamente estos parámetros (ignora los nulos):\n{json.dumps(datos_extraidos.model_dump(), ensure_ascii=False)}"
+        f"El sistema ha pre-analizado los requerimientos. Al llamar a la herramienta `buscar_directorio_semantico_rpc`, "
+        f"utiliza EXCLUSIVAMENTE estos argumentos exactos (ignora llaves que no estén aquí):\n{json.dumps(argumentos_sugeridos, ensure_ascii=False)}"
     )
 
     system_prompt = SYSTEM_PROMPT_GEMA + contexto_temporal + contexto_paciente + contexto_extraccion
