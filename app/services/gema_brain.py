@@ -11,6 +11,19 @@ from openai import AsyncOpenAI
 
 from app.core.supabase import obtener_cliente_supabase
 
+# Importar el nuevo esquema estricto (con fallback por seguridad)
+try:
+    from app.schemas.extraction import ExtraccionIntencion
+except ImportError:
+    from pydantic import BaseModel, Field
+    class ExtraccionIntencion(BaseModel):
+        intencion_usuario: str = Field(default="informacion")
+        especialidad: Optional[str] = Field(default=None)
+        ubicacion_provincia: Optional[str] = Field(default=None)
+        aseguradora: Optional[str] = Field(default=None)
+        tipo_entidad: Optional[str] = Field(default=None)
+        nombre_medico: Optional[str] = Field(default=None)
+
 # Importar funciones de Evolution Service con protección fallback
 try:
     from app.services.evolution_service import enviar_mensaje_whatsapp
@@ -171,6 +184,32 @@ def guardar_mensaje_supabase(telefono_jid: str, rol: str, contenido: str, tipo_m
         logger.error(f"❌ Error guardando mensaje: {e}")
 
 # ==========================================
+# NUEVO: EXTRACCIÓN ESTRUCTURADA (PYDANTIC + OPENAI)
+# ==========================================
+
+async def extraer_parametros_async(mensaje_usuario: str, client: AsyncOpenAI) -> ExtraccionIntencion:
+    """
+    Usa OpenAI Structured Outputs para leer el mensaje del usuario y 
+    convertirlo asíncronamente en un objeto validado por Pydantic.
+    """
+    try:
+        response = await client.beta.chat.completions.parse(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system", 
+                    "content": "Eres un extractor de datos médicos experto. Analiza el mensaje del usuario y extrae los parámetros solicitados basándote estrictamente en el esquema proporcionado. Si un dato no se menciona, asume None/null. No inventes."
+                },
+                {"role": "user", "content": mensaje_usuario}
+            ],
+            response_format=ExtraccionIntencion,
+        )
+        return response.choices[0].message.parsed
+    except Exception as e:
+        logger.error(f"⚠️ Error en extracción estructurada: {e}")
+        return ExtraccionIntencion(intencion_usuario="informacion")
+
+# ==========================================
 # MOTOR HÍBRIDO: BÚSQUEDA VECTORIAL Y RPC (`buscar_prestadores_gema`)
 # ==========================================
 
@@ -190,14 +229,12 @@ async def buscar_directorio_semantico_rpc(
     try:
         logger.info(f"🧠 BÚSQUEDA HÍBRIDA GEMA (RPC): '{consulta_texto}' | Aseguradora: {filtro_aseguradora} | Provincia: {filtro_provincia}")
 
-        # Generar embedding del texto de consulta
         emb_response = await client.embeddings.create(
             model="text-embedding-3-small",
             input=consulta_texto
         )
         query_vector = emb_response.data[0].embedding
 
-        # Llamada a la función RPC optimizada en Supabase
         res = supabase.rpc("buscar_prestadores_gema", {
             "busqueda_texto": consulta_texto,
             "query_embedding": query_vector,
@@ -214,7 +251,6 @@ async def buscar_directorio_semantico_rpc(
             item = dict(r)
             item['tipo_prestador'] = item.get('tipo_prestador') or 'PRESTADOR'
             
-            # Usar las especialidades consolidadas en formato arreglo
             esp_cons = item.get('especialidades_consolidadas')
             if isinstance(esp_cons, list) and esp_cons:
                 item['especialidad_final'] = ", ".join(esp_cons)
@@ -410,22 +446,15 @@ Eres Gema, la asistente inteligente para citas médicas y servicios de salud de 
 - Cuentas con la identidad y ubicación guardada del usuario en el contexto (`Nombre identificado` y `Ubicación Habitual`).
 - Si el usuario pregunta quién le escribe o si lo conoces, salúdalo personalmente por su nombre.
 - **Uso de Ubicación Habitual:** Si el usuario busca un servicio general sin especificar ciudad (ej: "necesito una farmacia", "busco un cardiólogo"), UTILIZA su `Ubicación Habitual` en la búsqueda (por ejemplo, pasándola en `filtro_provincia`).
-- **Búsqueda por Nombre Propio (EXCEPCIÓN):** Si el usuario busca a un médico por su NOMBRE Y APELLIDO (ej: "José Santiago Tolentino Caraballo"), pasa únicamente el nombre a `consulta_texto` sin forzar la ubicación, ya que el doctor puede estar en otra provincia.
 
 ### ⚡ REGLA DE AGILIDAD EN BÚSQUEDA (CRÍTICO):
-1. Cuando el usuario solicite un médico, especialidad, aseguradora o servicio de salud (ej. "Cardiólogo en San Cristóbal que acepte SeNaSa"), EXTRAE los filtros correctamente:
-   - `consulta_texto`: la especialidad o síntoma (ej. "cardiologo").
-   - `filtro_aseguradora`: la aseguradora si se menciona (ej. "SeNaSa", "ARS Humano", "Mapfre Salud ARS").
-   - `filtro_provincia`: la provincia si se menciona o la habitual del usuario (ej. "San Cristóbal").
+1. Cuando el usuario solicite un servicio, DEBES utilizar los filtros extraídos y provistos en el bloque 'EXTRACCIÓN ESTRUCTURADA'.
 2. DEBES MOSTRAR INMEDIATAMENTE las opciones disponibles ejecutando `buscar_directorio_semantico_rpc`.
 3. NO le pidas hora, motivo ni confirmación de tercero ANTES de mostrar los médicos. Muestra la lista primero.
 4. NUNCA inventes nombres, teléfonos ni direcciones. Invoca obligatoriamente la herramienta.
 
 ### 👥 MANEJO DE CITAS PARA TERCEROS:
 - Si el usuario indica que la cita es para otra persona (ej. "para mi madre", "un familiar"), asegúrate de procesar el agendamiento indicando `es_para_tercero: true`.
-
-### 📝 REGLA DE REGISTRO EN GOOGLE FORM:
-- El formulario de registro (`URL_FORM_OFICIAL`) SOLO se solicita al final, cuando el usuario ya eligió doctor, fecha y hora para agendar.
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
@@ -452,41 +481,37 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     historial_raw = obtener_historial_supabase(jid_normalizado, limite=10)
     historial_limpio = [{"role": m["rol"] if "rol" in m else m["role"], "content": m["contenido"] if "contenido" in m else m["content"]} for m in historial_raw]
 
+    # === 1. EJECUCIÓN DE EXTRACCIÓN ESTRUCTURADA ===
+    datos_extraidos = await extraer_parametros_async(mensaje_usuario, client)
+    logger.info(f"🧠 Datos interpretados (Pydantic): {datos_extraidos.model_dump()}")
+
+    # === 2. CONSTRUCCIÓN DEL CONTEXTO FINAL ===
     ahora_rd = datetime.now(TZ_RD)
-    contexto_temporal = f"\nHoy es {ahora_rd.strftime('%Y-%m-%d %H:%M:%S')} AST en República Dominicana."
-    contexto_paciente = f"\nUSUARIO EN CHAT: Nombre identificado = '{nombre_contacto or 'Usuario'}' | WhatsApp JID = {jid_normalizado} | Ubicación Habitual = '{ubicacion_str}'."
+    contexto_temporal = f"\n\n🕒 Hoy es {ahora_rd.strftime('%Y-%m-%d %H:%M:%S')} AST."
+    contexto_paciente = f"\n👤 USUARIO: Nombre='{nombre_contacto or 'Usuario'}' | WhatsApp={jid_normalizado} | Ubicación='{ubicacion_str}'."
     
-    system_prompt = SYSTEM_PROMPT_GEMA + contexto_temporal + contexto_paciente
+    contexto_extraccion = (
+        f"\n\n🔍 EXTRACCIÓN ESTRUCTURADA (OBLIGATORIA):\n"
+        f"El sistema ha pre-analizado la intención del usuario. Si decides llamar a la herramienta `buscar_directorio_semantico_rpc`, "
+        f"DEBES usar exactamente estos parámetros (ignora los nulos):\n{json.dumps(datos_extraidos.model_dump(), ensure_ascii=False)}"
+    )
+
+    system_prompt = SYSTEM_PROMPT_GEMA + contexto_temporal + contexto_paciente + contexto_extraccion
 
     tools = [
         {
             "type": "function",
             "function": {
                 "name": "buscar_directorio_semantico_rpc",
-                "description": "Busca prestadores de salud (médicos, clínicas, farmacias, laboratorios) usando búsqueda híbrida en Supabase con filtros opcionales de aseguradora y provincia.",
+                "description": "Busca prestadores de salud usando búsqueda híbrida en Supabase.",
                 "parameters": {
                     "type": "object", 
                     "properties": {
-                        "consulta_texto": {
-                            "type": "string",
-                            "description": "Término de búsqueda, síntoma o especialidad (ej: 'cardiologo', 'dolor de pecho', 'pediatra')"
-                        },
-                        "filtro_aseguradora": {
-                            "type": "string",
-                            "description": "Aseguradora mencionada por el usuario (ej: 'SeNaSa', 'ARS Humano', 'Mapfre Salud ARS')"
-                        },
-                        "filtro_provincia": {
-                            "type": "string",
-                            "description": "Provincia o ubicación mencionada o por defecto del usuario (ej: 'San Cristóbal')"
-                        },
-                        "filtro_tipo": {
-                            "type": "string",
-                            "description": "Tipo de prestador opcional (ej: 'Médico', 'CLINICA', 'FARMACIA', 'LABORATORIO')"
-                        },
-                        "limite": {
-                            "type": "integer",
-                            "description": "Número máximo de resultados (default 6)"
-                        }
+                        "consulta_texto": {"type": "string"},
+                        "filtro_aseguradora": {"type": "string"},
+                        "filtro_provincia": {"type": "string"},
+                        "filtro_tipo": {"type": "string"},
+                        "limite": {"type": "integer"}
                     }, 
                     "required": ["consulta_texto"]
                 }
