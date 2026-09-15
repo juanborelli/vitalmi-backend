@@ -245,22 +245,31 @@ async def buscar_directorio_semantico_rpc(
         prestadores_procesados = []
         for r in resultados:
             item = dict(r)
-            item['tipo_prestador'] = item.get('tipo_prestador') or 'PRESTADOR'
             
-            # Garantizar especialidad 100% oficial y segura
             esp_oficial = item.get('especialidad_medico') or item.get('especialidad')
             esp_cons = item.get('especialidades_consolidadas')
             
             if esp_oficial:
-                item['especialidad_final'] = esp_oficial
+                especialidad_final = esp_oficial
             elif isinstance(esp_cons, list) and esp_cons:
-                item['especialidad_final'] = ", ".join(esp_cons)
+                especialidad_final = ", ".join(esp_cons)
             else:
-                item['especialidad_final'] = 'General / Sin especificar'
+                especialidad_final = 'General / Sin especificar'
+            
+            tel_inst = item.get('telefono_institucional')
+            whatsapp = item.get('whatsapp')
                 
-            item['telefono_final'] = item.get('telefono_institucional') or 'No disponible'
-            item['whatsapp_final'] = item.get('whatsapp') or item.get('telefono_institucional') or 'No disponible'
-            prestadores_procesados.append(item)
+            # Diccionario Minificado para evitar desbordamiento de Tokens
+            minified_item = {
+                "nombre": item.get('nombre'),
+                "especialidad": especialidad_final,
+                "centro": item.get('centro_medico', 'No especificado'),
+                "direccion": item.get('direccion', 'No especificada'),
+                "telefono": tel_inst if tel_inst else 'No disponible',
+                "whatsapp": whatsapp if whatsapp else tel_inst if tel_inst else 'No disponible',
+                "aseguradoras": item.get('aseguradoras', [])
+            }
+            prestadores_procesados.append(minified_item)
 
         return json.dumps({
             "total_encontrados": len(prestadores_procesados),
