@@ -147,7 +147,7 @@ def obtener_o_registrar_paciente_por_whatsapp(telefono_jid: str, nombre_push: st
         logger.error(f"❌ Error identificando/registrando paciente por WhatsApp: {e}")
         return {}
 
-def obtener_historial_supabase(telefono_jid: str, limite: int = 10) -> List[Dict[str, str]]:
+def obtener_historial_supabase(telefono_jid: str, limite: int = 6) -> List[Dict[str, str]]:
     supabase = obtener_cliente_supabase()
     if not supabase:
         return []
@@ -488,7 +488,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
         ubicacion_str = "San Cristóbal, República Dominicana"
 
     guardar_mensaje_supabase(jid_normalizado, "user", mensaje_usuario)
-    historial_raw = obtener_historial_supabase(jid_normalizado, limite=10)
+    historial_raw = obtener_historial_supabase(jid_normalizado, limite=6)
     historial_limpio = [{"role": m["rol"] if "rol" in m else m["role"], "content": m["contenido"] if "contenido" in m else m["content"]} for m in historial_raw]
 
     # === 1. EJECUCIÓN DE EXTRACCIÓN ESTRUCTURADA ===
@@ -582,6 +582,10 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                 args = json.loads(tool_call.function.arguments)
 
                 if name == "buscar_directorio_semantico_rpc":
+                    # Blindaje crítico: Si la IA omitió consulta_texto, usar tipo_entidad o provincia por defecto
+                    if not args.get("consulta_texto"):
+                        args["consulta_texto"] = args.get("filtro_tipo") or args.get("filtro_provincia") or "medico"
+                    
                     res_tool = await buscar_directorio_semantico_rpc(**args)
                 elif name == "agendar_cita_medica":
                     args["telefono_jid"] = jid_normalizado
