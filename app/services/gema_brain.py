@@ -223,7 +223,7 @@ async def buscar_directorio_semantico_rpc(
         return json.dumps({"error": "Sin conexión a base de datos o API de OpenAI"})
 
     try:
-        logger.info(f"🧠 BÚSQUEDA HÍBRIDA GEMA (RPC): '{consulta_texto}' | Aseguradora: {filtro_aseguradora} | Provincia: {filtro_provincia}")
+        logger.info(f"🧠 BÚSQUEDA HÍBRIDA GEMA (RPC): '{consulta_texto}' | Aseguradora: {filtro_aseguradora} | Provincia: {filtro_provincia} | Límite: {limite}")
 
         emb_response = await client.embeddings.create(
             model="text-embedding-3-small",
@@ -247,11 +247,16 @@ async def buscar_directorio_semantico_rpc(
             item = dict(r)
             item['tipo_prestador'] = item.get('tipo_prestador') or 'PRESTADOR'
             
+            # Garantizar especialidad 100% oficial y segura
+            esp_oficial = item.get('especialidad_medico') or item.get('especialidad')
             esp_cons = item.get('especialidades_consolidadas')
-            if isinstance(esp_cons, list) and esp_cons:
+            
+            if esp_oficial:
+                item['especialidad_final'] = esp_oficial
+            elif isinstance(esp_cons, list) and esp_cons:
                 item['especialidad_final'] = ", ".join(esp_cons)
             else:
-                item['especialidad_final'] = 'General'
+                item['especialidad_final'] = 'General / Sin especificar'
                 
             item['telefono_final'] = item.get('telefono_institucional') or 'No disponible'
             item['whatsapp_final'] = item.get('whatsapp') or item.get('telefono_institucional') or 'No disponible'
@@ -448,6 +453,11 @@ Eres Gema, la asistente inteligente para citas médicas y servicios de salud de 
 2. DEBES MOSTRAR INMEDIATAMENTE las opciones disponibles ejecutando `buscar_directorio_semantico_rpc`.
 3. NO le pidas hora, motivo ni confirmación de tercero ANTES de mostrar los médicos. Muestra la lista primero.
 4. NUNCA inventes nombres, teléfonos ni direcciones. Invoca obligatoriamente la herramienta.
+
+### 📊 REGLA DE LÍMITE DINÁMICO DE BÚSQUEDA (CRÍTICO):
+- **Búsquedas Puntuales:** Si el usuario busca un prestador específico (ej: "necesito un cardiólogo", "busco un pediatra"), pasa un `limite` de **6** para no saturar la respuesta.
+- **Búsquedas Masivas / Conteo:** Si el usuario pregunta explícitamente por cantidades, totales o listados generales (ej: "¿Cuántas farmacias hay?", "Dame la lista de todos los centros médicos"), DEBES pasar un `limite` alto (ej: **30 o 50**) para que la base de datos devuelva el universo completo de registros.
+- **Especialidad 100% Segura:** Al presentar los resultados al usuario, muestra siempre la especialidad oficial consolidada de la base de datos de forma clara y directa.
 
 ### 🔄 REGLA DE FLEXIBILIDAD Y ALTERNATIVAS:
 - Si la búsqueda con filtros estrictos (ej. especialidad + ARS específica) arroja **0 resultados**, no te limites a decir que no hay nada. 
