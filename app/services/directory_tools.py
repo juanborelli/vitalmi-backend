@@ -32,7 +32,6 @@ def _minificar_resultados(data: list) -> str:
         else:
             especialidad_final = 'Medicina General / Especialidad no especificada'
             
-        # Aseguramos nombres explícitos y limpios para los campos de contacto
         telefono_inst = item.get('telefono_institucional') or item.get('telefono') or 'No disponible'
         whatsapp_val = item.get('whatsapp') or 'No disponible'
             
@@ -48,34 +47,41 @@ def _minificar_resultados(data: list) -> str:
     return json.dumps({"total": len(procesados), "resultados": procesados}, ensure_ascii=False)
 
 def buscar_directorio_salud(ubicacion: str, tipo_busqueda: str, termino: str = "", limite: int = 15) -> str:
-    """Búsqueda avanzada universal con soporte nacional y filtrado flexible."""
+    """Búsqueda avanzada con soporte nacional y filtros geográficos estrictos."""
     try:
         termino_limpio = termino.strip() if termino else tipo_busqueda
         ubicacion_limpia = ubicacion.strip() if ubicacion else ""
         
-        logger.info(f"🔎 MEILISEARCH BÚSQUEDA UNIVERSAL: Término='{termino_limpio}', Ubicación='{ubicacion_limpia}'")
+        logger.info(f"🔎 MEILISEARCH BÚSQUEDA: Término='{termino_limpio}', Ubicación='{ubicacion_limpia}'")
         
-        es_busqueda_abierta = not ubicacion_limpia or ubicacion_limpia.lower() in ["republica dominicana", "rd", "pais", "todo el pais", "sin importar la ciudad", "san cristóbal", "san cristobal"]
+        # Únicamente se considera abierta si el usuario pide explícitamente país, RD o deja vacío
+        es_busqueda_abierta = not ubicacion_limpia or ubicacion_limpia.lower() in ["republica dominicana", "rd", "pais", "todo el pais", "sin importar la ciudad"]
         
-        if es_busqueda_abierta:
-            query_final = termino_limpio
-            search_params = {
-                'limit': limite,
-                'matchingStrategy': 'all'
-            }
-        else:
-            query_final = f"{termino_limpio} {ubicacion_limpia}".strip()
-            search_params = {
-                'limit': limite,
-                'matchingStrategy': 'last'
-            }
+        search_params = {
+            'limit': limite,
+            'matchingStrategy': 'all'
+        }
+        
+        query_final = termino_limpio
 
+        if not es_busqueda_abierta:
+            # Si el usuario especificó un lugar (ej: San Cristóbal, Naco, Barahona), 
+            # aplicamos filtro estricto de Meilisearch para evitar cruce de provincias.
+            loc_title = ubicacion_limpia.title()
+            search_params['filter'] = f"provincia = '{loc_title}' OR municipio_cabecera = '{loc_title}' OR sector = '{loc_title}'"
+            # Mantenemos también la ubicación en la query de texto para mayor precisión semántica
+            query_final = f"{termino_limpio} {ubicacion_limpia}".strip()
+            search_params['matchingStrategy'] = 'last'
+
+        # Ejecutar búsqueda en Meilisearch
         res = index.search(query_final, search_params)
         hits = res.get('hits', [])
         
-        if not hits:
-            logger.warning(f"⚠️ Sin resultados para '{query_final}'. Intentando búsqueda libre por término...")
-            res_alt = index.search(termino_limpio, {'limit': limite, 'matchingStrategy': 'all'})
+        # Fallback por si el filtro estricto con acentos/mayúsculas exactas no da resultados de inmediato
+        if not hits and not es_busqueda_abierta:
+            logger.warning(f"⚠️ Sin resultados estrictos para '{ubicacion_limpia}'. Intentando búsqueda flexible con texto...")
+            search_params.pop('filter', None) # Quitamos el filtro estricto y dejamos que la query de texto actúe
+            res_alt = index.search(f"{termino_limpio} {ubicacion_limpia}", {'limit': limite, 'matchingStrategy': 'last'})
             hits = res_alt.get('hits', [])
 
         if not hits:
