@@ -8,3 +8,4 @@ httpx>=0.24.0
 python-dotenv>=1.0.0
 openai>=1.0.0pydantic>=2.9.0
 openai>=1.45.0
+meilisearch
