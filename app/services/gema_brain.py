@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
-# Importar las nuevas herramientas modulares
+# Importar las herramientas modulares
 from app.services.directory_tools import buscar_directorio_salud, buscar_hospitales_emergencia
 from app.core.supabase import obtener_cliente_supabase
 
@@ -34,7 +34,7 @@ TZ_RD = zoneinfo.ZoneInfo("America/Santo_Domingo")
 URL_FORM_OFICIAL = "https://docs.google.com/forms/d/e/1FAIpQLSdrp4sSaHzxOli3UlYPbvvZgznovAWxQH1IAXvFi0OveZC_cg/viewform"
 
 # ==========================================
-# FUNCIONES DE UTILIDAD (NO BORRAR)
+# FUNCIONES DE UTILIDAD
 # ==========================================
 
 def obtener_cliente_openai() -> Optional[AsyncOpenAI]:
@@ -71,23 +71,8 @@ def normalizar_jid(telefono_raw: str) -> str:
     elif len(solo_numeros) > 11 and solo_numeros.startswith("1"): solo_numeros = solo_numeros[:11]
     return f"{solo_numeros}@s.whatsapp.net"
 
-def resolver_fecha_relativa(texto_fecha: str) -> str:
-    ahora_rd = datetime.now(TZ_RD)
-    texto_clean = remover_tildes(str(texto_fecha))
-    if re.match(r"^\d{4}-\d{2}-\d{2}$", texto_clean): return texto_clean
-    if "manana" in texto_clean or "mañana" in texto_clean: return (ahora_rd + timedelta(days=1)).strftime("%Y-%m-%d")
-    if "hoy" in texto_clean: return ahora_rd.strftime("%Y-%m-%d")
-    
-    dias_semana_map = {"lunes": 0, "martes": 1, "miercoles": 2, "jueves": 3, "viernes": 4, "sabado": 5, "domingo": 6}
-    for nombre_dia, idx_target in dias_semana_map.items():
-        if nombre_dia in texto_clean:
-            dias_diferencia = (idx_target - ahora_rd.weekday()) % 7
-            if dias_diferencia == 0 or "proximo" in texto_clean or "que viene" in texto_clean: dias_diferencia += 7
-            return (ahora_rd + timedelta(days=dias_diferencia)).strftime("%Y-%m-%d")
-    return (ahora_rd + timedelta(days=1)).strftime("%Y-%m-%d")
-
 # ==========================================
-# GESTIÓN DE BASE DE DATOS
+# GESTIÓN DE BASE DE DATOS Y CHAT
 # ==========================================
 
 def obtener_o_registrar_paciente_por_whatsapp(telefono_jid: str, nombre_push: str = "") -> dict:
@@ -234,63 +219,68 @@ def agendar_cita_medica(telefono_jid: str, medico_nombre: str, fecha_cita: str =
         return json.dumps({"error": str(e)})
 
 # ==========================================
-# CEREBRO GEMA (SYSTEM PROMPT Y LÓGICA)
+# CEREBRO GEMA (SYSTEM PROMPT CÁLIDO Y UNIVERSAL)
 # ==========================================
 
 SYSTEM_PROMPT_GEMA = """
-Eres Gema, la asistente inteligente y empática de salud de VitalMi. 
+Eres Gema, la asistente virtual oficial de salud de VitalMi en la República Dominicana. 
+Tu tono es cálido, humano, empático, profesional y muy servicial. 
 
-Tu comportamiento se rige por TRES protocolos estrictos:
+ENFOQUE EXCLUSIVO:
+Te especializas únicamente en dos cosas de manera impecable:
+1. Buscar médicos, especialistas, centros médicos, hospitales y farmacias en el directorio nacional.
+2. Agendar y gestionar citas médicas con los profesionales de la salud.
 
-1. PROTOCOLO DE CRISIS (Emergencias):
+PROTOCOLOS ESTRICTOS:
+
+1. PROTOCOLO DE PRESENTACIÓN (Primer contacto):
+   - Si es la primera interacción o el usuario te saluda ("Hola", "Buenos días"), preséntate con amabilidad y calidez, diciendo quién eres (Gema de VitalMi) y en qué puedes ayudarle con su salud o citas.
+
+2. PROTOCOLO DE CRISIS (Emergencias):
    - Si el usuario menciona "emergencia", "herida", "infarto", "accidente", "sangrado" o peligro de muerte.
-   - ACCIÓN INMEDIATA: Recomienda enfáticamente llamar al 911 o al número de emergencias local. 
-   - SECUNDARIO: Ejecuta la herramienta `buscar_hospitales_emergencia` para darle el hospital más cercano, pero haz énfasis en el 911.
+   - ACCIÓN INMEDIATA: Con empatía y urgencia, recomiéndale llamar al 911 de inmediato. 
+   - Ejecuta la herramienta `buscar_hospitales_emergencia` para darle clínicas o hospitales cercanos.
 
-2. PROTOCOLO DE DESCUBRIMIENTO (Búsquedas):
+3. PROTOCOLO DE BÚSQUEDA (Directorio):
    - Si el usuario busca médicos, farmacias, centros o especialidades.
-   - DEBES ejecutar la herramienta `buscar_directorio_salud`.
-   - NUNCA inventes médicos ni direcciones. Si la herramienta no devuelve resultados en la ciudad solicitada, discúlpate e invita al usuario a buscar en una ciudad vecina.
+   - REGLA DE UBICACIÓN INTELIGENTE: 
+     * Si el usuario indica un lugar específico (sector, municipio, provincia) o pide "en todo el país", respétalo y úsalo.
+     * **¡MUY IMPORTANTE!** Si el usuario hace una pregunta ambigua o general sin mencionar ubicación (ej: "Necesito un urólogo", "Busco un cardiólogo"), **NO des una lista revuelta de todo el país**. Muestra cercanía, saluda con calidez y **pregúntale amablemente en qué provincia, ciudad o sector prefiere buscar** para darle opciones precisas.
+   - NUNCA inventes médicos ni direcciones.
 
-3. PROTOCOLO DE ACCIÓN (Agendar Citas):
-   - Solo se activa cuando el usuario expresa su deseo claro de agendar con un médico o centro.
-   - Ejecuta la herramienta `agendar_cita_medica`.
+4. PROTOCOLO DE ACCIÓN (Agendar Citas):
+   - Cuando el usuario exprese su deseo claro de agendar con un médico o centro, ejecuta la herramienta `agendar_cita_medica`.
 
-IMPORTANTE: 
-- Extrae siempre la ubicación. Si el usuario no la menciona, asume su ciudad registrada en tu contexto.
-- Sé directa, clara y empática. 
+Sé natural, cercana y evita respuestas frías o robóticas.
 """
 
 async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "default", nombre_usuario: str = "") -> str:
     client = obtener_cliente_openai()
-    if not client: return "Hola, en este momento estamos actualizando el sistema. Escríbeme en un minuto."
+    if not client: return "Hola, soy Gema de VitalMi. En este momento estamos actualizando nuestro sistema. Escríbeme en un momentito por favor."
 
     jid_normalizado = normalizar_jid(numero_usuario)
     paciente = obtener_o_registrar_paciente_por_whatsapp(jid_normalizado, nombre_usuario)
     
     nombre_contacto = extraer_primer_nombre_valido(paciente.get("nombre") or nombre_usuario)
-    provincia = paciente.get("provincia") or ""
-    municipio = paciente.get("municipio") or paciente.get("sector") or ""
-    ubicacion_str = f"{municipio}, {provincia}".strip(", ") if provincia or municipio else "San Cristóbal, República Dominicana"
-
+    
     guardar_mensaje_supabase(jid_normalizado, "user", mensaje_usuario)
     historial_raw = obtener_historial_supabase(jid_normalizado, limite=6)
     historial_limpio = [{"role": m["rol"] if "rol" in m else m["role"], "content": m["contenido"] if "contenido" in m else m["content"]} for m in historial_raw]
     
-    contexto = f"\n\n🕒 Fecha actual: {datetime.now(TZ_RD).strftime('%Y-%m-%d %H:%M')}\n👤 Usuario: {nombre_contacto or 'Usuario'} | Ubicación Habitual: {ubicacion_str}"
+    contexto = f"\n\n🕒 Fecha actual: {datetime.now(TZ_RD).strftime('%Y-%m-%d %H:%M')}\n👤 Usuario: {nombre_contacto or 'Usuario'}"
     
     tools = [
         {
             "type": "function",
             "function": {
                 "name": "buscar_directorio_salud",
-                "description": "Busca profesionales o entidades médicas en el directorio.",
+                "description": "Busca profesionales o entidades médicas en el directorio nacional. Solo ejecútala si tienes una ubicación o especialidad clara, de lo contrario pídele la zona al usuario.",
                 "parameters": {
                     "type": "object", 
                     "properties": {
-                        "ubicacion": {"type": "string", "description": "Provincia o sector. Usa la Ubicación Habitual si no se menciona otra."},
+                        "ubicacion": {"type": "string", "description": "Sector, municipio o provincia especificada por el usuario. Si el usuario no dio ubicación, deja este campo vacío para que Gema pregunte."},
                         "tipo_busqueda": {"type": "string", "enum": ["medico", "centro", "farmacia", "nombre_especifico"]},
-                        "termino": {"type": "string", "description": "Especialidad (ej: cardiologo), nombre del médico o centro."}
+                        "termino": {"type": "string", "description": "Especialidad (ej: urologo, cardiologo), nombre del médico o centro."}
                     }, 
                     "required": ["ubicacion", "tipo_busqueda"]
                 }
@@ -336,7 +326,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     messages.append({"role": "user", "content": mensaje_usuario})
 
     try:
-        response = await client.chat.completions.create(model="gpt-4o-mini", messages=messages, tools=tools, tool_choice="auto", temperature=0.1)
+        response = await client.chat.completions.create(model="gpt-4o-mini", messages=messages, tools=tools, tool_choice="auto", temperature=0.3)
         response_message = response.choices[0].message
 
         if response_message.tool_calls:
@@ -356,7 +346,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
                 messages.append({"tool_call_id": tool_call.id, "role": "tool", "name": name, "content": res_tool})
 
-            second_response = await client.chat.completions.create(model="gpt-4o-mini", messages=messages, temperature=0.2)
+            second_response = await client.chat.completions.create(model="gpt-4o-mini", messages=messages, temperature=0.3)
             respuesta_texto = second_response.choices[0].message.content.strip()
         else:
             respuesta_texto = response_message.content.strip()
@@ -366,7 +356,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     except Exception as e:
         logger.error(f"❌ Error en GemaBrain: {e}")
-        return "Tuve un inconveniente técnico procesando tu solicitud. Por favor indícame la especialidad o servicio médico que buscas."
+        return "Disculpa, he tenido un pequeño inconveniente técnico. ¿Me puedes repetir qué especialista o servicio médico necesitas?"
 
 async def procesar_mensaje_gema(usuario_jid: str, mensaje: str) -> str:
     return await obtener_respuesta_gema(mensaje_usuario=mensaje, numero_usuario=usuario_jid)
