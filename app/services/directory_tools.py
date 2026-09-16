@@ -51,33 +51,31 @@ def buscar_directorio_salud(ubicacion: str, tipo_busqueda: str, termino: str = "
         
         logger.info(f"🔎 MEILISEARCH BÚSQUEDA UNIVERSAL: Término='{termino_limpio}', Ubicación='{ubicacion_limpia}'")
         
-        # Determinar si la búsqueda es nacional o abierta (sin restricción geográfica estricta)
-        es_busqueda_nacional = not ubicacion_limpia or ubicacion_limpia.lower() in ["republica dominicana", "rd", "pais", "todo el pais", "sin importar la ciudad"]
+        # Consideramos abierta o nacional si no hay ubicación o si es la referencia genérica por defecto
+        es_busqueda_abierta = not ubicacion_limpia or ubicacion_limpia.lower() in ["republica dominicana", "rd", "pais", "todo el pais", "sin importar la ciudad", "san cristóbal", "san cristobal"]
         
-        if es_busqueda_nacional:
-            # Búsqueda totalmente abierta a nivel nacional
+        if es_busqueda_abierta:
             query_final = termino_limpio
             search_params = {
                 'limit': limite,
                 'matchingStrategy': 'all'
             }
         else:
-            # Si el usuario especificamos un sector/ciudad, unimos el término y la ubicación en la query de Meilisearch
-            # para aprovechar el motor de texto completo de forma inteligente sin filtros restrictivos duros.
+            # Si es un sector o provincia muy específica (ej: Naco, Piantini, Barahona)
             query_final = f"{termino_limpio} {ubicacion_limpia}".strip()
             search_params = {
                 'limit': limite,
-                'matchingStrategy': 'lastWords' # Permite flexibilidad si el sector o nombre es compuesto
+                'matchingStrategy': 'last'  # Corregido: 'last' es el valor válido en Meilisearch
             }
 
         # Ejecutar búsqueda en Meilisearch
         res = index.search(query_final, search_params)
         hits = res.get('hits', [])
         
-        # Fallback por si la combinación estricta no arroja nada, intentamos búsqueda libre solo con el término
-        if not hits and not es_busqueda_nacional:
+        # Fallback de seguridad: si no encuentra con la combinación, busca solo por el término principal
+        if not hits:
             logger.warning(f"⚠️ Sin resultados para '{query_final}'. Intentando búsqueda libre por término...")
-            res_alt = index.search(termino_limpio, {'limit': limite, 'matchingStrategy': 'lastWords'})
+            res_alt = index.search(termino_limpio, {'limit': limite, 'matchingStrategy': 'all'})
             hits = res_alt.get('hits', [])
 
         if not hits:
@@ -97,7 +95,7 @@ def buscar_hospitales_emergencia(ubicacion: str) -> str:
         
         res = index.search(query, {
             'limit': 5,
-            'matchingStrategy': 'lastWords'
+            'matchingStrategy': 'last' # Corregido aquí también por seguridad
         })
         hits = res.get('hits', [])
         
