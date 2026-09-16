@@ -219,7 +219,7 @@ def agendar_cita_medica(telefono_jid: str, medico_nombre: str, fecha_cita: str =
         return json.dumps({"error": str(e)})
 
 # ==========================================
-# CEREBRO GEMA (SYSTEM PROMPT CÁLIDO Y UNIVERSAL)
+# CEREBRO GEMA (SYSTEM PROMPT CÁLIDO E INTELIGENTE)
 # ==========================================
 
 SYSTEM_PROMPT_GEMA = """
@@ -231,25 +231,16 @@ Te especializas únicamente en dos cosas de manera impecable:
 1. Buscar médicos, especialistas, centros médicos, hospitales y farmacias en el directorio nacional.
 2. Agendar y gestionar citas médicas con los profesionales de la salud.
 
-PROTOCOLOS ESTRICTOS:
+REGLAS DE INTERACCIÓN Y SALUDO (ESTRICTO):
+1. **SALUDO INICIAL (ÚNICO):** Si el historial de chat está vacío o es el comienzo de una nueva conversación, saluda de manera cálida y personalizada usando el nombre del usuario (ej: "¡Hola, [Nombre]! ¿Cómo te sientes hoy? Espero que estés muy bien de salud. Soy Gema, tu asistente inteligente para citas médicas. También te puedo ayudar a localizar centros médicos, hospitales y farmacias en todo el país. Estoy aquí lista para servirte.").
+2. **MENSAJES SUBSIGUIENTES:** **NUNCA** vuelvas a dar el saludo largo de presentación si ya se saludó en la conversación previa. Ve directo al grano con un tono cercano (ej: "¡Hola, [Nombre]! Qué bueno que estás por aquí de nuevo. ¿En qué puedo ayudarte?").
 
-1. PROTOCOLO DE PRESENTACIÓN (Primer contacto):
-   - Si es la primera interacción o el usuario te saluda ("Hola", "Buenos días"), preséntate con amabilidad y calidez, diciendo quién eres (Gema de VitalMi) y en qué puedes ayudarle con su salud o citas.
-
-2. PROTOCOLO DE CRISIS (Emergencias):
-   - Si el usuario menciona "emergencia", "herida", "infarto", "accidente", "sangrado" o peligro de muerte.
-   - ACCIÓN INMEDIATA: Con empatía y urgencia, recomiéndale llamar al 911 de inmediato. 
-   - Ejecuta la herramienta `buscar_hospitales_emergencia` para darle clínicas o hospitales cercanos.
-
-3. PROTOCOLO DE BÚSQUEDA (Directorio):
-   - Si el usuario busca médicos, farmacias, centros o especialidades.
-   - REGLA DE UBICACIÓN INTELIGENTE: 
-     * Si el usuario indica un lugar específico (sector, municipio, provincia) o pide "en todo el país", respétalo y úsalo.
-     * **¡MUY IMPORTANTE!** Si el usuario hace una pregunta ambigua o general sin mencionar ubicación (ej: "Necesito un urólogo", "Busco un cardiólogo"), **NO des una lista revuelta de todo el país**. Muestra cercanía, saluda con calidez y **pregúntale amablemente en qué provincia, ciudad o sector prefiere buscar** para darle opciones precisas.
-   - NUNCA inventes médicos ni direcciones.
-
-4. PROTOCOLO DE ACCIÓN (Agendar Citas):
-   - Cuando el usuario exprese su deseo claro de agendar con un médico o centro, ejecuta la herramienta `agendar_cita_medica`.
+PROTOCOLOS:
+1. **PROTOCOLO DE CRISIS (Emergencias):** Si mencionan "emergencia", "infarto", "accidente" o peligro de muerte, recomienda llamar al 911 de inmediato y usa `buscar_hospitales_emergencia`.
+2. **PROTOCOLO DE BÚSQUEDA (Directorio):** 
+   - Si buscan médicos/servicios sin especificar zona (ej: "Necesito un urólogo"), **no des listas revueltas nacionales**. Saluda con cercanía y pregúntale amablemente en qué provincia, ciudad o sector prefiere buscar.
+   - Si indican zona (ej: "en Naco"), ejecútalo con `buscar_directorio_salud`.
+3. **PROTOCOLO DE ACCIÓN (Agendar Citas):** Ejecuta `agendar_cita_medica` cuando el usuario quiera formalizar una cita.
 
 Sé natural, cercana y evita respuestas frías o robóticas.
 """
@@ -261,26 +252,30 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
     jid_normalizado = normalizar_jid(numero_usuario)
     paciente = obtener_o_registrar_paciente_por_whatsapp(jid_normalizado, nombre_usuario)
     
-    nombre_contacto = extraer_primer_nombre_valido(paciente.get("nombre") or nombre_usuario)
+    nombre_contacto = extraer_primer_nombre_valido(paciente.get("nombre") or nombre_usuario) or "amigo(a)"
     
     guardar_mensaje_supabase(jid_normalizado, "user", mensaje_usuario)
     historial_raw = obtener_historial_supabase(jid_normalizado, limite=6)
-    historial_limpio = [{"role": m["rol"] if "rol" in m else m["role"], "content": m["contenido"] if "contenido" in m else m["content"]} for m in historial_raw]
     
-    contexto = f"\n\n🕒 Fecha actual: {datetime.now(TZ_RD).strftime('%Y-%m-%d %H:%M')}\n👤 Usuario: {nombre_contacto or 'Usuario'}"
+    # Determinar si es el primer mensaje (historial vacío o solo el mensaje actual que acabamos de guardar)
+    es_primer_mensaje = len(historial_raw) <= 1
+    
+    historial_limpio = [{"role": m["rol"], "content": m["contenido"]} for m in historial_raw[:-1]] if not es_primer_mensaje else []
+    
+    contexto = f"\n\n🕒 Fecha actual: {datetime.now(TZ_RD).strftime('%Y-%m-%d %H:%M')}\n👤 Usuario: {nombre_contacto}\n📌 ¿Es el primer saludo?: {'Sí, debes dar la bienvenida completa' if es_primer_mensaje else 'No, ya fue saludado, ve directo al grano'}"
     
     tools = [
         {
             "type": "function",
             "function": {
                 "name": "buscar_directorio_salud",
-                "description": "Busca profesionales o entidades médicas en el directorio nacional. Solo ejecútala si tienes una ubicación o especialidad clara, de lo contrario pídele la zona al usuario.",
+                "description": "Busca profesionales o entidades médicas en el directorio nacional. Solo ejecútala si tienes ubicación clara.",
                 "parameters": {
                     "type": "object", 
                     "properties": {
-                        "ubicacion": {"type": "string", "description": "Sector, municipio o provincia especificada por el usuario. Si el usuario no dio ubicación, deja este campo vacío para que Gema pregunte."},
+                        "ubicacion": {"type": "string", "description": "Sector, municipio o provincia. Vacío si el usuario no especificó zona."},
                         "tipo_busqueda": {"type": "string", "enum": ["medico", "centro", "farmacia", "nombre_especifico"]},
-                        "termino": {"type": "string", "description": "Especialidad (ej: urologo, cardiologo), nombre del médico o centro."}
+                        "termino": {"type": "string", "description": "Especialidad o nombre."}
                     }, 
                     "required": ["ubicacion", "tipo_busqueda"]
                 }
@@ -290,7 +285,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
             "type": "function",
             "function": {
                 "name": "buscar_hospitales_emergencia",
-                "description": "Busca hospitales y clínicas de emergencia de manera rápida.",
+                "description": "Busca hospitales y clínicas de emergencia.",
                 "parameters": {
                     "type": "object", 
                     "properties": {
@@ -356,7 +351,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
 
     except Exception as e:
         logger.error(f"❌ Error en GemaBrain: {e}")
-        return "Disculpa, he tenido un pequeño inconveniente técnico. ¿Me puedes repetir qué especialista o servicio médico necesitas?"
+        return f"Disculpa {nombre_contacto}, he tenido un pequeño inconveniente técnico. ¿En qué te puedo ayudar?"
 
 async def procesar_mensaje_gema(usuario_jid: str, mensaje: str) -> str:
     return await obtener_respuesta_gema(mensaje_usuario=mensaje, numero_usuario=usuario_jid)
