@@ -1,12 +1,20 @@
 import json
 import logging
+import meilisearch
 from typing import Optional
 from app.core.supabase import obtener_cliente_supabase
 
 logger = logging.getLogger("DirectoryTools")
 
+# Inicializar cliente Meilisearch (Apunta a tu motor local temporalmente)
+try:
+    meili = meilisearch.Client('http://127.0.0.1:7700', 'clave_maestra_local_vitalmi_123')
+    index = meili.index('prestadores')
+except Exception as e:
+    logger.error(f"❌ Error conectando a Meilisearch: {e}")
+
 def _minificar_resultados(data: list) -> str:
-    """Limpia los datos de la base de datos para no saturar a OpenAI con basura técnica."""
+    """Limpia los datos para no saturar a OpenAI con basura técnica."""
     procesados = []
     for item in data:
         esp_oficial = item.get('especialidad_medico') or item.get('especialidad')
@@ -31,76 +39,46 @@ def _minificar_resultados(data: list) -> str:
     return json.dumps({"total": len(procesados), "resultados": procesados}, ensure_ascii=False)
 
 def buscar_directorio_salud(ubicacion: str, tipo_busqueda: str, termino: str = "", limite: int = 15) -> str:
-    """
-    Herramienta unificada de descubrimiento.
-    tipo_busqueda puede ser: 'medico', 'centro', 'farmacia', 'nombre_especifico'
-    """
-    supabase = obtener_cliente_supabase()
-    if not supabase:
-        return json.dumps({"error": "Error de conexión a la base de datos."})
-
+    """Herramienta unificada usando el motor ultrarrápido de Meilisearch"""
     try:
-        logger.info(f"🔎 BUSCANDO: Tipo='{tipo_busqueda}', Término='{termino}', Ubicación='{ubicacion}'")
+        logger.info(f"🔎 MEILISEARCH BUSCANDO: Tipo='{tipo_busqueda}', Término='{termino}', Ubicación='{ubicacion}'")
         
-        # Iniciar la consulta base (Cerco Geográfico)
-        query = supabase.table("vitalmi_directorio_master").select("*")
+        # Unimos los términos naturales. Si alguien escribe mal "cardioloho en bani", Meilisearch lo entenderá.
+        termino_limpio = termino.strip() if termino else tipo_busqueda
+        query = f"{termino_limpio} {ubicacion}".strip()
         
-        if ubicacion and ubicacion.lower() not in ["republica dominicana", "país", "nacional"]:
-            # Filtro flexible para la ubicación (provincia, municipio o sector)
-            query = query.or_(f"provincia.ilike.%{ubicacion}%,municipio_cabecera.ilike.%{ubicacion}%,sector.ilike.%{ubicacion}%")
-
-        # Aplicar filtros según la lógica de la intención
-        termino_limpio = termino.strip()
-
-        if tipo_busqueda == 'medico' and termino_limpio:
-            query = query.or_(f"especialidad_medico.ilike.%{termino_limpio}%,especialidades_consolidadas.ilike.%{termino_limpio}%")
-            
-        elif tipo_busqueda == 'centro':
-            termino_centro = termino_limpio if termino_limpio else "hospital"
-            query = query.or_(f"tipo_prestador.ilike.%{termino_centro}%,centro_medico.ilike.%{termino_centro}%")
-            
-        elif tipo_busqueda == 'farmacia':
-            query = query.or_("tipo_prestador.ilike.%farmacia%,centro_medico.ilike.%farmacia%")
-            if termino_limpio:
-                query = query.ilike("nombre", f"%{termino_limpio}%")
-                
-        elif tipo_busqueda == 'nombre_especifico' and termino_limpio:
-            query = query.ilike("nombre", f"%{termino_limpio}%")
-
-        # Ejecutar y retornar
-        res = query.limit(limite).execute()
+        # Búsqueda instantánea
+        res = index.search(query, {
+            'limit': limite
+        })
         
-        if not res.data:
+        hits = res.get('hits', [])
+        if not hits:
             return json.dumps({"mensaje": f"No se encontraron resultados para {termino} en {ubicacion}."})
             
-        return _minificar_resultados(res.data)
+        return _minificar_resultados(hits)
 
     except Exception as e:
-        logger.error(f"❌ Error en buscar_directorio_salud: {e}")
+        logger.error(f"❌ Error en buscar_directorio_salud (Meilisearch): {e}")
         return json.dumps({"error": "Fallo interno al consultar el directorio."})
 
 def buscar_hospitales_emergencia(ubicacion: str) -> str:
-    """
-    Herramienta de Crisis: Busca exclusivamente centros médicos y hospitales para emergencias.
-    """
-    supabase = obtener_cliente_supabase()
-    if not supabase:
-        return json.dumps({"error": "Base de datos desconectada."})
-
+    """Herramienta de Crisis impulsada por Meilisearch"""
     try:
-        logger.info(f"🚨 PROTOCOLO DE EMERGENCIA ACTIVADO PARA: {ubicacion}")
-        query = supabase.table("vitalmi_directorio_master").select("*")
-        query = query.or_(f"tipo_prestador.ilike.%hospital%,tipo_prestador.ilike.%clinica%,centro_medico.ilike.%hospital%")
+        logger.info(f"🚨 PROTOCOLO DE EMERGENCIA MEILISEARCH PARA: {ubicacion}")
         
-        if ubicacion:
-            query = query.or_(f"provincia.ilike.%{ubicacion}%,municipio_cabecera.ilike.%{ubicacion}%,sector.ilike.%{ubicacion}%")
-            
-        res = query.limit(5).execute()
+        # Forzamos términos clave de emergencia
+        query = f"hospital clinica emergencia {ubicacion}".strip()
         
-        if not res.data:
-             return json.dumps({"mensaje": "ATENCIÓN: No se detectaron hospitales en la base de datos para esta área exacta. Sugiera contactar al 911 de inmediato."})
+        res = index.search(query, {
+            'limit': 5
+        })
+        
+        hits = res.get('hits', [])
+        if not hits:
+             return json.dumps({"mensaje": "ATENCIÓN: No se detectaron hospitales. Sugiera contactar al 911 de inmediato."})
              
-        return _minificar_resultados(res.data)
+        return _minificar_resultados(hits)
         
     except Exception as e:
         logger.error(f"❌ Error en emergencias: {e}")
