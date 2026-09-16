@@ -19,7 +19,7 @@ except Exception as e:
     logger.error(f"❌ Error al inicializar Meilisearch: {e}")
 
 def _minificar_resultados(data: list) -> str:
-    """Limpia y estructura los datos asegurando que la especialidad y los datos clave nunca falten."""
+    """Limpia y estructura los datos exponiendo explícitamente Telefonos Institucionales y WhatsApp."""
     procesados = []
     for item in data:
         esp_oficial = item.get('especialidad_medico') or item.get('especialidad')
@@ -32,14 +32,18 @@ def _minificar_resultados(data: list) -> str:
         else:
             especialidad_final = 'Medicina General / Especialidad no especificada'
             
+        # Aseguramos nombres explícitos y limpios para los campos de contacto
+        telefono_inst = item.get('telefono_institucional') or item.get('telefono') or 'No disponible'
+        whatsapp_val = item.get('whatsapp') or 'No disponible'
+            
         procesados.append({
             "nombre": item.get('nombre', 'Desconocido'),
             "tipo": item.get('tipo_prestador', 'Centro/Médico'),
             "especialidad": especialidad_final,
             "centro_medico": item.get('centro_medico', 'No especificado'),
             "direccion": f"{item.get('direccion', '')}, {item.get('sector', '')}, {item.get('municipio_cabecera', '')}, {item.get('provincia', '')}".strip(" ,"),
-            "telefono": item.get('telefono_institucional') or item.get('telefono') or 'No disponible',
-            "whatsapp": item.get('whatsapp') or 'No disponible'
+            "telefono_institucional": telefono_inst,
+            "whatsapp": whatsapp_val
         })
     return json.dumps({"total": len(procesados), "resultados": procesados}, ensure_ascii=False)
 
@@ -51,7 +55,6 @@ def buscar_directorio_salud(ubicacion: str, tipo_busqueda: str, termino: str = "
         
         logger.info(f"🔎 MEILISEARCH BÚSQUEDA UNIVERSAL: Término='{termino_limpio}', Ubicación='{ubicacion_limpia}'")
         
-        # Consideramos abierta o nacional si no hay ubicación o si es la referencia genérica por defecto
         es_busqueda_abierta = not ubicacion_limpia or ubicacion_limpia.lower() in ["republica dominicana", "rd", "pais", "todo el pais", "sin importar la ciudad", "san cristóbal", "san cristobal"]
         
         if es_busqueda_abierta:
@@ -61,18 +64,15 @@ def buscar_directorio_salud(ubicacion: str, tipo_busqueda: str, termino: str = "
                 'matchingStrategy': 'all'
             }
         else:
-            # Si es un sector o provincia muy específica (ej: Naco, Piantini, Barahona)
             query_final = f"{termino_limpio} {ubicacion_limpia}".strip()
             search_params = {
                 'limit': limite,
-                'matchingStrategy': 'last'  # Corregido: 'last' es el valor válido en Meilisearch
+                'matchingStrategy': 'last'
             }
 
-        # Ejecutar búsqueda en Meilisearch
         res = index.search(query_final, search_params)
         hits = res.get('hits', [])
         
-        # Fallback de seguridad: si no encuentra con la combinación, busca solo por el término principal
         if not hits:
             logger.warning(f"⚠️ Sin resultados para '{query_final}'. Intentando búsqueda libre por término...")
             res_alt = index.search(termino_limpio, {'limit': limite, 'matchingStrategy': 'all'})
@@ -95,7 +95,7 @@ def buscar_hospitales_emergencia(ubicacion: str) -> str:
         
         res = index.search(query, {
             'limit': 5,
-            'matchingStrategy': 'last' # Corregido aquí también por seguridad
+            'matchingStrategy': 'last'
         })
         hits = res.get('hits', [])
         
