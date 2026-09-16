@@ -37,46 +37,51 @@ def _minificar_resultados(data: list) -> str:
             "tipo": item.get('tipo_prestador', 'Centro/Médico'),
             "especialidad": especialidad_final,
             "centro_medico": item.get('centro_medico', 'No especificado'),
-            "direccion": f"{item.get('direccion', '')}, {item.get('sector', '')}, {item.get('municipio_cabecera', '')}".strip(" ,"),
+            "direccion": f"{item.get('direccion', '')}, {item.get('sector', '')}, {item.get('municipio_cabecera', '')}, {item.get('provincia', '')}".strip(" ,"),
             "telefono": item.get('telefono_institucional') or item.get('telefono') or 'No disponible',
             "whatsapp": item.get('whatsapp') or 'No disponible'
         })
     return json.dumps({"total": len(procesados), "resultados": procesados}, ensure_ascii=False)
 
 def buscar_directorio_salud(ubicacion: str, tipo_busqueda: str, termino: str = "", limite: int = 15) -> str:
-    """Búsqueda avanzada con filtros geográficos estrictos y matching exacto."""
+    """Búsqueda avanzada universal con soporte nacional y filtrado flexible."""
     try:
         termino_limpio = termino.strip() if termino else tipo_busqueda
-        logger.info(f"🔎 MEILISEARCH BÚSQUEDA ESTRICTA: Término='{termino_limpio}', Ubicación='{ubicacion}'")
+        ubicacion_limpia = ubicacion.strip() if ubicacion else ""
         
-        # Construir filtro estricto por ubicación para evitar alucinaciones geográficas
-        filtros = []
-        if ubicacion and ubicacion.lower() not in ["republica dominicana", "rd", "pais"]:
-            loc_limpia = ubicacion.strip().title()
-            # Filtramos si coincide con provincia o municipio cabecera o sector
-            filtros.append(f"provincia = '{loc_limpia}' OR municipio_cabecera = '{loc_limpia}' OR sector = '{loc_limpia}'")
-
-        search_params = {
-            'limit': limite,
-            'matchingStrategy': 'all'  # Obliga a que coincidan todas las palabras (Ej: "Farmacia" y "GBC")
-        }
+        logger.info(f"🔎 MEILISEARCH BÚSQUEDA UNIVERSAL: Término='{termino_limpio}', Ubicación='{ubicacion_limpia}'")
         
-        if filtros:
-            search_params['filter'] = " OR ".join(filtros)
+        # Determinar si la búsqueda es nacional o abierta (sin restricción geográfica estricta)
+        es_busqueda_nacional = not ubicacion_limpia or ubicacion_limpia.lower() in ["republica dominicana", "rd", "pais", "todo el pais", "sin importar la ciudad"]
+        
+        if es_busqueda_nacional:
+            # Búsqueda totalmente abierta a nivel nacional
+            query_final = termino_limpio
+            search_params = {
+                'limit': limite,
+                'matchingStrategy': 'all'
+            }
+        else:
+            # Si el usuario especificamos un sector/ciudad, unimos el término y la ubicación en la query de Meilisearch
+            # para aprovechar el motor de texto completo de forma inteligente sin filtros restrictivos duros.
+            query_final = f"{termino_limpio} {ubicacion_limpia}".strip()
+            search_params = {
+                'limit': limite,
+                'matchingStrategy': 'lastWords' # Permite flexibilidad si el sector o nombre es compuesto
+            }
 
         # Ejecutar búsqueda en Meilisearch
-        res = index.search(termino_limpio, search_params)
+        res = index.search(query_final, search_params)
         hits = res.get('hits', [])
         
-        # Fallback de seguridad: si el filtro estricto no arroja nada
-        if not hits and filtros:
-            logger.warning(f"⚠️ Sin resultados estrictos para '{loc_limpia}'. Intentando búsqueda abierta de respaldo...")
-            query_alternativa = f"{termino_limpio} {ubicacion}".strip()
-            res_alt = index.search(query_alternativa, {'limit': limite, 'matchingStrategy': 'all'})
+        # Fallback por si la combinación estricta no arroja nada, intentamos búsqueda libre solo con el término
+        if not hits and not es_busqueda_nacional:
+            logger.warning(f"⚠️ Sin resultados para '{query_final}'. Intentando búsqueda libre por término...")
+            res_alt = index.search(termino_limpio, {'limit': limite, 'matchingStrategy': 'lastWords'})
             hits = res_alt.get('hits', [])
 
         if not hits:
-            return json.dumps({"mensaje": f"No se encontraron registros exactos para '{termino_limpio}' en '{ubicacion}'."})
+            return json.dumps({"mensaje": f"No se encontraron registros para '{termino_limpio}' en la ubicación especificada."})
             
         return _minificar_resultados(hits)
 
@@ -90,7 +95,6 @@ def buscar_hospitales_emergencia(ubicacion: str) -> str:
         logger.info(f"🚨 EMERGENCIA MEILISEARCH PARA: {ubicacion}")
         query = f"hospital clinica emergencia {ubicacion}".strip()
         
-        # En emergencias priorizamos traer algo útil, por lo que permitimos coincidencia parcial ('lastWords')
         res = index.search(query, {
             'limit': 5,
             'matchingStrategy': 'lastWords'
