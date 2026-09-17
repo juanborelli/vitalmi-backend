@@ -180,12 +180,12 @@ def agendar_cita_medica(telefono_jid: str, medico_nombre: str, fecha_cita: str =
 
         paciente = res_pac.data[0]
         
-        # Valores por defecto seguros
         centro_medico = "Consultorio Privado Autorizado"
         doc_whatsapp = ""
         doc_telefono = "No disponible"
         direccion_doc = "San Cristóbal, República Dominicana"
         especialidad_doc = "Especialidad General"
+        medico_encontrado_en_bd = False
 
         # Búsqueda estricta obligatoria en el directorio maestro de Supabase
         tokens_nombre = [t for t in remover_tildes(medico_nombre).split() if len(t) > 3]
@@ -193,19 +193,33 @@ def agendar_cita_medica(telefono_jid: str, medico_nombre: str, fecha_cita: str =
             res_doc = supabase.table("vitalmi_directorio_master").select("*").ilike("nombre", f"%{tokens_nombre[0]}%").limit(1).execute()
             if res_doc.data:
                 doc_data = res_doc.data[0]
+                medico_encontrado_en_bd = True
                 centro_medico = doc_data.get("centro_medico") or centro_medico
                 medico_nombre = doc_data.get("nombre") or medico_nombre
-                doc_whatsapp = doc_data.get("whatsapp") or doc_data.get("telefono_institucional") or ""
+                doc_whatsapp = doc_data.get("whatsapp") or ""
                 doc_telefono = doc_data.get("telefono_institucional") or doc_data.get("telefono") or "No disponible"
                 direccion_doc = f"{doc_data.get('direccion', '')}, {doc_data.get('sector', '')}, {doc_data.get('municipio_cabecera', '')}, {doc_data.get('provincia', '')}".strip(" ,")
                 especialidad_doc = doc_data.get('especialidad_medico') or doc_data.get('especialidad') or "Especialidad General"
 
-                # 🛑 Validación estricta: Bloquear si el médico no tiene teléfono ni WhatsApp registrado
-                if not doc_whatsapp and doc_telefono == "No disponible":
-                    return json.dumps({
-                        "error": "medico_sin_contacto",
-                        "mensaje": f"Lamentablemente, el/la doctor(a) {medico_nombre} no cuenta con un número de teléfono institucional o WhatsApp registrado en nuestro sistema para coordinar la cita directamente. Te sugiero comunicarte con el centro médico ({centro_medico}) o elegir otro especialista."
-                    }, ensure_ascii=False)
+        # 🛑 BLOQUEO ESTRICTO 1: Si el médico no existe en la base de datos oficial
+        if not medico_encontrado_en_bd:
+            return json.dumps({
+                "error": "medico_no_encontrado",
+                "mensaje": f"Lo siento, no pude verificar al doctor(a) {medico_nombre} en nuestro directorio oficial de San Cristóbal. Por seguridad, no podemos agendar citas con médicos que no estén verificados en el sistema."
+            }, ensure_ascii=False)
+
+        # 🛑 BLOQUEO ESTRICTO 2: Si el médico no tiene WhatsApp ni teléfono institucional válido
+        whatsapp_limpio = str(doc_whatsapp).strip()
+        telefono_limpio = str(doc_telefono).strip()
+        
+        tiene_whatsapp = whatsapp_limpio and whatsapp_limpio.lower() != "no disponible"
+        tiene_telefono = telefono_limpio and telefono_limpio.lower() != "no disponible"
+
+        if not tiene_whatsapp and not tiene_telefono:
+            return json.dumps({
+                "error": "medico_sin_contacto",
+                "mensaje": f"Lamentablemente, el/la doctor(a) {medico_nombre} no cuenta con un número de teléfono institucional o WhatsApp registrado en nuestro sistema para coordinar la cita directamente. Te sugiero comunicarte con el centro médico ({centro_medico}) o elegir otro especialista."
+            }, ensure_ascii=False)
 
         # Mapeo formal de tandas a horarios institucionales exactos
         tanda_limpia = remover_tildes(tanda)
@@ -220,7 +234,7 @@ def agendar_cita_medica(telefono_jid: str, medico_nombre: str, fecha_cita: str =
             "paciente_id": paciente.get("id"),
             "motivo_consulta": f"Paciente: {paciente.get('nombre')} | Cédula: {paciente.get('cedula', 'N/A')} | ARS: {paciente.get('ars', 'Privado')} | Médico: {medico_nombre} | Especialidad: {especialidad_doc} | Centro: {centro_medico} | Fecha: {fecha_cita} | Horario: {horario_formateado} | Motivo: {motivo_consulta}",
             "estado": "pendiente_aprobacion",
-            "doctor_whatsapp_jid": normalizar_jid(doc_whatsapp) if doc_whatsapp else None,
+            "doctor_whatsapp_jid": normalizar_jid(whatsapp_limpio) if tiene_whatsapp else None,
             "whatsapp_status": "pendiente",
             "costo_consulta": 2500.00,
             "created_at": obtener_hora_rd_iso()
@@ -229,7 +243,7 @@ def agendar_cita_medica(telefono_jid: str, medico_nombre: str, fecha_cita: str =
         res_cita = supabase.table("citas").insert(datos_cita).execute()
         cita_creada = res_cita.data[0] if res_cita.data else {}
 
-        if cita_creada.get("id"):
+        if cita_creada.get("id") and tiene_whatsapp:
             try:
                 despachar_notificacion_doctor(cita_creada["id"])
             except Exception as err_notif:
@@ -242,7 +256,7 @@ def agendar_cita_medica(telefono_jid: str, medico_nombre: str, fecha_cita: str =
             "centro_medico": centro_medico,
             "direccion": direccion_doc,
             "telefono_institucional": doc_telefono,
-            "whatsapp": doc_whatsapp or "No disponible",
+            "whatsapp": whatsapp_limpio if tiene_whatsapp else "No disponible",
             "fecha_cita": fecha_cita,
             "tanda": horario_formateado,
             "costo": 2500.00,
