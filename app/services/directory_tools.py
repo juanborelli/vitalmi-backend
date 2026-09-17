@@ -54,7 +54,6 @@ def buscar_directorio_salud(ubicacion: str, tipo_busqueda: str, termino: str = "
         
         logger.info(f"🔎 MEILISEARCH BÚSQUEDA: Término='{termino_limpio}', Ubicación='{ubicacion_limpia}'")
         
-        # Únicamente se considera abierta si el usuario pide explícitamente país, RD o deja vacío
         es_busqueda_abierta = not ubicacion_limpia or ubicacion_limpia.lower() in ["republica dominicana", "rd", "pais", "todo el pais", "sin importar la ciudad"]
         
         search_params = {
@@ -65,22 +64,17 @@ def buscar_directorio_salud(ubicacion: str, tipo_busqueda: str, termino: str = "
         query_final = termino_limpio
 
         if not es_busqueda_abierta:
-            # Si el usuario especificó un lugar (ej: San Cristóbal, Naco, Barahona), 
-            # aplicamos filtro estricto de Meilisearch para evitar cruce de provincias.
             loc_title = ubicacion_limpia.title()
             search_params['filter'] = f"provincia = '{loc_title}' OR municipio_cabecera = '{loc_title}' OR sector = '{loc_title}'"
-            # Mantenemos también la ubicación en la query de texto para mayor precisión semántica
             query_final = f"{termino_limpio} {ubicacion_limpia}".strip()
             search_params['matchingStrategy'] = 'last'
 
-        # Ejecutar búsqueda en Meilisearch
         res = index.search(query_final, search_params)
         hits = res.get('hits', [])
         
-        # Fallback por si el filtro estricto con acentos/mayúsculas exactas no da resultados de inmediato
         if not hits and not es_busqueda_abierta:
             logger.warning(f"⚠️ Sin resultados estrictos para '{ubicacion_limpia}'. Intentando búsqueda flexible con texto...")
-            search_params.pop('filter', None) # Quitamos el filtro estricto y dejamos que la query de texto actúe
+            search_params.pop('filter', None)
             res_alt = index.search(f"{termino_limpio} {ubicacion_limpia}", {'limit': limite, 'matchingStrategy': 'last'})
             hits = res_alt.get('hits', [])
 
@@ -94,19 +88,31 @@ def buscar_directorio_salud(ubicacion: str, tipo_busqueda: str, termino: str = "
         return json.dumps({"error": "Fallo interno al consultar el directorio de salud."})
 
 def buscar_hospitales_emergencia(ubicacion: str) -> str:
-    """Protocolo de emergencia geolocalizado"""
+    """Protocolo de emergencia geolocalizado estrictamente a la zona solicitada"""
     try:
-        logger.info(f"🚨 EMERGENCIA MEILISEARCH PARA: {ubicacion}")
-        query = f"hospital clinica emergencia {ubicacion}".strip()
+        ubicacion_limpia = ubicacion.strip() if ubicacion else "San Cristóbal"
+        logger.info(f"🚨 EMERGENCIA MEILISEARCH PARA: {ubicacion_limpia}")
         
-        res = index.search(query, {
+        query = f"hospital clinica emergencia {ubicacion_limpia}".strip()
+        loc_title = ubicacion_limpia.title()
+        
+        search_params = {
             'limit': 5,
-            'matchingStrategy': 'last'
-        })
+            'matchingStrategy': 'last',
+            'filter': f"provincia = '{loc_title}' OR municipio_cabecera = '{loc_title}' OR sector = '{loc_title}'"
+        }
+        
+        res = index.search(query, search_params)
         hits = res.get('hits', [])
         
         if not hits:
-             return json.dumps({"mensaje": "ATENCIÓN: No se detectaron hospitales locales. Sugiera contactar al Sistema Nacional de Emergencias 911 de inmediato."})
+            logger.warning(f"⚠️ Sin hospitales estrictos para '{ubicacion_limpia}'. Relajando filtro geográfico local...")
+            search_params.pop('filter', None)
+            res_alt = index.search(query, search_params)
+            hits = res_alt.get('hits', [])
+        
+        if not hits:
+             return json.dumps({"mensaje": f"ATENCIÓN: No se detectaron hospitales locales en {ubicacion_limpia}. Por favor, contacte al Sistema Nacional de Emergencias 911 de inmediato."})
              
         return _minificar_resultados(hits)
         

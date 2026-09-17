@@ -197,6 +197,13 @@ def agendar_cita_medica(telefono_jid: str, medico_nombre: str, fecha_cita: str =
                 direccion_doc = f"{doc_data.get('direccion', '')}, {doc_data.get('sector', '')}, {doc_data.get('municipio_cabecera', '')}, {doc_data.get('provincia', '')}".strip(" ,")
                 especialidad_doc = doc_data.get('especialidad_medico') or doc_data.get('especialidad') or "Especialidad General"
 
+                # 🛑 Validación estricta: Bloquear si el médico no tiene teléfono ni WhatsApp registrado
+                if not doc_whatsapp and doc_telefono == "No disponible":
+                    return json.dumps({
+                        "error": "medico_sin_contacto",
+                        "mensaje": f"Lamentablemente, el/la doctor(a) {medico_nombre} no cuenta con un número de teléfono institucional o WhatsApp registrado en nuestro sistema para coordinar la cita directamente. Te sugiero comunicarte con el centro médico ({centro_medico}) o elegir otro especialista."
+                    }, ensure_ascii=False)
+
         datos_cita = {
             "paciente_id": paciente.get("id"),
             "motivo_consulta": f"Paciente: {paciente.get('nombre')} | Cédula: {paciente.get('cedula', 'N/A')} | ARS: {paciente.get('ars', 'Privado')} | Médico: {medico_nombre} | Centro: {centro_medico} | Motivo: {motivo_consulta}",
@@ -216,7 +223,6 @@ def agendar_cita_medica(telefono_jid: str, medico_nombre: str, fecha_cita: str =
             except Exception as err_notif:
                 logger.error(f"⚠️ Error al despachar: {err_notif}")
 
-        # Devolvemos un JSON estructurado completo para que Gema lo presente impecable en el chat
         resultado_agendamiento = {
             "status": "exitoso",
             "medico": medico_nombre,
