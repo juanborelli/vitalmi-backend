@@ -164,7 +164,7 @@ def despachar_notificacion_doctor(cita_id: str) -> dict:
     supabase.table("citas").update({"whatsapp_status": "fallido_envio"}).eq("id", cita_id).execute()
     return {"status": "fallido", "error": "Falló el envío de la API", "mensaje_doctor_texto": mensaje_doctor}
 
-def agendar_cita_medica(telefono_jid: str, medico_nombre: str, fecha_cita: str = "Mañana", tanda: str = "Mañana", es_para_tercero: bool = False, telefono_tercero: str = "", motivo_consulta: str = "Consulta General") -> str:
+def agendar_cita_medica(telefono_jid: str, medico_nombre: str, fecha_cita: str = "Próxima fecha disponible", tanda: str = "Mañana", es_para_tercero: bool = False, telefono_tercero: str = "", motivo_consulta: str = "Consulta General") -> str:
     supabase = obtener_cliente_supabase()
     if not supabase: return json.dumps({"error": "Sin conexión a base de datos"})
 
@@ -179,12 +179,15 @@ def agendar_cita_medica(telefono_jid: str, medico_nombre: str, fecha_cita: str =
             }, ensure_ascii=False)
 
         paciente = res_pac.data[0]
+        
+        # Valores por defecto seguros
         centro_medico = "Consultorio Privado Autorizado"
         doc_whatsapp = ""
         doc_telefono = "No disponible"
-        direccion_doc = "No especificada"
+        direccion_doc = "San Cristóbal, República Dominicana"
         especialidad_doc = "Especialidad General"
 
+        # Búsqueda estricta obligatoria en el directorio maestro de Supabase
         tokens_nombre = [t for t in remover_tildes(medico_nombre).split() if len(t) > 3]
         if tokens_nombre:
             res_doc = supabase.table("vitalmi_directorio_master").select("*").ilike("nombre", f"%{tokens_nombre[0]}%").limit(1).execute()
@@ -204,9 +207,18 @@ def agendar_cita_medica(telefono_jid: str, medico_nombre: str, fecha_cita: str =
                         "mensaje": f"Lamentablemente, el/la doctor(a) {medico_nombre} no cuenta con un número de teléfono institucional o WhatsApp registrado en nuestro sistema para coordinar la cita directamente. Te sugiero comunicarte con el centro médico ({centro_medico}) o elegir otro especialista."
                     }, ensure_ascii=False)
 
+        # Mapeo formal de tandas a horarios institucionales exactos
+        tanda_limpia = remover_tildes(tanda)
+        if "mañana" in tanda_limpia:
+            horario_formateado = "Tanda Mañana (9:00 a.m. a 12:00 p.m.)"
+        elif "tarde" in tanda_limpia:
+            horario_formateado = "Tanda Tarde (2:00 p.m. a 5:00 p.m.)"
+        else:
+            horario_formateado = f"{tanda} (9:00 a.m. a 12:00 p.m.)"
+
         datos_cita = {
             "paciente_id": paciente.get("id"),
-            "motivo_consulta": f"Paciente: {paciente.get('nombre')} | Cédula: {paciente.get('cedula', 'N/A')} | ARS: {paciente.get('ars', 'Privado')} | Médico: {medico_nombre} | Centro: {centro_medico} | Motivo: {motivo_consulta}",
+            "motivo_consulta": f"Paciente: {paciente.get('nombre')} | Cédula: {paciente.get('cedula', 'N/A')} | ARS: {paciente.get('ars', 'Privado')} | Médico: {medico_nombre} | Especialidad: {especialidad_doc} | Centro: {centro_medico} | Fecha: {fecha_cita} | Horario: {horario_formateado} | Motivo: {motivo_consulta}",
             "estado": "pendiente_aprobacion",
             "doctor_whatsapp_jid": normalizar_jid(doc_whatsapp) if doc_whatsapp else None,
             "whatsapp_status": "pendiente",
@@ -232,7 +244,7 @@ def agendar_cita_medica(telefono_jid: str, medico_nombre: str, fecha_cita: str =
             "telefono_institucional": doc_telefono,
             "whatsapp": doc_whatsapp or "No disponible",
             "fecha_cita": fecha_cita,
-            "tanda": tanda,
+            "tanda": horario_formateado,
             "costo": 2500.00,
             "cita_id": cita_creada.get("id")
         }
@@ -263,14 +275,15 @@ PROTOCOLOS:
 1. **PROTOCOLO DE CRISIS (Emergencias):** Si mencionan "emergencia", "infarto", "accidente" o peligro de muerte, recomienda llamar al 911 de inmediato y usa `buscar_hospitales_emergencia`.
 2. **PROTOCOLO DE BÚSQUEDA (Directorio):** 
    - Si buscan médicos/servicios sin especificar zona (ej: "Necesito un urólogo"), **no des listas revueltas nacionales**. Saluda con cercanía y pregúntale amablemente en qué provincia, ciudad o sector prefiere buscar.
-   - Si indican zona (ej: "en Baní", "en San Cristóbal"), ejecútalo estrictamente con `buscar_directorio_salud`.
+   - Si indican zona (ej: "en San Cristóbal", "en Baní"), ejecútalo estrictamente con `buscar_directorio_salud`.
 3. **PROTOCOLO DE ACCIÓN (Agendar Citas):** 
-   - Cuando el usuario confirme el médico, la fecha y la hora, ejecuta `agendar_cita_medica`.
-   - **CIERRE Y RESUMEN OBLIGATORIO:** Cuando la herramienta confirme el agendamiento con éxito, preséntale al usuario una tarjeta o resumen detallado que incluya obligatoriamente:
-     * Nombre completo del médico y especialidad.
-     * Centro médico y dirección exacta.
+   - Cuando el usuario confirme el médico, la fecha y la hora/tanda, ejecuta `agendar_cita_medica`.
+   - **CIERRE Y RESUMEN OBLIGATORIO:** Cuando la herramienta confirme el agendamiento con éxito, preséntale al usuario un resumen detallado y estructurado idéntico a este formato:
+     * Nombre completo del médico y su especialidad real obtenida de la base de datos.
+     * Centro médico exacto y su dirección completa.
      * Teléfono institucional y WhatsApp del consultorio/médico.
-     * Fecha, hora y costo estimado de la consulta (RD$ 2,500.00).
+     * Fecha y horario formal (ej. Tanda Mañana: 9:00 a.m. a 12:00 p.m.).
+     * Costo estimado de la consulta: RD$ 2,500.00.
      * Indicación clara de los siguientes pasos: *"Estamos enviando tu solicitud al doctor. En cuanto el doctor reciba y confirme tu cita por este medio, te enviaremos un mensaje de confirmación con los detalles. Además, recibirás un recordatorio una hora antes de tu cita."*
 
 Sé natural, cercana y evita respuestas frías o robóticas.
@@ -334,7 +347,7 @@ async def obtener_respuesta_gema(mensaje_usuario: str, numero_usuario: str = "de
                     "properties": {
                         "medico_nombre": {"type": "string"},
                         "fecha_cita": {"type": "string"},
-                        "tanda": {"type": "string"},
+                        "tanda": {"type": "string", "description": "Tanda o bloque horario, ej: Mañana (9:00 a.m. a 12:00 p.m.) o Tarde (2:00 p.m. a 5:00 p.m.)"},
                         "es_para_tercero": {"type": "boolean"},
                         "telefono_tercero": {"type": "string"},
                         "motivo_consulta": {"type": "string"}
